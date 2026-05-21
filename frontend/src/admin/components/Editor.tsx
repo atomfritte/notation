@@ -1,5 +1,8 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { Save } from 'lucide-react'
+import CodeMirror, { EditorView } from '@uiw/react-codemirror'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { languages } from '@codemirror/language-data'
 import * as api from '../lib/api'
 
 type Props = {
@@ -10,12 +13,54 @@ type Props = {
   onSaved: (content: string, etag: string | null) => void
 }
 
+const customTheme = EditorView.theme({
+  "&": {
+    color: "#d4d4d8", // zinc-300
+    backgroundColor: "transparent",
+    fontSize: "15px",
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
+  },
+  ".cm-content": {
+    padding: "0",
+    minHeight: "300px",
+  },
+  ".cm-content *": {
+    lineHeight: "1.7",
+  },
+  "&.cm-focused": {
+    outline: "none",
+  },
+  "&.cm-focused .cm-cursor": {
+    borderLeftColor: "#BFF355",
+    borderLeftWidth: "2px",
+  },
+  "&.cm-focused .cm-selectionBackground, ::selection": {
+    backgroundColor: "rgba(191, 243, 85, 0.2)",
+  },
+  ".cm-gutters": {
+    display: "none", // Notion-like seamless experience
+  },
+  // Style markdown headers to stand out slightly even in edit mode
+  ".cm-header": {
+    fontWeight: "bold",
+    color: "#f4f4f5", // zinc-100
+  },
+  ".cm-header-1": { fontSize: "2em", marginTop: "1em", marginBottom: "0.5em" },
+  ".cm-header-2": { fontSize: "1.5em", marginTop: "0.8em", marginBottom: "0.4em" },
+  ".cm-header-3": { fontSize: "1.25em" },
+  // Style links
+  ".cm-link": {
+    color: "#BFF355",
+    textDecoration: "underline",
+    textDecorationStyle: "dashed",
+  },
+})
+
 export function Editor({ spaceID, path, initial, etag, onSaved }: Props) {
   const [content, setContent] = useState(initial)
   const [currentEtag, setCurrentEtag] = useState(etag)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dirty = content !== initial
 
   useEffect(() => {
@@ -23,22 +68,12 @@ export function Editor({ spaceID, path, initial, etag, onSaved }: Props) {
     setCurrentEtag(etag)
   }, [initial, path, etag])
 
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'
-    }
-  }, [content])
-
   async function save() {
     if (!dirty) return
     setSaving(true)
     setErr(null)
     try {
       await api.writeFile(spaceID, path, content, currentEtag)
-      // Optimistically update, but ideally we'd fetch the new ETag.
-      // For now, setting it to null ensures the next save might pass or fail based on backend state.
       setCurrentEtag(null)
       onSaved(content, null)
     } catch (e: any) {
@@ -52,6 +87,7 @@ export function Editor({ spaceID, path, initial, etag, onSaved }: Props) {
     }
   }
 
+  // Keyboard shortcut for saving is built into the parent or we can listen globally here.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
@@ -65,16 +101,25 @@ export function Editor({ spaceID, path, initial, etag, onSaved }: Props) {
 
   return (
     <div className="relative min-h-full pb-20">
-      {/* Seamless Notion-like editor area */}
       <div className="max-w-3xl mx-auto p-8">
-        <textarea
-          ref={textareaRef}
+        <CodeMirror
           value={content}
-          onChange={e => setContent(e.target.value)}
-          spellCheck={false}
-          placeholder="Start typing..."
-          className="w-full bg-transparent font-mono text-zinc-300 resize-none outline-none overflow-hidden leading-relaxed"
-          style={{ minHeight: '300px' }}
+          onChange={(val) => setContent(val)}
+          theme={customTheme}
+          extensions={[
+            markdown({ base: markdownLanguage, codeLanguages: languages }),
+            EditorView.lineWrapping
+          ]}
+          basicSetup={{
+            lineNumbers: false,
+            foldGutter: false,
+            highlightActiveLine: false,
+            highlightActiveLineGutter: false,
+            dropCursor: false,
+            allowMultipleSelections: false,
+            indentOnInput: false,
+          }}
+          className="w-full h-full"
         />
       </div>
 
@@ -86,7 +131,7 @@ export function Editor({ spaceID, path, initial, etag, onSaved }: Props) {
           <button
             onClick={save}
             disabled={saving || !dirty}
-            className="flex items-center gap-2 px-4 py-2 bg-[#BFF355] text-zinc-950 hover:bg-[#a6d944] font-semibold text-sm rounded-full shadow-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-[#BFF355] text-zinc-950 hover:bg-[#a6d944] font-semibold text-sm rounded-full shadow-lg transition-colors disabled:opacity-50 cursor-pointer"
           >
             <Save size={16} />
             {saving ? 'Saving...' : 'Save Changes'}
