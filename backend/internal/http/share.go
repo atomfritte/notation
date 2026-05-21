@@ -217,21 +217,3 @@ func writeShareError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 	}
 }
-rror())
-		return
-	}
-	writeJSON(w, http.StatusOK, list)
-}
-
-func writeShareError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, share.ErrShareNotFound):
-		writeError(w, http.StatusNotFound, "share not found")
-	case errors.Is(err, share.ErrShareExpired):
-		writeError(w, http.StatusGone, "share has expired")
-	case errors.Is(err, fs.ErrNotExist):
-		writeError(w, http.StatusNotFound, "not found")
-	default:
-		writeError(w, http.StatusInternalServerError, err.Error())
-	}
-}
