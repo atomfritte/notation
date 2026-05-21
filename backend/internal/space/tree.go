@@ -2,8 +2,6 @@ package space
 
 import (
 	"os"
-	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -19,15 +17,24 @@ type Entry struct {
 }
 
 // Tree returns a recursive listing of the Space's files directory. Dotfiles
-// and symlinks are skipped silently (defense in depth — these shouldn't exist
-// via the API anyway). Entries are sorted: directories first, then by name.
+// and symlinks are skipped silently. Entries are sorted: directories first,
+// then by name (case-insensitive).
 func (s *Store) Tree(spaceID string) ([]Entry, error) {
-	return readDir(s.FilesDir(spaceID), "")
+	root, err := s.openRoot(spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return readDirInRoot(root, ".")
 }
 
-func readDir(root, prefix string) ([]Entry, error) {
-	fullDir := filepath.Join(root, filepath.FromSlash(prefix))
-	items, err := os.ReadDir(fullDir)
+func readDirInRoot(root *os.Root, dir string) ([]Entry, error) {
+	f, err := root.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	items, err := f.ReadDir(-1)
+	_ = f.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -36,14 +43,19 @@ func readDir(root, prefix string) ([]Entry, error) {
 		if strings.HasPrefix(it.Name(), ".") {
 			continue
 		}
-		info, err := os.Lstat(filepath.Join(fullDir, it.Name()))
+		var rel string
+		if dir == "." || dir == "" {
+			rel = it.Name()
+		} else {
+			rel = dir + "/" + it.Name()
+		}
+		info, err := root.Lstat(rel)
 		if err != nil {
 			continue
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			continue
 		}
-		rel := path.Join(prefix, it.Name())
 		e := Entry{
 			Name:     it.Name(),
 			Path:     rel,
@@ -52,7 +64,7 @@ func readDir(root, prefix string) ([]Entry, error) {
 			Modified: info.ModTime().UTC().Format(time.RFC3339),
 		}
 		if info.IsDir() {
-			children, err := readDir(root, rel)
+			children, err := readDirInRoot(root, rel)
 			if err == nil {
 				e.Children = children
 			}

@@ -2,7 +2,6 @@ package space
 
 import (
 	"bufio"
-	"os"
 	"strings"
 )
 
@@ -13,15 +12,21 @@ type Heading struct {
 }
 
 // Outline returns the heading hierarchy of a markdown file with line numbers.
-// Skips headings inside fenced code blocks (``` or ~~~) so code samples with
-// `# comment` lines don't show up as outline entries.
+// Reads through the os.Root sandbox so a symlinked path can't escape the
+// Space. Skips headings inside fenced code blocks (``` or ~~~) so code
+// samples with `# comment` lines don't show up as outline entries.
 func (s *Store) Outline(spaceID, userPath string) ([]Heading, error) {
 	out := make([]Heading, 0)
-	abs, err := SafeJoin(s.FilesDir(spaceID), userPath)
+	rel, err := s.safeRel(spaceID, userPath)
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Open(abs)
+	root, err := s.openRoot(spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	f, err := root.Open(rel)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +41,6 @@ func (s *Store) Outline(spaceID, userPath string) ([]Heading, error) {
 		lineNo++
 		raw := sc.Text()
 		trimmed := strings.TrimLeft(raw, " \t")
-		// Track fenced code blocks (``` or ~~~) so we ignore # lines inside them.
 		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
 			mark := trimmed[:3]
 			if !inFence {
@@ -64,10 +68,8 @@ func (s *Store) Outline(spaceID, userPath string) ([]Heading, error) {
 			continue
 		}
 		text := strings.TrimSpace(trimmed[level:])
-		// Trim trailing closing #s ("# heading #" form).
 		text = strings.TrimRight(text, "#")
 		text = strings.TrimSpace(text)
-		// Strip inline markdown markers for cleaner display.
 		text = strings.ReplaceAll(text, "`", "")
 		if text == "" {
 			continue

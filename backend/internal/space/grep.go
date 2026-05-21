@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -30,9 +28,10 @@ type GrepOpts struct {
 	MaxResults    int
 }
 
-// Grep walks the Space's file tree, applies the optional glob filter, then
-// scans matching files line-by-line for the regex. Returns up to MaxResults
-// hits. Dotfiles / dotdirs and symlinks are skipped defensively.
+// Grep walks the Space's file tree (through the os.Root sandbox), applies
+// the optional glob filter, then scans matching files line-by-line for the
+// regex. Returns up to MaxResults hits. Dotfiles / dotdirs and symlinks are
+// skipped defensively.
 func (s *Store) Grep(spaceID string, opts GrepOpts) ([]GrepMatch, error) {
 	out := make([]GrepMatch, 0)
 	if opts.Pattern == "" {
@@ -65,41 +64,44 @@ func (s *Store) Grep(spaceID string, opts GrepOpts) ([]GrepMatch, error) {
 		globRe = gr
 	}
 
-	root := s.FilesDir(spaceID)
-	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
+	root, err := s.openRoot(spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
+	walkErr := fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
 		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if d.IsDir() {
-			if strings.HasPrefix(d.Name(), ".") && p != root {
-				return filepath.SkipDir
+			if strings.HasPrefix(d.Name(), ".") && p != "." {
+				return fs.SkipDir
 			}
 			return nil
 		}
 		if strings.HasPrefix(d.Name(), ".") {
 			return nil
 		}
-		info, _ := d.Info()
-		if info != nil && info.Mode()&os.ModeSymlink != 0 {
-			return nil
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return nil
-		}
-		relSlash := filepath.ToSlash(rel)
-		if globRe != nil && !globRe.MatchString(relSlash) {
+		if globRe != nil && !globRe.MatchString(p) {
 			return nil
 		}
 
-		f, err := os.Open(p)
+		f, err := root.Open(p)
 		if err != nil {
 			return nil
 		}
 		defer f.Close()
 
-		// Read full file into memory so we can emit context lines.
-		// For our typical Space sizes (markdown notes) this is cheap.
+		// Read full file into memory so we can emit context lines. For typical
+		// Space sizes (markdown notes) this is cheap; M3 in the audit lists
+		// streaming as a follow-up.
 		lines := make([]string, 0, 64)
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -112,7 +114,7 @@ func (s *Store) Grep(spaceID string, opts GrepOpts) ([]GrepMatch, error) {
 				continue
 			}
 			m := GrepMatch{
-				Path:    relSlash,
+				Path:    p,
 				Line:    i + 1,
 				Content: clip(line, 400),
 			}
@@ -136,20 +138,20 @@ func (s *Store) Grep(spaceID string, opts GrepOpts) ([]GrepMatch, error) {
 			}
 			out = append(out, m)
 			if len(out) >= opts.MaxResults {
-				return filepath.SkipAll
+				return fs.SkipAll
 			}
 		}
 		return nil
 	})
-	if walkErr != nil && !errors.Is(walkErr, filepath.SkipAll) {
+	if walkErr != nil && !errors.Is(walkErr, fs.SkipAll) {
 		return out, walkErr
 	}
 	return out, nil
 }
 
 // Glob returns paths under the Space's files dir that match the glob pattern.
-// Supports `**` for cross-segment wildcards, `*`/`?` within a segment. Slash-
-// delimited paths, dotfiles skipped.
+// Supports `**` for cross-segment wildcards, `*`/`?` within a segment.
+// Slash-delimited paths, dotfiles skipped.
 func (s *Store) Glob(spaceID, pattern string, limit int) ([]string, error) {
 	out := make([]string, 0)
 	if pattern == "" {
@@ -162,35 +164,39 @@ func (s *Store) Glob(spaceID, pattern string, limit int) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid glob: %w", err)
 	}
-	root := s.FilesDir(spaceID)
-	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
+	root, err := s.openRoot(spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	walkErr := fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
 		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if d.IsDir() {
-			if strings.HasPrefix(d.Name(), ".") && p != root {
-				return filepath.SkipDir
+			if strings.HasPrefix(d.Name(), ".") && p != "." {
+				return fs.SkipDir
 			}
 			return nil
 		}
 		if strings.HasPrefix(d.Name(), ".") {
 			return nil
 		}
-		info, _ := d.Info()
-		if info != nil && info.Mode()&os.ModeSymlink != 0 {
-			return nil
-		}
-		rel, _ := filepath.Rel(root, p)
-		relSlash := filepath.ToSlash(rel)
-		if globRe.MatchString(relSlash) {
-			out = append(out, relSlash)
+		if globRe.MatchString(p) {
+			out = append(out, p)
 			if len(out) >= limit {
-				return filepath.SkipAll
+				return fs.SkipAll
 			}
 		}
 		return nil
 	})
-	if walkErr != nil && !errors.Is(walkErr, filepath.SkipAll) {
+	if walkErr != nil && !errors.Is(walkErr, fs.SkipAll) {
 		return out, walkErr
 	}
 	return out, nil
@@ -240,7 +246,6 @@ func clip(s string, max int) string {
 	if len(s) <= max {
 		return s
 	}
-	// Walk back to a rune boundary so we don't slice mid-character.
 	end := max
 	for end > 0 && (s[end]&0xC0) == 0x80 {
 		end--

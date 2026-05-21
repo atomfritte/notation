@@ -3,24 +3,20 @@ package space
 import (
 	"bufio"
 	"io/fs"
-	"os"
 	"path"
-	"path/filepath"
-	"sort"
 	"strings"
 )
 
 type Match struct {
-	Path    string  `json:"path"`
-	Line    int     `json:"line"`
-	Content string  `json:"content"`
+	Path    string `json:"path"`
+	Line    int    `json:"line"`
+	Content string `json:"content"`
 }
 
-// Search performs a substring (case-insensitive) match across all files in the
-// Space. Optional globPattern (e.g. "*.md", "**/*.md") restricts which files
-// are scanned. Returns up to maxResults matches. The result is fast enough for
-// small Spaces (under a few thousand files); for larger trees we'd want to
-// shell out to ripgrep.
+// Search performs a substring (case-insensitive) match across all files in
+// the Space. Optional globPattern (e.g. "*.md") restricts which files are
+// scanned. Returns up to maxResults matches. Walks the file tree through
+// the os.Root sandbox.
 func (s *Store) Search(spaceID, query, globPattern string, maxResults int) ([]Match, error) {
 	out := make([]Match, 0)
 	if query == "" {
@@ -29,41 +25,40 @@ func (s *Store) Search(spaceID, query, globPattern string, maxResults int) ([]Ma
 	if maxResults <= 0 || maxResults > 1000 {
 		maxResults = 200
 	}
-	root := s.FilesDir(spaceID)
+	root, err := s.openRoot(spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
 	needle := strings.ToLower(query)
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil // skip unreadable paths
+
+	err = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
 		}
-		// Skip dot dirs (e.g. .git) and dot files defensively.
+		if d.Type()&fs.ModeSymlink != 0 {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if d.IsDir() {
 			name := d.Name()
-			if strings.HasPrefix(name, ".") && p != root {
-				return filepath.SkipDir
+			if strings.HasPrefix(name, ".") && p != "." {
+				return fs.SkipDir
 			}
 			return nil
 		}
 		if strings.HasPrefix(d.Name(), ".") {
 			return nil
 		}
-		if info, _ := d.Info(); info != nil && info.Mode()&os.ModeSymlink != 0 {
-			return nil
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return nil
-		}
-		relSlash := filepath.ToSlash(rel)
 		if globPattern != "" {
-			ok, err := path.Match(globPattern, relSlash)
-			if err != nil {
-				return nil
-			}
-			if !ok {
+			ok, err := path.Match(globPattern, p)
+			if err != nil || !ok {
 				return nil
 			}
 		}
-		f, err := os.Open(p)
+		f, err := root.Open(p)
 		if err != nil {
 			return nil
 		}
@@ -79,22 +74,16 @@ func (s *Store) Search(spaceID, query, globPattern string, maxResults int) ([]Ma
 				if len(snippet) > 240 {
 					snippet = snippet[:240] + "…"
 				}
-				out = append(out, Match{Path: relSlash, Line: lineNo, Content: snippet})
+				out = append(out, Match{Path: p, Line: lineNo, Content: snippet})
 				if len(out) >= maxResults {
-					return filepath.SkipAll
+					return fs.SkipAll
 				}
 			}
 		}
 		return nil
 	})
-	if err != nil && err != filepath.SkipAll {
-		return nil, err
+	if err != nil && err != fs.SkipAll {
+		return out, err
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Path != out[j].Path {
-			return out[i].Path < out[j].Path
-		}
-		return out[i].Line < out[j].Line
-	})
 	return out, nil
 }

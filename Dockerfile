@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # --- Stage 2: build the Go binary with embedded frontend --------------------
-FROM golang:1.22-alpine AS backend
+FROM golang:1.24-alpine AS backend
 RUN apk add --no-cache git
 WORKDIR /work
 COPY backend/go.mod backend/go.sum* ./backend/
