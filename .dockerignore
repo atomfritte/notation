@@ -1,0 +1,17 @@
+.git
+.gitignore
+.dockerignore
+.vscode
+.idea
+
+frontend/node_modules
+backend/web/dist/_assets
+
+/data
+.env
+.env.*
+!.env.example
+
+Dockerfile
+docker-compose*.yml
+*.md

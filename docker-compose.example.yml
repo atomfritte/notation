@@ -1,0 +1,45 @@
+# Example deployment: notation behind Traefik + Authelia.
+#
+# Key idea: two Traefik routers point at the same notation container, but only
+# the admin router has the Authelia ForwardAuth middleware attached. The public
+# router (higher priority) catches /s/* and /mcp/* and lets them through.
+#
+# Authelia must be configured (in your Authelia rules block) to issue an
+# `allow` policy for /s/** and /mcp/** as a defense-in-depth measure in case
+# the router fallthrough order ever changes.
+services:
+  notation:
+    build: .
+    container_name: notation
+    restart: unless-stopped
+    environment:
+      NOTATION_BIND: ":8080"
+      NOTATION_DATA_DIR: "/data"
+      NOTATION_ADMIN_HEADER: "Remote-User"
+      NOTATION_ADMIN_GROUPS_HEADER: "Remote-Groups"
+      NOTATION_ADMIN_GROUP: "admins"
+      NOTATION_SHARE_PATH: "/s"
+      NOTATION_MCP_PATH: "/mcp"
+      NOTATION_BASE_URL: "https://notation.example.com"
+    volumes:
+      - ./data:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.notation.loadbalancer.server.port=8080"
+
+      # Admin router: Authelia-protected.
+      - "traefik.http.routers.notation-admin.rule=Host(`notation.example.com`)"
+      - "traefik.http.routers.notation-admin.entrypoints=websecure"
+      - "traefik.http.routers.notation-admin.tls.certresolver=le"
+      - "traefik.http.routers.notation-admin.middlewares=authelia@docker"
+
+      # Public router: bypasses Authelia for /s/* and /mcp/*.
+      - "traefik.http.routers.notation-public.rule=Host(`notation.example.com`) && (PathPrefix(`/s/`) || PathPrefix(`/mcp/`))"
+      - "traefik.http.routers.notation-public.entrypoints=websecure"
+      - "traefik.http.routers.notation-public.tls.certresolver=le"
+      - "traefik.http.routers.notation-public.priority=100"
+    networks: [proxy]
+
+networks:
+  proxy:
+    external: true
