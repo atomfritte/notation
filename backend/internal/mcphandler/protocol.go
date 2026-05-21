@@ -14,7 +14,25 @@ package mcphandler
 
 import "encoding/json"
 
-const protocolVersion = "2024-11-05"
+// Versions we are known-compatible with. We accept whichever the client asks
+// for and echo it back; if the client doesn't specify, we fall back to the
+// latest entry. Newer clients negotiate via this field, older clients ignore.
+var supportedProtocolVersions = []string{
+	"2024-11-05",
+	"2025-03-26",
+	"2025-06-18",
+}
+
+const defaultProtocolVersion = "2025-06-18"
+
+func resolveProtocolVersion(requested string) string {
+	for _, v := range supportedProtocolVersions {
+		if v == requested {
+			return v
+		}
+	}
+	return defaultProtocolVersion
+}
 
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`

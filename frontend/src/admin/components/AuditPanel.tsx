@@ -32,7 +32,7 @@ export function AuditPanel({ spaceID }: Props) {
     setLoading(true)
     api
       .getAudit(spaceID)
-      .then(setEntries)
+      .then(r => setEntries(Array.isArray(r) ? r : []))
       .catch(e => setErr(String(e)))
       .finally(() => setLoading(false))
   }

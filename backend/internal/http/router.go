@@ -67,10 +67,13 @@ func NewRouter(d Deps) http.Handler {
 	})
 
 	// Authelia-bypass: MCP endpoints, Bearer-auth per space.
+	// Two routes: bare /{spaceID} and /{spaceID}/* so clients that append
+	// a trailing slash or path (`/messages`, `/sse`) still reach the handler.
 	mcpHandler := d.MCP.Handler()
 	r.Route(d.Cfg.MCPPath, func(mr chi.Router) {
 		mr.Use(d.Lim.Middleware)
 		mr.Handle("/{spaceID}", mcpHandler)
+		mr.Handle("/{spaceID}/*", mcpHandler)
 	})
 
 	// Admin: protected by Authelia ForwardAuth header.

@@ -15,7 +15,10 @@ export function HistoryPanel({ spaceID }: Props) {
   const [diffs, setDiffs] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    api.getLog(spaceID).then(setCommits).catch(e => setErr(String(e)))
+    api
+      .getLog(spaceID)
+      .then(r => setCommits(Array.isArray(r) ? r : []))
+      .catch(e => setErr(String(e)))
   }, [spaceID])
 
   async function toggle(hash: string) {

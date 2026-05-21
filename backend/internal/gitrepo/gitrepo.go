@@ -213,7 +213,7 @@ func (m *Manager) Log(spaceID string, limit int) ([]Commit, error) {
 		}
 		return nil, err
 	}
-	var commits []Commit
+	commits := make([]Commit, 0)
 	for _, line := range strings.Split(string(out), "\n") {
 		if line == "" {
 			continue
@@ -299,7 +299,7 @@ func (m *Manager) FileHistory(spaceID, userPath string, limit int) ([]Commit, er
 		}
 		return nil, err
 	}
-	var commits []Commit
+	commits := make([]Commit, 0)
 	for _, line := range strings.Split(string(out), "\n") {
 		if line == "" {
 			continue

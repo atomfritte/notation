@@ -22,15 +22,15 @@ type Match struct {
 // small Spaces (under a few thousand files); for larger trees we'd want to
 // shell out to ripgrep.
 func (s *Store) Search(spaceID, query, globPattern string, maxResults int) ([]Match, error) {
+	out := make([]Match, 0)
 	if query == "" {
-		return nil, nil
+		return out, nil
 	}
 	if maxResults <= 0 || maxResults > 1000 {
 		maxResults = 200
 	}
 	root := s.FilesDir(spaceID)
 	needle := strings.ToLower(query)
-	var out []Match
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // skip unreadable paths

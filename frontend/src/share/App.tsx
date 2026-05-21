@@ -73,13 +73,17 @@ function ShareUI() {
     refreshComments()
   }, [file, refreshComments])
 
-  // Scroll the comments column to whichever entry is active.
+  // Scroll the comments column to whichever entry is active. Small timeout
+  // so the panel has finished mounting/animating before we measure.
   useEffect(() => {
     if (!activeCommentId) return
-    const panel = document.getElementById('share-comments-panel')
-    if (!panel) return
-    const el = panel.querySelector(`[data-comment-id="${CSS.escape(activeCommentId)}"]`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    const t = window.setTimeout(() => {
+      const panel = document.getElementById('share-comments-panel')
+      if (!panel) return
+      const el = panel.querySelector(`[data-comment-id="${CSS.escape(activeCommentId)}"]`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+    return () => window.clearTimeout(t)
   }, [activeCommentId])
 
   const select = useCallback((p: string) => setSearchParams({ file: p }), [setSearchParams])
@@ -109,7 +113,7 @@ function ShareUI() {
 
   function onNewAnchorComment(anchor: api.CommentAnchor) {
     setPendingAnchor(anchor)
-    setPendingComment(`> ${anchor.quote.split('\n').join('\n> ')}\n\n`)
+    // Don't pre-fill the textarea — CommentRow renders the anchor quote.
   }
 
   if (err && !info) {

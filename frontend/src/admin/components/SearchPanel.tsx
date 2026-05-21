@@ -43,7 +43,7 @@ export function SearchPanel({ open, spaceID, onClose, onSelect }: Props) {
     const t = setTimeout(() => {
       api
         .searchSpace(spaceID, q)
-        .then(r => setResults(r))
+        .then(r => setResults(Array.isArray(r) ? r : []))
         .catch(e => {
           if ((e as Error).name !== 'AbortError') setErr(String(e))
         })

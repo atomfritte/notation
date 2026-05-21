@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { X, RotateCcw, GitCommit, Check, GitCompareArrows } from 'lucide-react'
 import * as api from '../lib/api'
-import { isTextFile } from '../lib/fileTypes'
+import { isTextFile, monacoLang } from '../lib/fileTypes'
 import { FileViewer } from './FileViewer'
+
+const MonacoDiff = lazy(() => import('./MonacoDiff'))
 
 type Props = {
   spaceID: string
@@ -27,12 +29,17 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
   const [selected, setSelected] = useState<string[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [previewContent, setPreviewContent] = useState<string>('')
-  const [diffText, setDiffText] = useState<string>('')
   const [previewLoading, setPreviewLoading] = useState(false)
   const [restoring, setRestoring] = useState(false)
+  // Side-by-side compare uses both versions' content fed into Monaco DiffEditor.
+  const [compareFrom, setCompareFrom] = useState<string>('')
+  const [compareTo, setCompareTo] = useState<string>('')
 
   useEffect(() => {
-    api.getFileHistory(spaceID, path).then(setCommits).catch(e => setErr(String(e)))
+    api
+      .getFileHistory(spaceID, path)
+      .then(r => setCommits(Array.isArray(r) ? r : []))
+      .catch(e => setErr(String(e)))
   }, [spaceID, path])
 
   // Compute the preview state from the selection
@@ -40,11 +47,13 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
     setErr(null)
     if (selected.length === 0) {
       setPreviewContent('')
-      setDiffText('')
+      setCompareFrom('')
+      setCompareTo('')
       return
     }
     if (selected.length === 1) {
-      setDiffText('')
+      setCompareFrom('')
+      setCompareTo('')
       if (isTextFile(path)) {
         setPreviewLoading(true)
         api.getFileAtCommit(spaceID, selected[0], path)
@@ -56,16 +65,21 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
       }
       return
     }
-    // 2 selected → diff. selected[0] is the older anchor (added first), but
-    // for users "from = older, to = newer" reads more naturally — sort by
-    // commit list order (newest first in `commits`, so older has bigger index).
+    // 2 selected → side-by-side diff. Commits list is newest-first so the
+    // entry with the higher index is the older commit; that's our "from".
     const [a, b] = selected
     const ia = commits.findIndex(c => c.hash === a)
     const ib = commits.findIndex(c => c.hash === b)
-    const [from, to] = ia > ib ? [a, b] : [b, a] // older → newer
+    const [from, to] = ia > ib ? [a, b] : [b, a]
     setPreviewLoading(true)
-    api.getFileDiff(spaceID, path, from, to)
-      .then(setDiffText)
+    Promise.all([
+      api.getFileAtCommit(spaceID, from, path),
+      api.getFileAtCommit(spaceID, to, path),
+    ])
+      .then(([f, t]) => {
+        setCompareFrom(f)
+        setCompareTo(t)
+      })
       .catch(e => setErr(String(e)))
       .finally(() => setPreviewLoading(false))
   }, [selected, spaceID, path, commits])
@@ -207,51 +221,32 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
             />
           )}
           {selected.length === 2 && (
-            <DiffView text={diffText} loading={previewLoading} />
+            previewLoading ? (
+              <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">Loading…</div>
+            ) : compareFrom === compareTo ? (
+              <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm flex-col gap-2">
+                <GitCompareArrows size={20} className="opacity-50" />
+                No differences between the selected versions.
+              </div>
+            ) : (
+              <Suspense
+                fallback={
+                  <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
+                    Loading diff editor…
+                  </div>
+                }
+              >
+                <MonacoDiff
+                  original={compareFrom}
+                  modified={compareTo}
+                  language={monacoLang(path)}
+                  theme={theme}
+                />
+              </Suspense>
+            )
           )}
         </div>
       </div>
-    </div>
-  )
-}
-
-function DiffView({ text, loading }: { text: string; loading: boolean }) {
-  const lines = useMemo(() => text.split('\n'), [text])
-
-  if (loading) {
-    return <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">Computing diff…</div>
-  }
-  if (text.trim() === '') {
-    return (
-      <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm flex-col gap-2">
-        <GitCompareArrows size={20} className="opacity-50" />
-        No differences between the selected versions.
-      </div>
-    )
-  }
-  return (
-    <div className="flex-1 overflow-auto bg-zinc-50/30 dark:bg-zinc-950/30">
-      <pre className="text-xs font-mono leading-relaxed p-4">
-        {lines.map((line, i) => {
-          let cls = 'text-zinc-700 dark:text-zinc-400'
-          if (line.startsWith('+++') || line.startsWith('---')) {
-            cls = 'text-zinc-500 font-semibold'
-          } else if (line.startsWith('+')) {
-            cls = 'text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30'
-          } else if (line.startsWith('-')) {
-            cls = 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30'
-          } else if (line.startsWith('@@')) {
-            cls = 'text-blue-700 dark:text-blue-400 font-semibold'
-          } else if (line.startsWith('diff ') || line.startsWith('index ')) {
-            cls = 'text-zinc-400 dark:text-zinc-600'
-          }
-          return (
-            <div key={i} className={cls + ' px-2 -mx-2'}>
-              {line || ' '}
-            </div>
-          )
-        })}
-      </pre>
     </div>
   )
 }

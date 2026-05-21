@@ -119,16 +119,26 @@ func (s *Server) servePOST(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleInitialize(w http.ResponseWriter, req rpcRequest) {
+	// Echo whichever protocol version the client requested (if we know it), so
+	// the handshake succeeds across MCP spec revisions.
+	var p struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	if len(req.Params) > 0 {
+		_ = json.Unmarshal(req.Params, &p)
+	}
 	writeRPC(w, rpcResponse{
 		JSONRPC: "2.0", ID: req.ID,
 		Result: map[string]any{
-			"protocolVersion": protocolVersion,
+			"protocolVersion": resolveProtocolVersion(p.ProtocolVersion),
 			"serverInfo": map[string]string{
 				"name":    "notation",
 				"version": "0.1.0",
 			},
 			"capabilities": map[string]any{
-				"tools": map[string]any{},
+				"tools":     map[string]any{"listChanged": false},
+				"resources": map[string]any{"listChanged": false, "subscribe": false},
+				"prompts":   map[string]any{"listChanged": false},
 			},
 		},
 	})

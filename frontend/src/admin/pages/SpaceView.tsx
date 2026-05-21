@@ -172,17 +172,22 @@ export function SpaceView() {
   function onNewAnchorComment(anchor: api.CommentAnchor) {
     setPendingAnchor(anchor)
     setShowComments(true)
-    setPendingComment(`> ${anchor.quote.split('\n').join('\n> ')}\n\n`)
+    // Don't pre-fill the textarea with the quote — the anchor metadata renders
+    // the quote in the CommentRow already, double-display looked wrong.
   }
 
   // When the viewer asks us to focus a comment (mark click) or hover-blink it
   // (mark hover), make sure the comments panel is visible and scroll to it.
+  // requestAnimationFrame gives the panel a tick to mount + finish animating.
   useEffect(() => {
     if (!activeCommentId) return
-    const panel = document.getElementById('comments-panel')
-    if (!panel) return
-    const el = panel.querySelector(`[data-comment-id="${CSS.escape(activeCommentId)}"]`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    const t = window.setTimeout(() => {
+      const panel = document.getElementById('comments-panel')
+      if (!panel) return
+      const el = panel.querySelector(`[data-comment-id="${CSS.escape(activeCommentId)}"]`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+    return () => window.clearTimeout(t)
   }, [activeCommentId])
 
   // --- Effects ---

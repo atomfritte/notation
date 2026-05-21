@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Save } from 'lucide-react'
 import CodeMirror, { EditorView } from '@uiw/react-codemirror'
+import { WikiLinkPicker } from './WikiLinkPicker'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { insertNewlineContinueMarkup } from '@codemirror/lang-markdown'
@@ -178,7 +179,49 @@ export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved,
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const fileCache = useRef<Record<string, string>>({})
+  const viewRef = useRef<EditorView | null>(null)
+  // Wiki-link picker state. `openPos` is the document offset right after `[[`,
+  // which is where the inserted text should start replacing the user's typing.
+  const [picker, setPicker] = useState<
+    { x: number; y: number; openPos: number } | null
+  >(null)
   const dirty = content !== initial
+
+  // CodeMirror extension: detect when the user just typed `[[` and surface
+  // the picker anchored at the cursor's screen position. Memoized so the
+  // extension instance is stable across renders.
+  const wikiLinkTrigger = useMemo(
+    () =>
+      EditorView.updateListener.of(update => {
+        if (!update.docChanged) return
+        const cursor = update.state.selection.main.head
+        if (cursor < 2) return
+        const last2 = update.state.doc.sliceString(cursor - 2, cursor)
+        if (last2 === '[[') {
+          const coords = update.view.coordsAtPos(cursor)
+          if (coords) {
+            setPicker({
+              x: coords.left,
+              y: coords.bottom + 4,
+              openPos: cursor,
+            })
+          }
+        }
+      }),
+    [],
+  )
+
+  function insertAtPicker(text: string) {
+    const view = viewRef.current
+    if (!view || !picker) return
+    const cursor = view.state.selection.main.head
+    view.dispatch({
+      changes: { from: picker.openPos, to: cursor, insert: text },
+      selection: { anchor: picker.openPos + text.length },
+    })
+    setPicker(null)
+    view.focus()
+  }
 
   useEffect(() => {
     setContent(initial)
@@ -298,6 +341,7 @@ export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved,
         <CodeMirror
           value={content}
           onChange={(val) => setContent(val)}
+          onCreateEditor={(view) => { viewRef.current = view }}
           theme={theme}
           extensions={[
             markdown({ base: markdownLanguage, codeLanguages: languages }),
@@ -305,6 +349,7 @@ export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved,
             markdownKeybindings,
             customTheme,
             autocompletion({ override: [wikiLinkCompletion] }),
+            wikiLinkTrigger,
             selectionTooltip
           ]}
           basicSetup={{
@@ -324,6 +369,17 @@ export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved,
           className="w-full h-full"
         />
       </div>
+
+      <WikiLinkPicker
+        open={picker !== null}
+        anchor={picker ? { x: picker.x, y: picker.y } : null}
+        spaceID={spaceID}
+        allFiles={allFiles}
+        currentPath={path}
+        currentContent={content}
+        onSelect={insertAtPicker}
+        onClose={() => setPicker(null)}
+      />
 
       {/* Floating Save Actions */}
       <div className="fixed bottom-6 right-6 flex flex-col items-end gap-2 z-50">

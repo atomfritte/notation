@@ -31,8 +31,9 @@ export function BacklinksPanel({ spaceID, path, onSelect }: Props) {
     api
       .searchSpace(spaceID, `[[${name}`)
       .then(matches => {
+        const safe = Array.isArray(matches) ? matches : []
         const dedup = new Map<string, api.SearchMatch>()
-        for (const m of matches) {
+        for (const m of safe) {
           if (m.path === path) continue
           if (!dedup.has(m.path)) dedup.set(m.path, m)
         }

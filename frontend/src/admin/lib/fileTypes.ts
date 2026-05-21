@@ -46,6 +46,28 @@ export function isCodeFile(path: string): boolean {
   return TEXT_EXTS.has(e) && !MARKDOWN_EXTS.has(e)
 }
 
+/** Returns the Monaco editor language id best matching the path's extension. */
+export function monacoLang(path: string): string {
+  const e = ext(path)
+  const map: Record<string, string> = {
+    md: 'markdown', markdown: 'markdown', mdx: 'markdown',
+    js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
+    ts: 'typescript', tsx: 'typescript',
+    py: 'python', rb: 'ruby', go: 'go', rs: 'rust',
+    yml: 'yaml', yaml: 'yaml', json: 'json', jsonc: 'json',
+    xml: 'xml', html: 'html', htm: 'html',
+    css: 'css', scss: 'scss', less: 'less',
+    sh: 'shell', bash: 'shell', zsh: 'shell', fish: 'shell',
+    sql: 'sql', graphql: 'graphql', gql: 'graphql',
+    c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cc: 'cpp', cxx: 'cpp',
+    java: 'java', kt: 'kotlin', scala: 'scala', cs: 'csharp', swift: 'swift',
+    php: 'php', dart: 'dart',
+    toml: 'ini', env: 'shell',
+    dockerfile: 'dockerfile',
+  }
+  return map[e] ?? 'plaintext'
+}
+
 /** Returns the highlight.js language id best matching the path's extension. */
 export function highlightLang(path: string): string {
   const e = ext(path)
