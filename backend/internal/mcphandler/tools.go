@@ -66,11 +66,38 @@ func (s *Server) toolDefs() []toolDef {
 		},
 		{
 			Name:        "search",
-			Description: "Search the Space for a substring across all files (case-insensitive). Returns matching path + line number + snippet.",
+			Description: "Substring search across all files (case-insensitive). Simpler than `grep` — use `grep` when you need regex, context lines, or precise glob filtering.",
 			InputSchema: schemaObject(
 				requiredProp("query", "string", "Substring to search for."),
-				prop("glob", "string", "Optional glob filter, e.g. '*.md' or 'notes/*.md'."),
+				prop("glob", "string", "Optional glob filter, e.g. '*.md' (single-segment only)."),
 				prop("max_results", "number", "Maximum matches to return (default 200)."),
+			),
+		},
+		{
+			Name:        "grep",
+			Description: "Ripgrep-style regex search. Supports Go regex syntax, case-insensitive by default, optional context lines, and full ** glob filtering. Returns path, line, content, and the requested before/after context.",
+			InputSchema: schemaObject(
+				requiredProp("pattern", "string", "Go regex pattern. Use anchors and groups as needed."),
+				prop("glob", "string", "Optional file filter. Supports '**' (any depth), '*' (segment), '?'. E.g. '**/*.md', 'notes/**'."),
+				prop("case_sensitive", "boolean", "Default false."),
+				prop("context_before", "number", "Lines of context before each match (default 0, max 50)."),
+				prop("context_after", "number", "Lines of context after each match (default 0, max 50)."),
+				prop("max_results", "number", "Maximum matches (default 200, max 1000)."),
+			),
+		},
+		{
+			Name:        "glob",
+			Description: "List files in the Space whose paths match a glob. Returns slash-delimited paths relative to the files root.",
+			InputSchema: schemaObject(
+				requiredProp("pattern", "string", "Glob pattern. '**' matches any depth, '*' a single segment. E.g. '**/*.md', 'notes/*'."),
+				prop("max_results", "number", "Maximum paths to return (default 1000, max 5000)."),
+			),
+		},
+		{
+			Name:        "outline",
+			Description: "Return the heading outline (level, text, line) of a markdown file. Useful for picking the right read_file range before fetching content.",
+			InputSchema: schemaObject(
+				requiredProp("path", "string", "File path."),
 			),
 		},
 		{
@@ -247,6 +274,49 @@ func (s *Server) dispatchTool(_ context.Context, spaceID, tokenID, name string, 
 		}
 		return jsonResult(matches)
 
+	case "grep":
+		pattern := stringArg(args, "pattern")
+		if pattern == "" {
+			return errResult("pattern required"), nil
+		}
+		matches, err := s.store.Grep(spaceID, space.GrepOpts{
+			Pattern:       pattern,
+			Glob:          stringArg(args, "glob"),
+			CaseSensitive: boolArg(args, "case_sensitive"),
+			ContextBefore: intArg(args, "context_before", 0),
+			ContextAfter:  intArg(args, "context_after", 0),
+			MaxResults:    intArg(args, "max_results", 200),
+		})
+		s.auditCall(spaceID, tokenID, "mcp.grep", pattern, err)
+		if err != nil {
+			return errResult(err.Error()), nil
+		}
+		return jsonResult(matches)
+
+	case "glob":
+		pattern := stringArg(args, "pattern")
+		if pattern == "" {
+			return errResult("pattern required"), nil
+		}
+		max := intArg(args, "max_results", 1000)
+		paths, err := s.store.Glob(spaceID, pattern, max)
+		s.auditCall(spaceID, tokenID, "mcp.glob", pattern, err)
+		if err != nil {
+			return errResult(err.Error()), nil
+		}
+		return jsonResult(paths)
+
+	case "outline":
+		if pathArg == "" {
+			return errResult("path required"), nil
+		}
+		outline, err := s.store.Outline(spaceID, pathArg)
+		s.auditCall(spaceID, tokenID, "mcp.outline", pathArg, err)
+		if err != nil {
+			return errResult(err.Error()), nil
+		}
+		return jsonResult(outline)
+
 	case "git_log":
 		limit := intArg(args, "limit", 50)
 		commits, err := s.git.Log(spaceID, limit)
@@ -295,6 +365,19 @@ func intArg(m map[string]any, key string, def int) int {
 		return int(v)
 	default:
 		return def
+	}
+}
+
+func boolArg(m map[string]any, key string) bool {
+	switch v := m[key].(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true" || v == "1" || v == "yes"
+	case float64:
+		return v != 0
+	default:
+		return false
 	}
 }
 

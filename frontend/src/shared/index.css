@@ -50,21 +50,40 @@ mark {
   @apply bg-lime-200 text-zinc-900 dark:bg-[#BFF355]/30 dark:text-[#BFF355] rounded-sm px-1 py-0.5;
 }
 
-/* Comment anchors: subtler than yellow highlight, clickable. The active +
-   blink classes are toggled via JS from the sidebar hover handler. */
+/* Comment anchors: subtler than the yellow highlight `<mark>` style; the
+   anchor mark is always visible (so the reader can see where comments
+   are), and gets dramatic emphasis when its sidebar counterpart is
+   hovered (data-active="true") or freshly focused (.comment-anchor-blink). */
 mark.comment-anchor {
-  @apply bg-amber-100/70 text-zinc-900 dark:bg-amber-500/15 dark:text-zinc-200 border-b border-amber-400/70 dark:border-amber-500/40 rounded-none px-0 py-0 cursor-pointer transition-colors;
+  background-color: rgba(252, 211, 77, 0.30);
+  border-bottom: 2px solid rgba(245, 158, 11, 0.65);
+  color: inherit;
+  cursor: pointer;
+  padding: 1px 2px;
+  border-radius: 2px;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+.dark mark.comment-anchor {
+  background-color: rgba(245, 158, 11, 0.18);
+  border-bottom-color: rgba(245, 158, 11, 0.55);
+  color: inherit;
 }
 mark.comment-anchor:hover,
 mark.comment-anchor[data-active="true"] {
-  @apply bg-amber-200 dark:bg-amber-500/30;
+  background-color: rgba(252, 211, 77, 0.65) !important;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.6);
+}
+.dark mark.comment-anchor:hover,
+.dark mark.comment-anchor[data-active="true"] {
+  background-color: rgba(245, 158, 11, 0.45) !important;
+  box-shadow: 0 0 0 2px rgba(252, 211, 77, 0.7);
 }
 mark.comment-anchor.comment-anchor-blink {
-  animation: comment-anchor-blink 0.4s ease-in-out 3;
+  animation: comment-anchor-blink 0.45s ease-in-out 3;
 }
 @keyframes comment-anchor-blink {
-  0%, 100% { background-color: rgba(252, 211, 77, 0.35); }
-  50%      { background-color: rgba(245, 158, 11, 0.7); }
+  0%, 100% { background-color: rgba(252, 211, 77, 0.55); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4); }
+  50%      { background-color: rgba(245, 158, 11, 0.9);  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.6); }
 }
 
 /* Floating selection toolbar above the user's text selection in the viewer */
@@ -79,6 +98,93 @@ mark.comment-anchor.comment-anchor-blink {
 .selection-toolbar button {
   @apply px-3 py-1.5 hover:bg-zinc-700 dark:hover:bg-zinc-300 transition-colors cursor-pointer flex items-center gap-1.5 first:rounded-l-md last:rounded-r-md;
 }
+
+/* ------- Reader typography (overrides @tailwindcss/typography defaults) -----
+   Goal: comfortable long-form reading, Notion/Obsidian-grade rhythm. Body
+   sits at 17px with a 1.75 line-height; headings tighten letter-spacing for
+   visual mass; inline code is subtle; pre blocks use a softer corner radius. */
+.prose {
+  @apply max-w-none transition-colors duration-200;
+  font-size: 17px;
+  line-height: 1.75;
+  letter-spacing: -0.003em;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+}
+.prose p {
+  margin-top: 0.85em;
+  margin-bottom: 0.85em;
+}
+.prose h1 {
+  font-size: 2.25em;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin-top: 0.6em;
+  margin-bottom: 0.5em;
+}
+.prose h2 {
+  font-size: 1.55em;
+  font-weight: 650;
+  letter-spacing: -0.018em;
+  line-height: 1.25;
+  margin-top: 2em;
+  margin-bottom: 0.55em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid rgba(127,127,127,0.15);
+}
+.prose h3 {
+  font-size: 1.22em;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin-top: 1.7em;
+  margin-bottom: 0.4em;
+}
+.prose h4 {
+  font-size: 1.05em;
+  font-weight: 600;
+  margin-top: 1.4em;
+}
+.prose ul > li, .prose ol > li {
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+}
+.prose blockquote {
+  font-style: normal;
+  font-weight: normal;
+  border-left-width: 3px;
+  padding-left: 1em;
+  color: inherit;
+  opacity: 0.78;
+}
+.prose blockquote p::before, .prose blockquote p::after { content: none; }
+.prose hr { border-color: rgba(127,127,127,0.15); margin-top: 2.5em; margin-bottom: 2.5em; }
+.prose img { border-radius: 6px; }
+.prose table { font-size: 0.95em; }
+
+/* Inline code: subtle background, tighter padding. Pre blocks get a softer
+   look so they don't dominate the page. */
+.prose :not(pre) > code {
+  background-color: rgba(127, 127, 127, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.875em;
+  font-weight: 500;
+  border: 0;
+}
+.prose :not(pre) > code::before,
+.prose :not(pre) > code::after { content: none; }
+.dark .prose :not(pre) > code {
+  background-color: rgba(255, 255, 255, 0.07);
+}
+.prose pre {
+  font-size: 0.86em;
+  line-height: 1.6;
+  border-radius: 8px;
+  padding: 1em 1.25em;
+  background-color: #0d1117;
+}
+.dark .prose pre { background-color: #0a0a0a; border: 1px solid rgba(255,255,255,0.06); }
+.prose pre code { font-weight: 400; }
 
 /* Override prose colors for dark mode */
 .prose {

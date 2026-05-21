@@ -215,9 +215,27 @@ export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved,
     const view = viewRef.current
     if (!view || !picker) return
     const cursor = view.state.selection.main.head
+    const doc = view.state.doc
+    // CodeMirror's closeBrackets may have auto-inserted one or two trailing
+    // `]` right after the cursor when the user typed `[[`. Count the overlap
+    // between what's already there and the trailing brackets in our insert
+    // text, then drop the overlap so we don't end up with `[[foo]]]]`.
+    let existingClose = 0
+    for (let i = 0; i < 2 && cursor + i < doc.length; i++) {
+      if (doc.sliceString(cursor + i, cursor + i + 1) === ']') existingClose++
+      else break
+    }
+    let insertClose = 0
+    for (let i = text.length - 1; i >= 0 && insertClose < 2; i--) {
+      if (text[i] === ']') insertClose++
+      else break
+    }
+    const overlap = Math.min(existingClose, insertClose)
+    const insert = overlap > 0 ? text.slice(0, text.length - overlap) : text
+    const caretAfter = picker.openPos + insert.length + overlap
     view.dispatch({
-      changes: { from: picker.openPos, to: cursor, insert: text },
-      selection: { anchor: picker.openPos + text.length },
+      changes: { from: picker.openPos, to: cursor, insert },
+      selection: { anchor: caretAfter },
     })
     setPicker(null)
     view.focus()

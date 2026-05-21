@@ -155,22 +155,31 @@ export function MarkdownView({
     }
   }, [onHoverMark, onSelectAnchor])
 
-  // React to activeCommentID changes: toggle `data-active` on matching marks.
+  // React to activeCommentID changes: toggle `data-active` on matching marks,
+  // scroll the first matching mark into view, and fire the blink animation.
+  // Wrapped in rAF so that if `comments` and `activeCommentID` change in the
+  // same render (e.g. brand-new comment freshly committed), the mark exists
+  // before we try to highlight it.
   useEffect(() => {
     const article = articleRef.current
     if (!article) return
-    article.querySelectorAll<HTMLElement>('mark.comment-anchor').forEach(m => {
-      m.dataset.active = m.dataset.commentId === activeCommentID ? 'true' : 'false'
-    })
-    if (activeCommentID) {
+    const frame = requestAnimationFrame(() => {
+      article.querySelectorAll<HTMLElement>('mark.comment-anchor').forEach(m => {
+        m.dataset.active = m.dataset.commentId === activeCommentID ? 'true' : 'false'
+      })
+      if (!activeCommentID) return
       const marks = article.querySelectorAll<HTMLElement>(
         `mark.comment-anchor[data-comment-id="${CSS.escape(activeCommentID)}"]`,
       )
+      if (marks.length === 0) return
+      // Scroll the first matching mark roughly into the middle of the viewport.
+      marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' })
       marks.forEach(m => {
         m.classList.add('comment-anchor-blink')
-        window.setTimeout(() => m.classList.remove('comment-anchor-blink'), 1300)
+        window.setTimeout(() => m.classList.remove('comment-anchor-blink'), 1400)
       })
-    }
+    })
+    return () => cancelAnimationFrame(frame)
   }, [activeCommentID])
 
   return (

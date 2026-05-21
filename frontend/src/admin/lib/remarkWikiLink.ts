@@ -44,7 +44,8 @@ export const remarkWikiLink: Plugin<[], Root> = () => (tree) => {
       let anchor = ''
       const hash = target.indexOf('#')
       if (hash >= 0) {
-        anchor = target.slice(hash + 1)
+        // Slugify so `[[file#My Heading]]` matches rehype-slug's id="my-heading".
+        anchor = slugifyHeading(target.slice(hash + 1))
         target = target.slice(0, hash)
       }
       let path = target
@@ -65,4 +66,20 @@ export const remarkWikiLink: Plugin<[], Root> = () => (tree) => {
     ;(parent as Parent).children.splice(index, 1, ...out)
     return [SKIP, index + out.length]
   })
+}
+
+/**
+ * slugifyHeading approximates github-slugger / rehype-slug's default algorithm
+ * so `[[file#My Heading!]]` becomes a hash that matches the rendered <h2 id>.
+ * Doesn't handle the +1 numeric suffix that rehype-slug appends to duplicate
+ * headings on the same page (rare in practice, can be addressed if it bites).
+ */
+function slugifyHeading(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }

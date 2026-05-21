@@ -41,7 +41,13 @@ export function FileTree({ entries, current, onSelect, onContextMenu, depth = 0 
                 <span className="font-medium text-zinc-300 truncate">{e.name}</span>
               </div>
               {!isCollapsed && e.children && (
-                <FileTree entries={e.children} current={current} onSelect={onSelect} depth={depth + 1} />
+                <FileTree
+                  entries={e.children}
+                  current={current}
+                  onSelect={onSelect}
+                  onContextMenu={onContextMenu}
+                  depth={depth + 1}
+                />
               )}
             </li>
           )

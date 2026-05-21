@@ -29,8 +29,11 @@ export function MCPIntegrationModal({ open, spaceID, url, rawToken, onClose }: P
 
   const serverName = `notation-${spaceID}`
 
-  const cliClaude = `claude mcp add ${serverName} --transport http \\
-  --url ${url} \\
+  // `claude mcp add` takes the name and URL positionally; --transport and -H
+  // are options. `--url` is NOT a valid flag.
+  const cliClaude = `claude mcp add ${serverName} "${url}" \\
+  --transport http \\
+  --scope user \\
   --header "Authorization: Bearer ${token}"`
 
   const claudeJson = JSON.stringify(
@@ -159,10 +162,11 @@ curl -X POST '${url}' \\
                 </p>
                 <CodeBlock value={curlSnippet} />
                 <p className="text-xs text-zinc-500">
-                  Available tools: <code>list_files</code>, <code>get_tree</code>, <code>read_file</code>,{' '}
-                  <code>write_file</code>, <code>create_file</code>, <code>delete_file</code>,{' '}
-                  <code>rename_file</code>, <code>mkdir</code>, <code>search</code>,{' '}
-                  <code>git_log</code>, <code>git_diff</code>.
+                  Tools the server exposes:{' '}
+                  <code>list_files</code>, <code>get_tree</code>, <code>glob</code>, <code>outline</code>,{' '}
+                  <code>read_file</code>, <code>write_file</code>, <code>create_file</code>,{' '}
+                  <code>delete_file</code>, <code>rename_file</code>, <code>mkdir</code>,{' '}
+                  <code>search</code>, <code>grep</code>, <code>git_log</code>, <code>git_diff</code>.
                 </p>
               </div>
             )}
