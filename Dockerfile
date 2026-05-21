@@ -18,6 +18,7 @@ COPY backend/ ./backend/
 # Overlay the built frontend into the embed path before compiling.
 COPY --from=frontend /work/backend/web/dist ./backend/web/dist
 RUN cd backend \
+ && go mod tidy \
  && CGO_ENABLED=0 GOOS=linux go build \
       -trimpath -ldflags="-s -w" \
       -o /out/notation \
