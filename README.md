@@ -81,7 +81,7 @@ Each Space is a folder on disk with its own git repo. Auto-commit on save, manua
 
 ### ✍️  Notion-grade editor
 
-CodeMirror-based Markdown editor with `[[wiki-link]]` picker, syntax highlighting, selection toolbar, and `Cmd/Ctrl + K` command palette.
+Monaco-based Markdown editor with toolbar, `[[wiki-link]]` picker, custom context menu, line numbers, selection toolbar, and `Cmd/Ctrl + K` command palette.
 
 </td>
 </tr>
@@ -670,8 +670,7 @@ Built on the shoulders of:
 - [go-webauthn](https://github.com/go-webauthn/webauthn) — WebAuthn server
 - [@simplewebauthn/browser](https://simplewebauthn.dev/) — WebAuthn client
 - [React](https://react.dev) + [Vite](https://vite.dev) + [Tailwind](https://tailwindcss.com)
-- [CodeMirror 6](https://codemirror.net/) — the editor
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/) — diff view
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/) — both the markdown editor and the side-by-side diff view
 - [SheetJS](https://sheetjs.com/) — XLSX parsing
 - [Mammoth.js](https://github.com/mwilliamson/mammoth.js) — DOCX → HTML
 - [Mermaid](https://mermaid.js.org/) + [KaTeX](https://katex.org/) — diagrams & math

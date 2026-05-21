@@ -1,63 +1,22 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
-import { Save } from 'lucide-react'
-import CodeMirror, { EditorView } from '@uiw/react-codemirror'
+// Monaco-based Markdown editor with a sticky toolbar, floating selection
+// actions, wiki-link picker, custom context-menu items, and full keyboard
+// shortcuts. Replaces the older CodeMirror editor so both edit-mode and
+// the diff-view (HistoryView) use the same engine.
+
+import '../lib/monaco-setup'
+
+import { useEffect, useRef, useState, useCallback } from 'react'
+import type * as MonacoNS from 'monaco-editor'
+import MonacoEditor, { type OnMount } from '@monaco-editor/react'
+import {
+  Save, Bold, Italic, Strikethrough, Code, Code2, Heading1, Heading2, Heading3,
+  List, ListOrdered, Quote, Highlighter, Link as LinkIcon, Brackets, MessageSquare,
+} from 'lucide-react'
 import { WikiLinkPicker } from './WikiLinkPicker'
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { languages } from '@codemirror/language-data'
-import { insertNewlineContinueMarkup } from '@codemirror/lang-markdown'
-import { keymap } from '@codemirror/view'
-import { EditorSelection, StateField } from '@codemirror/state'
-import { autocompletion, CompletionContext } from '@codemirror/autocomplete'
-import { Tooltip, showTooltip } from '@codemirror/view'
 import * as api from '../lib/api'
 
-const selectionTooltip = StateField.define<readonly Tooltip[]>({
-  create: getTooltip,
-  update(tooltips, tr) {
-    if (!tr.docChanged && !tr.selection) return tooltips
-    return getTooltip(tr.state)
-  },
-  provide: f => showTooltip.computeN([f], state => state.field(f))
-})
-
-function getTooltip(state: any): readonly Tooltip[] {
-  const ranges = state.selection.ranges
-  if (ranges.length === 0) return []
-  const range = ranges[0]
-  if (range.empty) return []
-  
-  const text = state.sliceDoc(range.from, range.to)
-  
-  return [{
-    pos: range.from,
-    above: true,
-    strictSide: true,
-    arrow: true,
-    create: (view: EditorView) => {
-      const dom = document.createElement("div")
-      dom.className = "flex items-center gap-1 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-md shadow-xl px-1 py-1 text-xs font-medium"
-      
-      const btnMark = document.createElement("button")
-      btnMark.textContent = "Highlight"
-      btnMark.className = "px-2 py-1 hover:bg-zinc-700 dark:hover:bg-zinc-300 rounded cursor-pointer transition-colors"
-      btnMark.onclick = () => {
-        toggleHTMLTag("mark")(view)
-      }
-      
-      const btnComment = document.createElement("button")
-      btnComment.textContent = "Comment"
-      btnComment.className = "px-2 py-1 hover:bg-zinc-700 dark:hover:bg-zinc-300 rounded cursor-pointer transition-colors text-[#BFF355] dark:text-lime-700"
-      btnComment.onclick = () => {
-        toggleHTMLTag("mark")(view)
-        view.dom.dispatchEvent(new CustomEvent('editor-comment-request', { detail: text, bubbles: true }))
-      }
-      
-      dom.appendChild(btnMark)
-      dom.appendChild(btnComment)
-      return { dom }
-    }
-  }]
-}
+type IEditor = MonacoNS.editor.IStandaloneCodeEditor
+type IMonaco = typeof MonacoNS
 
 type Props = {
   spaceID: string
@@ -70,323 +29,466 @@ type Props = {
   onCommentRequest?: (text: string) => void
 }
 
-// Custom Markdown Bold/Italic shortcuts
-const toggleFormat = (mark: string) => (view: EditorView) => {
-  const { state } = view;
-  const tr = state.changeByRange(range => {
-    const len = mark.length;
-    const isMarked = range.from >= len && range.to <= state.doc.length - len &&
-                     state.sliceDoc(range.from - len, range.from) === mark &&
-                     state.sliceDoc(range.to, range.to + len) === mark;
-    if (isMarked) {
-      return {
-        changes: [
-          { from: range.from - len, to: range.from, insert: "" },
-          { from: range.to, to: range.to + len, insert: "" }
-        ],
-        range: EditorSelection.range(range.from - len, range.to - len)
-      }
-    } else {
-      return {
-        changes: [
-          { from: range.from, insert: mark },
-          { from: range.to, insert: mark }
-        ],
-        range: EditorSelection.range(range.from + len, range.to + len)
-      }
-    }
-  });
-  view.dispatch(tr);
-  return true;
-};
+export default function Editor({
+  spaceID, path, initial, etag, theme, allFiles, onSaved, onCommentRequest,
+}: Props) {
+  const editorRef = useRef<IEditor | null>(null)
+  const monacoRef = useRef<IMonaco | null>(null)
 
-const toggleHTMLTag = (tag: string) => (view: EditorView) => {
-  const { state } = view;
-  const openTag = `<${tag}>`;
-  const closeTag = `</${tag}>`;
-  const tr = state.changeByRange(range => {
-    const lenOpen = openTag.length;
-    const lenClose = closeTag.length;
-    const isMarked = range.from >= lenOpen && range.to <= state.doc.length - lenClose &&
-                     state.sliceDoc(range.from - lenOpen, range.from) === openTag &&
-                     state.sliceDoc(range.to, range.to + lenClose) === closeTag;
-    if (isMarked) {
-      return {
-        changes: [
-          { from: range.from - lenOpen, to: range.from, insert: "" },
-          { from: range.to, to: range.to + lenClose, insert: "" }
-        ],
-        range: EditorSelection.range(range.from - lenOpen, range.to - lenOpen)
-      }
-    } else {
-      return {
-        changes: [
-          { from: range.from, insert: openTag },
-          { from: range.to, insert: closeTag }
-        ],
-        range: EditorSelection.range(range.from + lenOpen, range.to + lenOpen)
-      }
-    }
-  });
-  view.dispatch(tr);
-  return true;
-};
-
-const markdownKeybindings = keymap.of([
-  { key: "Enter", run: insertNewlineContinueMarkup },
-  { key: "Mod-b", run: toggleFormat("**") },
-  { key: "Mod-i", run: toggleFormat("*") },
-  { key: "Mod-e", run: toggleHTMLTag("mark") } // Cmd+E for Bookmark/Highlight
-]);
-
-const customTheme = EditorView.theme({
-  "&": {
-    backgroundColor: "transparent",
-    fontSize: "15px",
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
-  },
-  ".cm-content": {
-    padding: "0",
-    minHeight: "300px",
-  },
-  ".cm-content *": {
-    lineHeight: "1.7",
-  },
-  "&.cm-focused": {
-    outline: "none",
-  },
-  "&.cm-focused .cm-cursor": {
-    borderLeftColor: "#BFF355", // Accent cursor
-    borderLeftWidth: "2px",
-  },
-  "&.cm-focused .cm-selectionBackground, ::selection": {
-    backgroundColor: "rgba(191, 243, 85, 0.2)",
-  },
-  ".cm-gutters": {
-    display: "none", // Hide line numbers for Notion-like feel
-  },
-  ".cm-header": {
-    fontWeight: "bold",
-  },
-  ".cm-header-1": { fontSize: "2.2em", marginTop: "1em", marginBottom: "0.5em" },
-  ".cm-header-2": { fontSize: "1.8em", marginTop: "0.8em", marginBottom: "0.4em" },
-  ".cm-header-3": { fontSize: "1.4em", marginTop: "0.6em", marginBottom: "0.3em" },
-})
-
-export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved, onCommentRequest }: Props) {
   const [content, setContent] = useState(initial)
   const [currentEtag, setCurrentEtag] = useState(etag)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const fileCache = useRef<Record<string, string>>({})
-  const viewRef = useRef<EditorView | null>(null)
-  // Wiki-link picker state. `openPos` is the document offset right after `[[`,
-  // which is where the inserted text should start replacing the user's typing.
-  const [picker, setPicker] = useState<
-    { x: number; y: number; openPos: number } | null
-  >(null)
   const dirty = content !== initial
 
-  // CodeMirror extension: detect when the user just typed `[[` and surface
-  // the picker anchored at the cursor's screen position. Memoized so the
-  // extension instance is stable across renders.
-  const wikiLinkTrigger = useMemo(
-    () =>
-      EditorView.updateListener.of(update => {
-        if (!update.docChanged) return
-        const cursor = update.state.selection.main.head
-        if (cursor < 2) return
-        const last2 = update.state.doc.sliceString(cursor - 2, cursor)
-        if (last2 === '[[') {
-          const coords = update.view.coordsAtPos(cursor)
-          if (coords) {
-            setPicker({
-              x: coords.left,
-              y: coords.bottom + 4,
-              openPos: cursor,
-            })
-          }
-        }
-      }),
-    [],
-  )
+  // ---- refs that the editor-command closures dereference at call time so
+  // they always see the latest React state without re-registering commands.
+  const contentRef = useRef(content)
+  const etagRef = useRef(currentEtag)
+  const allFilesRef = useRef(allFiles)
+  const pathRef = useRef(path)
+  const onCommentRequestRef = useRef(onCommentRequest)
+  useEffect(() => { contentRef.current = content }, [content])
+  useEffect(() => { etagRef.current = currentEtag }, [currentEtag])
+  useEffect(() => { allFilesRef.current = allFiles }, [allFiles])
+  useEffect(() => { pathRef.current = path }, [path])
+  useEffect(() => { onCommentRequestRef.current = onCommentRequest }, [onCommentRequest])
 
-  function insertAtPicker(text: string) {
-    const view = viewRef.current
-    if (!view || !picker) return
-    const cursor = view.state.selection.main.head
-    const doc = view.state.doc
-    // CodeMirror's closeBrackets may have auto-inserted one or two trailing
-    // `]` right after the cursor when the user typed `[[`. Count the overlap
-    // between what's already there and the trailing brackets in our insert
-    // text, then drop the overlap so we don't end up with `[[foo]]]]`.
-    let existingClose = 0
-    for (let i = 0; i < 2 && cursor + i < doc.length; i++) {
-      if (doc.sliceString(cursor + i, cursor + i + 1) === ']') existingClose++
-      else break
-    }
-    let insertClose = 0
-    for (let i = text.length - 1; i >= 0 && insertClose < 2; i--) {
-      if (text[i] === ']') insertClose++
-      else break
-    }
-    const overlap = Math.min(existingClose, insertClose)
-    const insert = overlap > 0 ? text.slice(0, text.length - overlap) : text
-    const caretAfter = picker.openPos + insert.length + overlap
-    view.dispatch({
-      changes: { from: picker.openPos, to: cursor, insert },
-      selection: { anchor: caretAfter },
-    })
-    setPicker(null)
-    view.focus()
-  }
-
+  // Reset content + etag when the user navigates to a different file.
   useEffect(() => {
     setContent(initial)
     setCurrentEtag(etag)
   }, [initial, path, etag])
 
-  const wikiLinkCompletion = async (context: CompletionContext) => {
-    const word = context.matchBefore(/\[\[([^\]]*)/)
-    if (!word) return null
-    if (word.from === word.to && !context.explicit) return null
-
-    const query = word.text.slice(2)
-    const hashIdx = query.indexOf('#')
-    let options = []
-
-    if (hashIdx === -1) {
-      // Suggest Files
-      options = allFiles
-        .filter(f => f.toLowerCase().includes(query.toLowerCase()))
-        .map(f => {
-           const clean = f.replace(/\.md$/i, '')
-           return { label: clean, type: 'text', detail: 'Page', apply: `[[${clean}]]` }
-        })
-    } else {
-      // Suggest Headings
-      const filePart = query.slice(0, hashIdx)
-      const headingQuery = query.slice(hashIdx + 1).toLowerCase()
-      
-      let targetContent = ''
-      if (filePart === '' || filePart + '.md' === path) {
-         targetContent = context.state.doc.toString()
-      } else {
-         const targetPath = filePart.endsWith('.md') ? filePart : filePart + '.md'
-         if (allFiles.includes(targetPath)) {
-           if (fileCache.current[targetPath]) {
-             targetContent = fileCache.current[targetPath]
-           } else {
-             try {
-               const res = await api.readFile(spaceID, targetPath)
-               targetContent = res.content
-               fileCache.current[targetPath] = targetContent
-             } catch (e) {
-               // ignore
-             }
-           }
-         }
-      }
-
-      const headings: string[] = []
-      const regex = /^#+\s+(.*)$/gm
-      let match;
-      while ((match = regex.exec(targetContent)) !== null) {
-        headings.push(match[1].trim())
-      }
-
-      options = headings
-        .filter(h => h.toLowerCase().includes(headingQuery))
-        .map(h => ({
-           label: h, type: 'property', detail: 'Heading', apply: `[[${filePart}#${h}]]`
-        }))
-    }
-
-    return {
-      from: word.from,
-      options,
-      validFor: /^\[\[([^\]]*)$/
-    }
-  }
-
-  async function save() {
-    if (!dirty) return
+  // ---- save ----------------------------------------------------------------
+  const save = useCallback(async () => {
+    if (contentRef.current === initial && !dirty) return
     setSaving(true)
     setErr(null)
     try {
-      await api.writeFile(spaceID, path, content, currentEtag)
+      await api.writeFile(spaceID, pathRef.current, contentRef.current, etagRef.current)
       setCurrentEtag(null)
-      onSaved(content, null)
-    } catch (e: any) {
+      onSaved(contentRef.current, null)
+    } catch (e) {
       if (String(e).includes('412')) {
-        setErr('Conflict: Someone else modified this file. Please copy your changes and refresh.')
+        setErr('Conflict: another writer modified this file. Copy your changes and reload.')
       } else {
         setErr(String(e))
       }
     } finally {
       setSaving(false)
     }
+  }, [spaceID, initial, dirty, onSaved])
+
+  // Stash the latest save() in a ref too so Monaco commands always invoke
+  // the current version.
+  const saveRef = useRef(save)
+  useEffect(() => { saveRef.current = save }, [save])
+
+  // ---- selection toolbar + wiki-link picker state -------------------------
+  const [selTool, setSelTool] = useState<
+    { x: number; y: number; text: string } | null
+  >(null)
+  const [picker, setPicker] = useState<
+    { x: number; y: number; openLine: number; openCol: number } | null
+  >(null)
+
+  // ---- markdown edit helpers ----------------------------------------------
+  function wrapSelection(prefix: string, suffix: string = prefix) {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
+    const sel = editor.getSelection()
+    if (!sel) return
+    const model = editor.getModel()
+    if (!model) return
+    const text = model.getValueInRange(sel)
+    // If the surrounding chars already match, strip — toggle semantics.
+    const startLine = sel.startLineNumber
+    const startCol = sel.startColumn
+    const endLine = sel.endLineNumber
+    const endCol = sel.endColumn
+    const lenP = prefix.length
+    const lenS = suffix.length
+    const before = startCol > lenP
+      ? model.getValueInRange(new monaco.Range(startLine, startCol - lenP, startLine, startCol))
+      : ''
+    const after = model.getValueInRange(new monaco.Range(endLine, endCol, endLine, endCol + lenS))
+    if (before === prefix && after === suffix) {
+      editor.executeEdits('toggle-wrap-off', [
+        { range: new monaco.Range(endLine, endCol, endLine, endCol + lenS), text: '' },
+        { range: new monaco.Range(startLine, startCol - lenP, startLine, startCol), text: '' },
+      ])
+    } else {
+      editor.executeEdits('toggle-wrap-on', [{ range: sel, text: `${prefix}${text}${suffix}` }])
+    }
+    editor.focus()
   }
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        if (dirty && !saving) void save()
-      }
+  function prependLines(prefix: string) {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
+    const sel = editor.getSelection()
+    if (!sel) return
+    const edits: MonacoNS.editor.IIdentifiedSingleEditOperation[] = []
+    for (let l = sel.startLineNumber; l <= sel.endLineNumber; l++) {
+      edits.push({ range: new monaco.Range(l, 1, l, 1), text: prefix, forceMoveMarkers: false })
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
+    editor.executeEdits('prepend-lines', edits)
+    editor.focus()
+  }
 
-  useEffect(() => {
-    function handleCommentRequest(e: Event) {
-      const customEvent = e as CustomEvent<string>
-      if (onCommentRequest) {
-        onCommentRequest(customEvent.detail)
-      }
+  function numberLines() {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
+    const sel = editor.getSelection()
+    if (!sel) return
+    const edits: MonacoNS.editor.IIdentifiedSingleEditOperation[] = []
+    let n = 1
+    for (let l = sel.startLineNumber; l <= sel.endLineNumber; l++) {
+      edits.push({ range: new monaco.Range(l, 1, l, 1), text: `${n}. `, forceMoveMarkers: false })
+      n++
     }
-    const editorNode = document.getElementById('cm-container')
-    if (editorNode) {
-      editorNode.addEventListener('editor-comment-request', handleCommentRequest)
-      return () => editorNode.removeEventListener('editor-comment-request', handleCommentRequest)
+    editor.executeEdits('number-lines', edits)
+    editor.focus()
+  }
+
+  function insertCodeBlock() {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
+    const sel = editor.getSelection()
+    if (!sel) return
+    const model = editor.getModel()
+    if (!model) return
+    const text = model.getValueInRange(sel)
+    editor.executeEdits('codeblock', [{ range: sel, text: `\`\`\`\n${text || ''}\n\`\`\`` }])
+    editor.focus()
+  }
+
+  function insertLink() {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
+    const sel = editor.getSelection()
+    if (!sel) return
+    const model = editor.getModel()
+    if (!model) return
+    const label = model.getValueInRange(sel) || 'link'
+    const inserted = `[${label}](url)`
+    editor.executeEdits('link', [{ range: sel, text: inserted }])
+    // Place the caret inside the (url) placeholder so the user can type.
+    const offset = inserted.length - 4
+    const start = sel.getStartPosition()
+    editor.setPosition({ lineNumber: start.lineNumber, column: start.column + offset })
+    editor.focus()
+  }
+
+  function startWikiLink() {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
+    const sel = editor.getSelection()
+    if (!sel) return
+    editor.executeEdits('wikilink', [{ range: sel, text: '[[' }])
+    editor.focus()
+    // The model-change listener below will see the new "[[" and open the picker.
+  }
+
+  function commentOnSelection() {
+    const editor = editorRef.current
+    if (!editor) return
+    const sel = editor.getSelection()
+    if (!sel) return
+    const text = editor.getModel()?.getValueInRange(sel) ?? ''
+    if (text.trim().length === 0) return
+    onCommentRequestRef.current?.(text)
+  }
+
+  // ---- onMount: wire Monaco extension points ------------------------------
+  const handleMount: OnMount = useCallback((editor, monaco) => {
+    editorRef.current = editor
+    monacoRef.current = monaco
+
+    // Disable auto-pairing — we own [[]] / ()/etc via toolbar + commands.
+    editor.updateOptions({ autoClosingBrackets: 'never', autoClosingQuotes: 'never' })
+
+    // ---- commands (keyboard shortcuts) ----
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { void saveRef.current() })
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB, () => wrapSelection('**'))
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => wrapSelection('*'))
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE, () => wrapSelection('<mark>', '</mark>'))
+
+    // ---- context-menu actions ----
+    editor.addAction({
+      id: 'notation.highlight',
+      label: 'Highlight selection',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE],
+      contextMenuGroupId: 'notation',
+      contextMenuOrder: 1,
+      run: () => wrapSelection('<mark>', '</mark>'),
+    })
+    editor.addAction({
+      id: 'notation.comment',
+      label: 'Comment on selection',
+      contextMenuGroupId: 'notation',
+      contextMenuOrder: 2,
+      run: () => commentOnSelection(),
+    })
+    editor.addAction({
+      id: 'notation.wikilink',
+      label: 'Insert wiki-link…',
+      contextMenuGroupId: 'notation',
+      contextMenuOrder: 3,
+      run: () => startWikiLink(),
+    })
+
+    // ---- wiki-link auto-completion (files + headings) ----
+    const completionDisposable = monaco.languages.registerCompletionItemProvider('markdown', {
+      triggerCharacters: ['[', '#'],
+      provideCompletionItems(model, position) {
+        const lineText = model.getLineContent(position.lineNumber)
+        const before = lineText.slice(0, position.column - 1)
+        const m = before.match(/\[\[([^\]\n]*)$/)
+        if (!m) return { suggestions: [] }
+        const query = m[1]
+        const replaceRange = new monaco.Range(
+          position.lineNumber, position.column - query.length,
+          position.lineNumber, position.column,
+        )
+        const hash = query.indexOf('#')
+        if (hash === -1) {
+          // File suggestions
+          const needle = query.toLowerCase()
+          const files = allFilesRef.current
+            .filter(f => /\.(md|markdown)$/i.test(f))
+            .filter(f => f.toLowerCase().includes(needle))
+            .slice(0, 50)
+          return {
+            suggestions: files.map(f => {
+              const clean = f.replace(/\.md$/i, '')
+              return {
+                label: clean,
+                kind: monaco.languages.CompletionItemKind.File,
+                detail: 'Page',
+                insertText: `${clean}]]`,
+                range: replaceRange,
+              }
+            }),
+          }
+        }
+        // Heading suggestions — pull from the current buffer or fetch.
+        const filePart = query.slice(0, hash)
+        const headingQuery = query.slice(hash + 1).toLowerCase()
+        const targetPath = filePart === '' || `${filePart}.md` === pathRef.current
+          ? pathRef.current
+          : (filePart.endsWith('.md') ? filePart : `${filePart}.md`)
+        const docContent = targetPath === pathRef.current
+          ? model.getValue()
+          : null
+        // For other files, suggest async via api.readFile (cached by browser anyway).
+        const fileContentPromise: Promise<string> = docContent != null
+          ? Promise.resolve(docContent)
+          : api.readFile(spaceID, targetPath).then(r => r.content).catch(() => '')
+        return fileContentPromise.then(text => {
+          const headings: string[] = []
+          const re = /^#+\s+(.+)$/gm
+          let mm: RegExpExecArray | null
+          while ((mm = re.exec(text)) !== null) headings.push(mm[1].trim())
+          return {
+            suggestions: headings
+              .filter(h => h.toLowerCase().includes(headingQuery))
+              .map(h => ({
+                label: h,
+                kind: monaco.languages.CompletionItemKind.Reference,
+                detail: 'Heading',
+                insertText: `${filePart}#${h}]]`,
+                range: replaceRange,
+              })),
+          }
+        })
+      },
+    })
+
+    // ---- selection toolbar updater ----
+    const updateSelTool = () => {
+      const sel = editor.getSelection()
+      if (!sel || sel.isEmpty()) { setSelTool(null); return }
+      const text = editor.getModel()?.getValueInRange(sel) ?? ''
+      if (text.trim().length < 2) { setSelTool(null); return }
+      const visible = editor.getScrolledVisiblePosition(sel.getStartPosition())
+      const dom = editor.getDomNode()
+      if (!visible || !dom) return
+      const rect = dom.getBoundingClientRect()
+      setSelTool({
+        x: rect.left + visible.left,
+        y: rect.top + visible.top - 38,
+        text,
+      })
     }
-  }, [onCommentRequest])
+    const selDisp = editor.onDidChangeCursorSelection(updateSelTool)
+    const scrollDisp = editor.onDidScrollChange(updateSelTool)
+    const blurDisp = editor.onDidBlurEditorWidget(() => {
+      // Don't tear down the toolbar on blur — the user is likely about to
+      // click one of the floating buttons, which steals focus from Monaco.
+    })
+
+    // ---- wiki-link trigger ([[) ----
+    const changeDisp = editor.onDidChangeModelContent((e) => {
+      // Only react to actual `[` insertions, not large paste events etc.
+      if (!e.changes.some(c => c.text === '[' || c.text === '[[')) return
+      const pos = editor.getPosition()
+      const model = editor.getModel()
+      if (!pos || !model) return
+      const startCol = Math.max(1, pos.column - 2)
+      const before = model.getValueInRange(new monaco.Range(pos.lineNumber, startCol, pos.lineNumber, pos.column))
+      if (before !== '[[') return
+      const visible = editor.getScrolledVisiblePosition(pos)
+      const dom = editor.getDomNode()
+      if (!visible || !dom) return
+      const rect = dom.getBoundingClientRect()
+      setPicker({
+        x: rect.left + visible.left,
+        y: rect.top + visible.top + (visible.height || 20) + 4,
+        openLine: pos.lineNumber,
+        openCol: pos.column,
+      })
+    })
+
+    return () => {
+      completionDisposable.dispose()
+      selDisp.dispose()
+      scrollDisp.dispose()
+      blurDisp.dispose()
+      changeDisp.dispose()
+    }
+  }, [spaceID])
+
+  function insertAtPicker(text: string) {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco || !picker) return
+    const model = editor.getModel()
+    if (!model) return
+    const pos = editor.getPosition()
+    if (!pos) return
+
+    // Replace from picker.openCol (right after `[[`) to current cursor with `text`.
+    const range = new monaco.Range(picker.openLine, picker.openCol, pos.lineNumber, pos.column)
+
+    // closeBrackets isn't on, but defensive: if `]]` already follows, drop ours.
+    const after = model.getValueInRange(new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column + 2))
+    let insert = text
+    let extra = 0
+    if (after.startsWith(']]') && insert.endsWith(']]')) {
+      insert = insert.slice(0, -2)
+      extra = 2
+    } else if (after.startsWith(']') && insert.endsWith(']]')) {
+      insert = insert.slice(0, -1)
+      extra = 1
+    }
+
+    editor.executeEdits('wiki-link-pick', [{ range, text: insert }])
+    editor.setPosition({
+      lineNumber: picker.openLine,
+      column: picker.openCol + insert.length + extra,
+    })
+    editor.focus()
+    setPicker(null)
+  }
+
+  // ---- render -------------------------------------------------------------
 
   return (
-    <div className="relative min-h-full pb-20" id="cm-container">
-      <div className="max-w-3xl mx-auto p-8">
-        <CodeMirror
+    <div className="relative flex flex-col h-full min-h-0 bg-white dark:bg-[#0a0a0a]">
+      <Toolbar
+        dirty={dirty}
+        saving={saving}
+        err={err}
+        onSave={() => void save()}
+        onAction={(a) => {
+          switch (a) {
+            case 'h1': prependLines('# '); break
+            case 'h2': prependLines('## '); break
+            case 'h3': prependLines('### '); break
+            case 'bold': wrapSelection('**'); break
+            case 'italic': wrapSelection('*'); break
+            case 'strike': wrapSelection('~~'); break
+            case 'highlight': wrapSelection('<mark>', '</mark>'); break
+            case 'code': wrapSelection('`'); break
+            case 'codeblock': insertCodeBlock(); break
+            case 'ul': prependLines('- '); break
+            case 'ol': numberLines(); break
+            case 'quote': prependLines('> '); break
+            case 'link': insertLink(); break
+            case 'wikilink': startWikiLink(); break
+          }
+        }}
+      />
+
+      <div className="flex-1 min-h-0">
+        <MonacoEditor
+          height="100%"
+          defaultLanguage="markdown"
           value={content}
-          onChange={(val) => setContent(val)}
-          onCreateEditor={(view) => { viewRef.current = view }}
-          theme={theme}
-          extensions={[
-            markdown({ base: markdownLanguage, codeLanguages: languages }),
-            EditorView.lineWrapping,
-            markdownKeybindings,
-            customTheme,
-            autocompletion({ override: [wikiLinkCompletion] }),
-            wikiLinkTrigger,
-            selectionTooltip
-          ]}
-          basicSetup={{
-            lineNumbers: false,
-            foldGutter: false,
-            highlightActiveLine: false,
-            highlightActiveLineGutter: false,
-            dropCursor: true,
-            allowMultipleSelections: true,
-            indentOnInput: true,
-            bracketMatching: true,
-            closeBrackets: true,
-            autocompletion: true,
-            history: true,
-            searchKeymap: true,
+          onChange={(v) => setContent(v ?? '')}
+          onMount={handleMount}
+          theme={theme === 'dark' ? 'notation-dark' : 'notation-light'}
+          options={{
+            fontSize: 15,
+            fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif',
+            lineNumbers: 'on',
+            lineNumbersMinChars: 3,
+            renderLineHighlight: 'all',
+            wordWrap: 'on',
+            wrappingIndent: 'same',
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            padding: { top: 12, bottom: 80 },
+            automaticLayout: true,
+            renderWhitespace: 'none',
+            smoothScrolling: true,
+            cursorBlinking: 'smooth',
+            cursorSmoothCaretAnimation: 'on',
+            mouseWheelZoom: false,
+            stickyScroll: { enabled: false },
+            tabSize: 2,
+            insertSpaces: true,
+            quickSuggestions: { other: true, comments: false, strings: true },
+            suggestOnTriggerCharacters: true,
+            acceptSuggestionOnEnter: 'on',
+            scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+            unicodeHighlight: { ambiguousCharacters: false, invisibleCharacters: false },
           }}
-          className="w-full h-full"
         />
       </div>
+
+      {selTool && (
+        <div
+          className="selection-toolbar"
+          style={{ left: selTool.x, top: selTool.y, position: 'fixed' }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button
+            onClick={() => {
+              wrapSelection('<mark>', '</mark>')
+              setSelTool(null)
+            }}
+          >
+            <Highlighter size={12} /> Highlight
+          </button>
+          <button
+            onClick={() => {
+              onCommentRequestRef.current?.(selTool.text)
+              setSelTool(null)
+            }}
+          >
+            <MessageSquare size={12} /> Comment
+          </button>
+        </div>
+      )}
 
       <WikiLinkPicker
         open={picker !== null}
@@ -398,22 +500,98 @@ export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved,
         onSelect={insertAtPicker}
         onClose={() => setPicker(null)}
       />
+    </div>
+  )
+}
 
-      {/* Floating Save Actions */}
-      <div className="fixed bottom-6 right-6 flex flex-col items-end gap-2 z-50">
-        {err && <div className="bg-red-50 dark:bg-red-950/90 text-red-600 dark:text-red-200 px-3 py-1.5 rounded-md text-xs border border-red-200 dark:border-red-900/50 backdrop-blur-sm shadow-xl">{err}</div>}
-        <div className={`transition-all duration-300 flex items-center gap-3 ${dirty ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-          <span className="text-zinc-500 text-xs bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 px-2 py-1 rounded-md backdrop-blur-md shadow-sm">⌘/Ctrl + S</span>
-          <button
-            onClick={save}
-            disabled={saving || !dirty}
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] font-semibold text-sm rounded-full shadow-lg transition-colors disabled:opacity-50 cursor-pointer"
-          >
-            <Save size={16} />
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
+// ---- Toolbar -------------------------------------------------------------
+
+type ToolbarProps = {
+  dirty: boolean
+  saving: boolean
+  err: string | null
+  onSave: () => void
+  onAction: (a:
+    | 'h1' | 'h2' | 'h3'
+    | 'bold' | 'italic' | 'strike' | 'highlight' | 'code' | 'codeblock'
+    | 'ul' | 'ol' | 'quote' | 'link' | 'wikilink'
+  ) => void
+}
+
+function Toolbar({ dirty, saving, err, onSave, onAction }: ToolbarProps) {
+  return (
+    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-zinc-200 dark:border-zinc-800/60 bg-zinc-50/80 dark:bg-zinc-900/40 backdrop-blur-sm flex-shrink-0 sticky top-0 z-20">
+      <ToolGroup>
+        <ToolBtn icon={Heading1} title="Heading 1" onClick={() => onAction('h1')} />
+        <ToolBtn icon={Heading2} title="Heading 2" onClick={() => onAction('h2')} />
+        <ToolBtn icon={Heading3} title="Heading 3" onClick={() => onAction('h3')} />
+      </ToolGroup>
+      <Divider />
+      <ToolGroup>
+        <ToolBtn icon={Bold} title="Bold (⌘B)" onClick={() => onAction('bold')} />
+        <ToolBtn icon={Italic} title="Italic (⌘I)" onClick={() => onAction('italic')} />
+        <ToolBtn icon={Strikethrough} title="Strikethrough" onClick={() => onAction('strike')} />
+        <ToolBtn icon={Highlighter} title="Highlight (⌘E)" onClick={() => onAction('highlight')} />
+        <ToolBtn icon={Code} title="Inline code" onClick={() => onAction('code')} />
+      </ToolGroup>
+      <Divider />
+      <ToolGroup>
+        <ToolBtn icon={List} title="Bullet list" onClick={() => onAction('ul')} />
+        <ToolBtn icon={ListOrdered} title="Numbered list" onClick={() => onAction('ol')} />
+        <ToolBtn icon={Quote} title="Quote" onClick={() => onAction('quote')} />
+        <ToolBtn icon={Code2} title="Code block" onClick={() => onAction('codeblock')} />
+      </ToolGroup>
+      <Divider />
+      <ToolGroup>
+        <ToolBtn icon={LinkIcon} title="Insert link" onClick={() => onAction('link')} />
+        <ToolBtn icon={Brackets} title="Wiki-link [[" onClick={() => onAction('wikilink')} />
+      </ToolGroup>
+
+      <div className="ml-auto flex items-center gap-2 pl-2">
+        {err && (
+          <span className="text-xs text-red-600 dark:text-red-400 truncate max-w-xs" title={err}>
+            {err}
+          </span>
+        )}
+        {dirty && !saving && (
+          <span className="text-[11px] text-amber-600 dark:text-amber-400">unsaved</span>
+        )}
+        <button
+          onClick={onSave}
+          disabled={!dirty || saving}
+          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40"
+          title="Save (⌘S)"
+        >
+          <Save size={13} /> {saving ? 'Saving…' : 'Save'}
+        </button>
       </div>
     </div>
+  )
+}
+
+function ToolGroup({ children }: { children: React.ReactNode }) {
+  return <div className="flex items-center gap-0.5">{children}</div>
+}
+
+function Divider() {
+  return <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700/60 mx-1" />
+}
+
+function ToolBtn({
+  icon: Icon, title, onClick,
+}: {
+  icon: typeof Bold
+  title: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className="p-1.5 rounded text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60 transition-colors"
+    >
+      <Icon size={14} />
+    </button>
   )
 }

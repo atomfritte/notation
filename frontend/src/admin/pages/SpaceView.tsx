@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
 import { MarkdownView } from '../components/MarkdownView'
-import { Editor } from '../components/Editor'
+// Monaco is heavy (~3MB). Load it only when the user actually starts editing.
+const Editor = lazy(() => import('../components/Editor'))
 import { SharePanel } from '../components/SharePanel'
 import { MCPPanel } from '../components/MCPPanel'
 import { CommentThread } from '../components/CommentThread'
@@ -542,23 +543,31 @@ export function SpaceView() {
                 )}
 
                 {editing ? (
-                  <Editor
-                    spaceID={spaceID}
-                    path={file}
-                    initial={content}
-                    etag={etag}
-                    theme={theme}
-                    allFiles={allFiles}
-                    onSaved={(c, newEtag) => {
-                      setContent(c)
-                      setEtag(newEtag)
-                      refreshTree()
-                    }}
-                    onCommentRequest={(selectedText) => {
-                      setShowComments(true)
-                      setPendingComment(`> ${selectedText.split('\n').join('\n> ')}\n\n`)
-                    }}
-                  />
+                  <Suspense
+                    fallback={
+                      <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
+                        Loading editor…
+                      </div>
+                    }
+                  >
+                    <Editor
+                      spaceID={spaceID}
+                      path={file}
+                      initial={content}
+                      etag={etag}
+                      theme={theme}
+                      allFiles={allFiles}
+                      onSaved={(c, newEtag) => {
+                        setContent(c)
+                        setEtag(newEtag)
+                        refreshTree()
+                      }}
+                      onCommentRequest={(selectedText) => {
+                        setShowComments(true)
+                        setPendingComment(`> ${selectedText.split('\n').join('\n> ')}\n\n`)
+                      }}
+                    />
+                  </Suspense>
                 ) : (
                   <div className={isMarkdownFile(file) && content.startsWith('# ') ? 'pt-8' : 'pt-0'}>
                     {isMarkdownFile(file) ? (

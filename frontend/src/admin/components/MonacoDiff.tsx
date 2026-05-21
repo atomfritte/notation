@@ -1,3 +1,8 @@
+// Ensures the locally-bundled Monaco (with custom themes + workers) is loaded
+// before @monaco-editor/react renders the DiffEditor — same setup as the
+// markdown editor, so both chunks share the monaco-editor module.
+import '../lib/monaco-setup'
+
 import { DiffEditor } from '@monaco-editor/react'
 
 type Props = {
@@ -20,7 +25,7 @@ export default function MonacoDiff({ original, modified, language, theme }: Prop
         language={language}
         original={original}
         modified={modified}
-        theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+        theme={theme === 'dark' ? 'notation-dark' : 'notation-light'}
         options={{
           readOnly: true,
           renderSideBySide: true,
