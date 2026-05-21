@@ -147,6 +147,19 @@ export function SpaceView() {
   const displayTitle = file.split('/').pop()?.replace(/\.md$/i, '') || ''
   const pathParts = file ? file.split('/') : []
 
+  const flattenTree = (entries: api.Entry[]): string[] => {
+    let result: string[] = []
+    for (const e of entries) {
+      if (e.is_dir && e.children) {
+        result = result.concat(flattenTree(e.children))
+      } else if (!e.is_dir && e.name.endsWith('.md')) {
+        result.push(e.path)
+      }
+    }
+    return result
+  }
+  const allFiles = flattenTree(tree)
+
   return (
     <div className="flex h-screen bg-white dark:bg-[#0a0a0a] text-zinc-900 dark:text-zinc-300 font-sans overflow-hidden selection:bg-[#BFF355]/30">
       
@@ -326,6 +339,7 @@ export function SpaceView() {
                     initial={content}
                     etag={etag}
                     theme={theme}
+                    allFiles={allFiles}
                     onSaved={(c, newEtag) => {
                       setContent(c)
                       setEtag(newEtag)

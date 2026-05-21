@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Save } from 'lucide-react'
 import CodeMirror, { EditorView } from '@uiw/react-codemirror'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
@@ -6,6 +6,7 @@ import { languages } from '@codemirror/language-data'
 import { insertNewlineContinueMarkup } from '@codemirror/lang-markdown'
 import { keymap } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
+import { autocompletion, CompletionContext } from '@codemirror/autocomplete'
 import * as api from '../lib/api'
 
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
   initial: string
   etag: string | null
   theme: 'light' | 'dark'
+  allFiles: string[]
   onSaved: (content: string, etag: string | null) => void
 }
 
@@ -87,17 +89,81 @@ const customTheme = EditorView.theme({
   ".cm-header-3": { fontSize: "1.4em", marginTop: "0.6em", marginBottom: "0.3em" },
 })
 
-export function Editor({ spaceID, path, initial, etag, theme, onSaved }: Props) {
+export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved }: Props) {
   const [content, setContent] = useState(initial)
   const [currentEtag, setCurrentEtag] = useState(etag)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const fileCache = useRef<Record<string, string>>({})
   const dirty = content !== initial
 
   useEffect(() => {
     setContent(initial)
     setCurrentEtag(etag)
   }, [initial, path, etag])
+
+  const wikiLinkCompletion = async (context: CompletionContext) => {
+    const word = context.matchBefore(/\[\[([^\]]*)/)
+    if (!word) return null
+    if (word.from === word.to && !context.explicit) return null
+
+    const query = word.text.slice(2)
+    const hashIdx = query.indexOf('#')
+    let options = []
+
+    if (hashIdx === -1) {
+      // Suggest Files
+      options = allFiles
+        .filter(f => f.toLowerCase().includes(query.toLowerCase()))
+        .map(f => {
+           const clean = f.replace(/\.md$/i, '')
+           return { label: clean, type: 'text', detail: 'Page', apply: `[[${clean}]]` }
+        })
+    } else {
+      // Suggest Headings
+      const filePart = query.slice(0, hashIdx)
+      const headingQuery = query.slice(hashIdx + 1).toLowerCase()
+      
+      let targetContent = ''
+      if (filePart === '' || filePart + '.md' === path) {
+         targetContent = context.state.doc.toString()
+      } else {
+         const targetPath = filePart.endsWith('.md') ? filePart : filePart + '.md'
+         if (allFiles.includes(targetPath)) {
+           if (fileCache.current[targetPath]) {
+             targetContent = fileCache.current[targetPath]
+           } else {
+             try {
+               const res = await api.readFile(spaceID, targetPath)
+               targetContent = res.content
+               fileCache.current[targetPath] = targetContent
+             } catch (e) {
+               // ignore
+             }
+           }
+         }
+      }
+
+      const headings: string[] = []
+      const regex = /^#+\s+(.*)$/gm
+      let match;
+      while ((match = regex.exec(targetContent)) !== null) {
+        headings.push(match[1].trim())
+      }
+
+      options = headings
+        .filter(h => h.toLowerCase().includes(headingQuery))
+        .map(h => ({
+           label: h, type: 'property', detail: 'Heading', apply: `[[${filePart}#${h}]]`
+        }))
+    }
+
+    return {
+      from: word.from,
+      options,
+      validFor: /^\[\[([^\]]*)$/
+    }
+  }
 
   async function save() {
     if (!dirty) return
@@ -140,7 +206,8 @@ export function Editor({ spaceID, path, initial, etag, theme, onSaved }: Props) 
             markdown({ base: markdownLanguage, codeLanguages: languages }),
             EditorView.lineWrapping,
             markdownKeybindings,
-            customTheme
+            customTheme,
+            autocompletion({ override: [wikiLinkCompletion] })
           ]}
           basicSetup={{
             lineNumbers: false,
