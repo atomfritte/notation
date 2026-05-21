@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { List } from 'lucide-react'
+import GithubSlugger from 'github-slugger'
 
 type Heading = { level: number; text: string; id: string }
 
@@ -90,25 +91,24 @@ export function Outline({ content }: Props) {
   )
 }
 
+// Use github-slugger directly — the same library rehype-slug uses to assign
+// ids in the rendered DOM. Our previous home-grown algorithm stripped any
+// non-ASCII character (Unicode letters like umlauts vanished entirely) and
+// could disagree with rehype-slug on duplicates, which is why H2 entries
+// with German / non-latin titles silently failed to scroll: the Outline
+// computed `bersicht`, but the DOM had `übersicht`. Pin both sides to the
+// exact same algorithm.
 function extractHeadings(md: string): Heading[] {
   const stripped = md.replace(/```[\s\S]*?```/g, '').replace(/~~~[\s\S]*?~~~/g, '')
   const re = /^(#{1,6})\s+(.+?)\s*#*\s*$/gm
-  const counts = new Map<string, number>()
+  const slugger = new GithubSlugger()
   const out: Heading[] = []
   let m: RegExpExecArray | null
   while ((m = re.exec(stripped)) !== null) {
     const level = m[1].length
     const text = m[2].replace(/`/g, '').replace(/\*+/g, '').trim()
-    let slug = text
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/--+/g, '-')
-      .replace(/^-+|-+$/g, '')
-    const n = counts.get(slug) ?? 0
-    counts.set(slug, n + 1)
-    if (n > 0) slug = `${slug}-${n}`
-    out.push({ level, text, id: slug })
+    const id = slugger.slug(text)
+    out.push({ level, text, id })
   }
   return out
 }

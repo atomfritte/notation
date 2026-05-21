@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History, Printer, ChevronLeft } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
@@ -32,6 +32,16 @@ export function SpaceView() {
   const [err, setErr] = useState<string | null>(null)
   
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem('notation_sidebar_width') || '', 10)
+    return Number.isFinite(v) && v >= 180 && v <= 600 ? v : 256
+  })
+  const [resizing, setResizing] = useState(false)
+  useEffect(() => {
+    localStorage.setItem('notation_sidebar_width', String(sidebarWidth))
+  }, [sidebarWidth])
+  const mainScrollRef = useRef<HTMLDivElement>(null)
+  const location = useLocation()
   const [sidebarTab, setSidebarTab] = useState<'files' | 'bookmarks' | 'shares' | 'mcp' | 'history' | 'audit'>('files')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -57,6 +67,88 @@ export function SpaceView() {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('notation_theme', theme)
   }, [theme])
+
+  // ---------- Default landing file ----------
+  // When the user opens a Space without a ?file= query param we want to land
+  // on README.md (case-insensitive, top-level) if it exists. This runs once
+  // the tree has loaded; subsequent navigations are user-driven via
+  // setSearchParams, so the condition `!file` stops this from clobbering
+  // anything the user picks.
+  useEffect(() => {
+    if (file) return
+    if (!tree || tree.length === 0) return
+    const readme = tree.find(e => !e.is_dir && /^readme\.(md|markdown|txt)$/i.test(e.name))
+    if (readme) setSearchParams({ file: readme.path }, { replace: true })
+  }, [file, tree, setSearchParams])
+
+  // ---------- Per-file scroll-position memory ----------
+  // We persist the outer scroll's top to localStorage keyed by space+path so
+  // returning to a long doc lands you back where you were. Saving is
+  // debounced (~250ms) to keep storage churn down during a scroll burst.
+  // Restore deliberately waits one rAF + a short timeout so MarkdownView /
+  // FileViewer have actually rendered their content before we move the
+  // scroll, otherwise the layout shifts the value back to 0.
+  useEffect(() => {
+    const el = mainScrollRef.current
+    if (!el || !file) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const key = `notation_scroll_${spaceID}__${file}`
+    function onScroll() {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (el && el.scrollTop > 0) localStorage.setItem(key, String(el.scrollTop))
+        else localStorage.removeItem(key)
+      }, 250)
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      if (timer) clearTimeout(timer)
+      el.removeEventListener('scroll', onScroll)
+    }
+  }, [spaceID, file])
+
+  useEffect(() => {
+    const el = mainScrollRef.current
+    if (!el || !file) return
+    // If the URL has a hash (Outline click / wiki-link with #section), let
+    // MarkdownView's anchor-scroll do its thing; don't fight it.
+    if (location.hash) return
+    const saved = localStorage.getItem(`notation_scroll_${spaceID}__${file}`)
+    const target = saved ? parseInt(saved, 10) || 0 : 0
+    const frame = requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (mainScrollRef.current) mainScrollRef.current.scrollTop = target
+      }, 30)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [spaceID, file, content, location.hash])
+
+  // ---------- Sidebar drag-resize ----------
+  // Manual implementation rather than a library — the handle is a vertical
+  // strip on the aside's right edge; mousedown registers global mousemove +
+  // mouseup so the cursor keeps dragging even if it briefly leaves the
+  // handle. The body cursor + select-none make the gesture feel native.
+  function startResize(e: React.MouseEvent) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = sidebarWidth
+    setResizing(true)
+    function move(ev: MouseEvent) {
+      const dx = ev.clientX - startX
+      setSidebarWidth(Math.max(180, Math.min(600, startW + dx)))
+    }
+    function up() {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      setResizing(false)
+    }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
 
   // --- Callbacks (Declared first to avoid use-before-declaration) ---
 
@@ -309,8 +401,14 @@ export function SpaceView() {
     <div className="flex h-screen bg-white dark:bg-[#0a0a0a] text-zinc-900 dark:text-zinc-300 font-sans overflow-hidden selection:bg-[#BFF355]/30">
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
       
-      <aside className={`flex-shrink-0 flex flex-col bg-zinc-50 dark:bg-[#111111] transition-all duration-300 ease-in-out border-r border-zinc-200 dark:border-zinc-800/50 relative ${sidebarOpen ? 'w-64' : 'w-0 border-r-0'}`}>
-        <div className="w-64 h-full flex flex-col absolute top-0 left-0">
+      <aside
+        className={`flex-shrink-0 flex flex-col bg-zinc-50 dark:bg-[#111111] ${resizing ? '' : 'transition-[width] duration-200 ease-in-out'} border-r border-zinc-200 dark:border-zinc-800/50 relative ${sidebarOpen ? '' : 'border-r-0'}`}
+        style={{ width: sidebarOpen ? sidebarWidth : 0 }}
+      >
+        <div
+          className="h-full flex flex-col absolute top-0 left-0"
+          style={{ width: sidebarWidth }}
+        >
           {/* Clickable header takes you back to the Spaces overview. The
              avatar swaps to a left-chevron on hover so the action is obvious. */}
           <Link
@@ -413,6 +511,19 @@ export function SpaceView() {
             />
           </div>
         </div>
+
+        {/* Drag handle for resizing the sidebar. Hidden when the sidebar is
+            collapsed; a 6px hit area with a thinner visible indicator on
+            hover keeps it discoverable without intruding on the layout. */}
+        {sidebarOpen && (
+          <div
+            onMouseDown={startResize}
+            className="absolute top-0 right-0 h-full w-1.5 -mr-0.5 cursor-col-resize group z-20"
+            title="Drag to resize"
+          >
+            <div className="h-full w-px ml-auto bg-transparent group-hover:bg-zinc-300 dark:group-hover:bg-zinc-700 transition-colors" />
+          </div>
+        )}
       </aside>
 
       <main
@@ -528,7 +639,7 @@ export function SpaceView() {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 overflow-y-auto relative no-scrollbar">
+          <div ref={mainScrollRef} className="flex-1 overflow-y-auto relative no-scrollbar">
             {err && <div className="absolute top-0 left-0 right-0 p-3 bg-red-50 dark:bg-red-900/50 text-red-600 dark:text-red-200 text-sm border-b border-red-200 dark:border-red-900/50 z-20 flex justify-between items-center">
                {err}
                <button onClick={() => setErr(null)} className="text-red-400 hover:text-red-600 dark:hover:text-red-200">&times;</button>
