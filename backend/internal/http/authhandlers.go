@@ -50,7 +50,7 @@ type stateResponse struct {
 func (h *authHandlers) state(w http.ResponseWriter, r *http.Request) {
 	admin, err := h.store.Load()
 	if err != nil && !errors.Is(err, authstore.ErrAdminNotInitialized) {
-		writeError(w, http.StatusInternalServerError, "auth store: "+err.Error())
+		writeInternal(w, r, "auth.state.store", err)
 		return
 	}
 	resp := stateResponse{
@@ -82,7 +82,7 @@ type claimReq struct {
 }
 
 func (h *authHandlers) claim(w http.ResponseWriter, r *http.Request) {
-	ip := share.ClientIP(r)
+	ip := share.ClientIP(r, h.cfg.TrustProxy)
 	if !h.claimGuard.Allow(ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts — try again later")
 		return
@@ -99,7 +99,7 @@ func (h *authHandlers) claim(w http.ResponseWriter, r *http.Request) {
 	}
 	admin, err := h.store.Load()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "auth store unavailable")
+		writeInternal(w, r, "auth.claim.store", err)
 		return
 	}
 	if admin.Bootstrap == nil {
@@ -117,12 +117,12 @@ func (h *authHandlers) claim(w http.ResponseWriter, r *http.Request) {
 		a.Bootstrap = nil
 		return nil
 	}); err != nil {
-		writeError(w, http.StatusInternalServerError, "claim failed: "+err.Error())
+		writeInternal(w, r, "auth.claim.update", err)
 		return
 	}
 	cookieValue, _, err := IssueSession(h.secret, "admin", h.cfg.SessionLifetime)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "session issue failed")
+		writeInternal(w, r, "auth.claim.session", err)
 		return
 	}
 	SetSessionCookie(w, cookieValue, h.cfg.CookieSecure(), h.cfg.SessionLifetime)

@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+// maxLimiterBuckets caps the in-memory per-IP bucket map so a flash burst of
+// unique IPs can't grow it unboundedly between cleanup ticks. When the cap
+// is hit, we evict the bucket with the oldest lastFill (O(n) scan, fine for
+// the cap size).
+const maxLimiterBuckets = 10_000
+
 // Limiter is a per-key token bucket. No extra dependencies — we do our own
 // math because golang.org/x/time/rate would add a module just for this.
 type Limiter struct {
@@ -15,6 +21,7 @@ type Limiter struct {
 	cache       map[string]*bucket
 	rate        float64 // tokens per second
 	burst       float64
+	trustProxy  bool
 	lastCleanup time.Time
 }
 
@@ -23,11 +30,12 @@ type bucket struct {
 	lastFill time.Time
 }
 
-func NewLimiter(rps, burst float64) *Limiter {
+func NewLimiter(rps, burst float64, trustProxy bool) *Limiter {
 	return &Limiter{
 		cache:       make(map[string]*bucket),
 		rate:        rps,
 		burst:       burst,
+		trustProxy:  trustProxy,
 		lastCleanup: time.Now(),
 	}
 }
@@ -38,6 +46,9 @@ func (l *Limiter) Allow(key string) bool {
 	now := time.Now()
 	b, ok := l.cache[key]
 	if !ok {
+		if len(l.cache) >= maxLimiterBuckets {
+			l.evictOldestLocked()
+		}
 		l.cache[key] = &bucket{tokens: l.burst - 1, lastFill: now}
 		l.maybeCleanup(now)
 		return true
@@ -57,6 +68,20 @@ func (l *Limiter) Allow(key string) bool {
 	return false
 }
 
+func (l *Limiter) evictOldestLocked() {
+	var oldestKey string
+	var oldestT time.Time
+	for k, v := range l.cache {
+		if oldestT.IsZero() || v.lastFill.Before(oldestT) {
+			oldestT = v.lastFill
+			oldestKey = k
+		}
+	}
+	if oldestKey != "" {
+		delete(l.cache, oldestKey)
+	}
+}
+
 func (l *Limiter) maybeCleanup(now time.Time) {
 	if now.Sub(l.lastCleanup) < 5*time.Minute {
 		return
@@ -71,7 +96,7 @@ func (l *Limiter) maybeCleanup(now time.Time) {
 
 func (l *Limiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !l.Allow(ClientIP(r)) {
+		if !l.Allow(ClientIP(r, l.trustProxy)) {
 			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
@@ -79,16 +104,22 @@ func (l *Limiter) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// ClientIP extracts the best-effort client IP, honoring X-Forwarded-For when
-// the request looks like it came through a reverse proxy. NOTE: this assumes
-// the reverse proxy strips/rewrites the header — if you run this exposed to
-// the internet without a proxy, attackers can forge XFF freely.
-func ClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i > 0 {
-			return strings.TrimSpace(xff[:i])
+// ClientIP returns the best-effort client IP.
+//
+// If trustProxy is true, X-Forwarded-For is honoured (first hop), suitable
+// for deployments behind a known reverse proxy (Traefik, Caddy, nginx) that
+// rewrites the header. With trustProxy false, the raw r.RemoteAddr is used
+// — anyone exposed to the public internet without a stripping proxy MUST
+// keep trustProxy off, otherwise rate limits are trivially bypassed by any
+// client setting the header.
+func ClientIP(r *http.Request, trustProxy bool) string {
+	if trustProxy {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if i := strings.IndexByte(xff, ','); i > 0 {
+				return strings.TrimSpace(xff[:i])
+			}
+			return strings.TrimSpace(xff)
 		}
-		return strings.TrimSpace(xff)
 	}
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return ip

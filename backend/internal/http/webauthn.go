@@ -163,7 +163,7 @@ func adminCredentials(a *authstore.Admin) []webauthn.Credential {
 func (h *webauthnHandlers) registerBegin(w http.ResponseWriter, r *http.Request) {
 	admin, err := h.auth.store.Load()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "auth store")
+		writeInternal(w, r, "passkey.register.begin.store", err)
 		return
 	}
 	user := &adminWebAuthnUser{admin: admin}
@@ -174,12 +174,12 @@ func (h *webauthnHandlers) registerBegin(w http.ResponseWriter, r *http.Request)
 		}),
 	)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "begin: "+err.Error())
+		writeInternal(w, r, "passkey.register.begin", err)
 		return
 	}
 	key, err := h.saveSession(purposeRegister, sd)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "stash: "+err.Error())
+		writeInternal(w, r, "passkey.register.stash", err)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -224,7 +224,7 @@ func (h *webauthnHandlers) registerFinish(w http.ResponseWriter, r *http.Request
 	}
 	admin, err := h.auth.store.Load()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "auth store")
+		writeInternal(w, r, "passkey.register.finish.store", err)
 		return
 	}
 	user := &adminWebAuthnUser{admin: admin}
@@ -258,7 +258,7 @@ func (h *webauthnHandlers) registerFinish(w http.ResponseWriter, r *http.Request
 		return nil
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "persist failed: "+err.Error())
+		writeInternal(w, r, "passkey.register.persist", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{
@@ -271,19 +271,19 @@ func (h *webauthnHandlers) registerFinish(w http.ResponseWriter, r *http.Request
 // passkey login: discoverable-credential flow, no prior session needed.
 
 func (h *webauthnHandlers) loginBegin(w http.ResponseWriter, r *http.Request) {
-	ip := share.ClientIP(r)
+	ip := share.ClientIP(r, h.auth.cfg.TrustProxy)
 	if !h.auth.loginGuard.Allow(ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts — try again later")
 		return
 	}
 	opts, sd, err := h.wa.BeginDiscoverableLogin()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "begin: "+err.Error())
+		writeInternal(w, r, "passkey.login.begin", err)
 		return
 	}
 	key, err := h.saveSession(purposeLogin, sd)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "stash: "+err.Error())
+		writeInternal(w, r, "passkey.login.stash", err)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -300,7 +300,7 @@ func (h *webauthnHandlers) loginBegin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *webauthnHandlers) loginFinish(w http.ResponseWriter, r *http.Request) {
-	ip := share.ClientIP(r)
+	ip := share.ClientIP(r, h.auth.cfg.TrustProxy)
 	if !h.auth.loginGuard.Allow(ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts — try again later")
 		return
@@ -322,7 +322,7 @@ func (h *webauthnHandlers) loginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	admin, err := h.auth.store.Load()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "auth store")
+		writeInternal(w, r, "passkey.login.finish.store", err)
 		return
 	}
 	user := &adminWebAuthnUser{admin: admin}
@@ -358,7 +358,7 @@ func (h *webauthnHandlers) loginFinish(w http.ResponseWriter, r *http.Request) {
 	})
 	cookieValue, _, err := IssueSession(h.auth.secret, "admin", h.auth.cfg.SessionLifetime)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "session issue failed")
+		writeInternal(w, r, "passkey.login.session", err)
 		return
 	}
 	SetSessionCookie(w, cookieValue, h.auth.cfg.CookieSecure(), h.auth.cfg.SessionLifetime)
@@ -368,10 +368,10 @@ func (h *webauthnHandlers) loginFinish(w http.ResponseWriter, r *http.Request) {
 
 // ----- passkey management (sign-in required) -------------------------------
 
-func (h *webauthnHandlers) listPasskeys(w http.ResponseWriter, _ *http.Request) {
+func (h *webauthnHandlers) listPasskeys(w http.ResponseWriter, r *http.Request) {
 	admin, err := h.auth.store.Load()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "auth store")
+		writeInternal(w, r, "passkey.list.store", err)
 		return
 	}
 	type publicPasskey struct {
@@ -427,7 +427,7 @@ func (h *webauthnHandlers) deletePasskey(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternal(w, r, "passkey.delete", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

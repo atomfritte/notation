@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"regexp"
 	"strings"
@@ -29,9 +30,9 @@ type GrepOpts struct {
 }
 
 // Grep walks the Space's file tree (through the os.Root sandbox), applies
-// the optional glob filter, then scans matching files line-by-line for the
-// regex. Returns up to MaxResults hits. Dotfiles / dotdirs and symlinks are
-// skipped defensively.
+// the optional glob filter, then streams matching files line-by-line for
+// the regex. Memory is bounded by ContextBefore + pending matches, not by
+// file size — see grepReader for the inner loop.
 func (s *Store) Grep(spaceID string, opts GrepOpts) ([]GrepMatch, error) {
 	out := make([]GrepMatch, 0)
 	if opts.Pattern == "" {
@@ -97,49 +98,12 @@ func (s *Store) Grep(spaceID string, opts GrepOpts) ([]GrepMatch, error) {
 		if err != nil {
 			return nil
 		}
-		defer f.Close()
-
-		// Read full file into memory so we can emit context lines. For typical
-		// Space sizes (markdown notes) this is cheap; M3 in the audit lists
-		// streaming as a follow-up.
-		lines := make([]string, 0, 64)
-		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-		for sc.Scan() {
-			lines = append(lines, sc.Text())
-		}
-
-		for i, line := range lines {
-			if !re.MatchString(line) {
-				continue
-			}
-			m := GrepMatch{
-				Path:    p,
-				Line:    i + 1,
-				Content: clip(line, 400),
-			}
-			if opts.ContextBefore > 0 {
-				start := i - opts.ContextBefore
-				if start < 0 {
-					start = 0
-				}
-				for j := start; j < i; j++ {
-					m.Before = append(m.Before, clip(lines[j], 400))
-				}
-			}
-			if opts.ContextAfter > 0 {
-				end := i + 1 + opts.ContextAfter
-				if end > len(lines) {
-					end = len(lines)
-				}
-				for j := i + 1; j < end; j++ {
-					m.After = append(m.After, clip(lines[j], 400))
-				}
-			}
-			out = append(out, m)
-			if len(out) >= opts.MaxResults {
-				return fs.SkipAll
-			}
+		remaining := opts.MaxResults - len(out)
+		hits := grepReader(f, p, re, opts.ContextBefore, opts.ContextAfter, remaining)
+		_ = f.Close()
+		out = append(out, hits...)
+		if len(out) >= opts.MaxResults {
+			return fs.SkipAll
 		}
 		return nil
 	})
@@ -147,6 +111,115 @@ func (s *Store) Grep(spaceID string, opts GrepOpts) ([]GrepMatch, error) {
 		return out, walkErr
 	}
 	return out, nil
+}
+
+// grepReader streams r line-by-line. Memory footprint is O(ctxBefore +
+// in-flight matches), never the whole file. Match-with-after-context handling
+// uses a "pending" list: when a match fires we stash it, and subsequent lines
+// are appended as After until that line's count hits ctxAfter, at which point
+// the match is emitted.
+func grepReader(r io.Reader, p string, re *regexp.Regexp, ctxBefore, ctxAfter, maxRemaining int) []GrepMatch {
+	out := make([]GrepMatch, 0)
+	if maxRemaining <= 0 {
+		return out
+	}
+	before := newRingBuf(ctxBefore)
+	type pending struct {
+		match     *GrepMatch
+		matchLine int
+	}
+	var pendingList []*pending
+
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	lineNo := 0
+	for sc.Scan() {
+		lineNo++
+		line := sc.Text()
+
+		// Feed this line into any pending after-collectors, and emit those
+		// that have collected enough.
+		kept := pendingList[:0]
+		for _, pp := range pendingList {
+			ac := lineNo - pp.matchLine
+			if ac <= ctxAfter {
+				pp.match.After = append(pp.match.After, clip(line, 400))
+			}
+			if ac >= ctxAfter {
+				out = append(out, *pp.match)
+				if len(out) >= maxRemaining {
+					return out
+				}
+			} else {
+				kept = append(kept, pp)
+			}
+		}
+		pendingList = kept
+
+		if re.MatchString(line) {
+			m := &GrepMatch{
+				Path:    p,
+				Line:    lineNo,
+				Content: clip(line, 400),
+				Before:  before.snapshot(),
+			}
+			if ctxAfter > 0 {
+				pendingList = append(pendingList, &pending{match: m, matchLine: lineNo})
+			} else {
+				out = append(out, *m)
+				if len(out) >= maxRemaining {
+					return out
+				}
+			}
+		}
+		before.push(line)
+	}
+	// EOF — flush remaining pending matches (their After is whatever we got).
+	for _, pp := range pendingList {
+		out = append(out, *pp.match)
+		if len(out) >= maxRemaining {
+			break
+		}
+	}
+	return out
+}
+
+// ringBuf is a fixed-size circular buffer of strings used as the rolling
+// "before-context" window for grepReader.
+type ringBuf struct {
+	buf  []string
+	next int
+	size int
+}
+
+func newRingBuf(size int) *ringBuf { return &ringBuf{size: size} }
+
+func (rb *ringBuf) push(s string) {
+	if rb.size == 0 {
+		return
+	}
+	if len(rb.buf) < rb.size {
+		rb.buf = append(rb.buf, s)
+		return
+	}
+	rb.buf[rb.next] = s
+	rb.next = (rb.next + 1) % rb.size
+}
+
+// snapshot returns the buffer contents in insertion order. Caller-owned copy.
+func (rb *ringBuf) snapshot() []string {
+	if rb.size == 0 || len(rb.buf) == 0 {
+		return nil
+	}
+	if len(rb.buf) < rb.size {
+		out := make([]string, len(rb.buf))
+		copy(out, rb.buf)
+		return out
+	}
+	out := make([]string, rb.size)
+	copy(out, rb.buf[rb.next:])
+	copy(out[rb.size-rb.next:], rb.buf[:rb.next])
+	return out
 }
 
 // Glob returns paths under the Space's files dir that match the glob pattern.

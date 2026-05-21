@@ -25,6 +25,7 @@ type Deps struct {
 	Shares        *share.Store
 	Audit         *share.AuditLog
 	Lim           *share.Limiter
+	AdminLim      *share.Limiter
 	Comments      *share.CommentStore
 	MCPTokens     *mcptoken.Store
 	MCP           *mcphandler.Server
@@ -123,6 +124,9 @@ func NewRouter(d Deps) (http.Handler, error) {
 	}
 	adminMW := adminMiddleware(d.Cfg, d.SessionSecret)
 	r.Route("/api/admin", func(ar chi.Router) {
+		// Rate-limit BEFORE auth so even unauth'd requests can't fill the
+		// limiter cache by hammering /api/admin/*.
+		ar.Use(d.AdminLim.Middleware)
 		ar.Use(adminMW)
 		// CSRF middleware is a no-op for GET/HEAD/OPTIONS, so registering it
 		// for the whole subtree is safe and centralises the policy.

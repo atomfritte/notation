@@ -42,7 +42,7 @@ func adminAuthor(r *http.Request) gitrepo.Author {
 func (h *adminHandlers) listSpaces(w http.ResponseWriter, r *http.Request) {
 	spaces, err := h.store.List()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list failed: "+err.Error())
+		writeInternal(w, r, "spaces.list", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, spaces)
@@ -72,12 +72,12 @@ func (h *adminHandlers) createSpace(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, space.ErrExists):
 			writeError(w, http.StatusConflict, "space already exists")
 		default:
-			writeError(w, http.StatusInternalServerError, "create failed: "+err.Error())
+			writeInternal(w, r, "spaces.create", err)
 		}
 		return
 	}
 	if err := h.git.Init(m.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, "git init: "+err.Error())
+		writeInternal(w, r, "spaces.create.git_init", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, m)
@@ -92,7 +92,7 @@ func (h *adminHandlers) deleteSpace(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, space.ErrNotFound):
 			writeError(w, http.StatusNotFound, "space not found")
 		default:
-			writeError(w, http.StatusInternalServerError, "delete failed: "+err.Error())
+			writeInternal(w, r, "spaces.delete", err)
 		}
 		return
 	}
@@ -117,7 +117,7 @@ func (h *adminHandlers) getTree(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := h.store.Tree(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "tree failed: "+err.Error())
+		writeInternal(w, r, "spaces.tree", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, entries)
@@ -241,7 +241,7 @@ func (h *adminHandlers) getLog(w http.ResponseWriter, r *http.Request) {
 	}
 	commits, err := h.git.Log(id, 100)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "log: "+err.Error())
+		writeInternal(w, r, "git.log", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, commits)
@@ -260,7 +260,7 @@ func (h *adminHandlers) getDiff(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid commit hash")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "diff: "+err.Error())
+		writeInternal(w, r, "git.diff", err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -283,7 +283,7 @@ func (h *adminHandlers) snapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.git.SnapshotCommit(id, adminAuthor(r), req.Message); err != nil {
-		writeError(w, http.StatusInternalServerError, "snapshot: "+err.Error())
+		writeInternal(w, r, "git.snapshot", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -299,7 +299,7 @@ func (h *adminHandlers) listShares(w http.ResponseWriter, r *http.Request) {
 	}
 	views, err := h.shares.List(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternal(w, r, "shares.list", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, views)
@@ -339,7 +339,7 @@ func (h *adminHandlers) createShare(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.shares.Create(id, req.Permission, req.Label, expiresAt, user.Name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternal(w, r, "shares.create", err)
 		return
 	}
 	res.URL = shareURL(h.cfg, r, res.Token)
@@ -358,7 +358,7 @@ func (h *adminHandlers) deleteShare(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "share not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternal(w, r, "shares.delete", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -374,7 +374,7 @@ func (h *adminHandlers) listMCPTokens(w http.ResponseWriter, r *http.Request) {
 	}
 	tokens, err := h.mcpTokens.List(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternal(w, r, "mcp.list", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, tokens)
@@ -404,7 +404,7 @@ func (h *adminHandlers) createMCPToken(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.mcpTokens.Create(id, req.Label, user.Name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternal(w, r, "mcp.create", err)
 		return
 	}
 	url := mcpURL(h.cfg, r, id)
@@ -423,7 +423,7 @@ func (h *adminHandlers) deleteMCPToken(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "token not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternal(w, r, "mcp.delete", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -440,7 +440,7 @@ func (h *adminHandlers) fileHistory(w http.ResponseWriter, r *http.Request) {
 	upath := chi.URLParam(r, "*")
 	commits, err := h.git.FileHistory(id, upath, 100)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "log: "+err.Error())
+		writeInternal(w, r, "git.file_history", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, commits)
@@ -485,7 +485,7 @@ func (h *adminHandlers) fileDiffAcross(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid commit hash")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "diff: "+err.Error())
+		writeInternal(w, r, "git.file_diff", err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -554,7 +554,7 @@ func (h *adminHandlers) search(w http.ResponseWriter, r *http.Request) {
 	}
 	matches, err := h.store.Search(id, q, glob, limit)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "search: "+err.Error())
+		writeInternal(w, r, "search", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, matches)
@@ -574,7 +574,7 @@ func (h *adminHandlers) getAudit(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := h.audit.Read(id, limit)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "audit: "+err.Error())
+		writeInternal(w, r, "audit.read", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, entries)
@@ -687,7 +687,7 @@ func (h *adminHandlers) listComments(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := h.comments.ListForFile(id, upath)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternal(w, r, "comments.list", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, list)

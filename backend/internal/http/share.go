@@ -37,7 +37,7 @@ func (h *shareHandlers) audit1(spaceID, action, path string, sh share.Share, r *
 		Actor:  actor(sh),
 		Action: action,
 		Path:   path,
-		IP:     share.ClientIP(r),
+		IP:     share.ClientIP(r, h.cfg.TrustProxy),
 		UA:     r.UserAgent(),
 	}
 	if err != nil {
@@ -82,7 +82,7 @@ func (h *shareHandlers) getTree(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := h.store.Tree(spaceID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "tree: "+err.Error())
+		writeInternal(w, r, "share.tree", err)
 		return
 	}
 	h.audit1(spaceID, "read.tree", "", sh, r, nil)
@@ -196,7 +196,7 @@ func (h *shareHandlers) listComments(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := h.comments.ListForFile(spaceID, upath)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternal(w, r, "share.comments.list", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, list)

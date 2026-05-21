@@ -60,7 +60,11 @@ func main() {
 	shareStore := share.NewStore(cfg.SpacesDir())
 	auditLog := share.NewAuditLog(cfg.SpacesDir())
 	commentStore := share.NewCommentStore(cfg.SpacesDir())
-	limiter := share.NewLimiter(5, 20)
+	// Per-IP token-bucket limiters. Two pools: a tight one for public
+	// share / MCP routes, a generous one for admin (still useful as a
+	// runaway-script brake).
+	shareLimiter := share.NewLimiter(5, 20, cfg.TrustProxy)
+	adminLimiter := share.NewLimiter(50, 200, cfg.TrustProxy)
 	mcpStore := mcptoken.NewStore(cfg.SpacesDir())
 	mcpSrv := mcphandler.New(cfg, store, gitMgr, mcpStore, auditLog)
 
@@ -71,7 +75,8 @@ func main() {
 		Git:           gitMgr,
 		Shares:        shareStore,
 		Audit:         auditLog,
-		Lim:           limiter,
+		Lim:           shareLimiter,
+		AdminLim:      adminLimiter,
 		Comments:      commentStore,
 		MCPTokens:     mcpStore,
 		MCP:           mcpSrv,
