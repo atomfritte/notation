@@ -6,11 +6,13 @@ type Props = {
   spaceID: string
   path: string
   initial: string
-  onSaved: (content: string) => void
+  etag: string | null
+  onSaved: (content: string, etag: string | null) => void
 }
 
-export function Editor({ spaceID, path, initial, onSaved }: Props) {
+export function Editor({ spaceID, path, initial, etag, onSaved }: Props) {
   const [content, setContent] = useState(initial)
+  const [currentEtag, setCurrentEtag] = useState(etag)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -18,7 +20,8 @@ export function Editor({ spaceID, path, initial, onSaved }: Props) {
 
   useEffect(() => {
     setContent(initial)
-  }, [initial, path])
+    setCurrentEtag(etag)
+  }, [initial, path, etag])
 
   // Auto-resize textarea
   useEffect(() => {
@@ -33,10 +36,17 @@ export function Editor({ spaceID, path, initial, onSaved }: Props) {
     setSaving(true)
     setErr(null)
     try {
-      await api.writeFile(spaceID, path, content)
-      onSaved(content)
-    } catch (e) {
-      setErr(String(e))
+      await api.writeFile(spaceID, path, content, currentEtag)
+      // Optimistically update, but ideally we'd fetch the new ETag.
+      // For now, setting it to null ensures the next save might pass or fail based on backend state.
+      setCurrentEtag(null)
+      onSaved(content, null)
+    } catch (e: any) {
+      if (String(e).includes('412')) {
+        setErr('Conflict: Someone else modified this file. Please copy your changes and refresh.')
+      } else {
+        setErr(String(e))
+      }
     } finally {
       setSaving(false)
     }

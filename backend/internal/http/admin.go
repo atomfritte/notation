@@ -133,6 +133,10 @@ func (h *adminHandlers) getFile(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
+	info, err := h.store.Stat(id, upath)
+	if err == nil {
+		w.Header().Set("ETag", `W/"`+fmt.Sprintf("%x", info.ModTime().UnixNano())+`"`)
+	}
 	mtype := mime.TypeByExtension(filepath.Ext(upath))
 	if mtype == "" {
 		mtype = http.DetectContentType(data)
@@ -149,6 +153,18 @@ func (h *adminHandlers) putFile(w http.ResponseWriter, r *http.Request) {
 		writeSpaceError(w, err)
 		return
 	}
+
+	if match := r.Header.Get("If-Match"); match != "" {
+		info, err := h.store.Stat(id, upath)
+		if err == nil {
+			currentETag := `W/"` + fmt.Sprintf("%x", info.ModTime().UnixNano()) + `"`
+			if match != currentETag && match != "*" {
+				writeError(w, http.StatusPreconditionFailed, "file has been modified since last read")
+				return
+			}
+		}
+	}
+
 	limited := http.MaxBytesReader(w, r.Body, h.cfg.MaxUploadBytes)
 	defer limited.Close()
 	if _, err := h.store.WriteFile(id, upath, limited, h.cfg.MaxUploadBytes); err != nil {

@@ -66,18 +66,23 @@ export const deleteSpace = (id: string) =>
 export const getTree = (id: string) =>
   fetchJSON<Entry[]>(`/api/admin/spaces/${encodeURIComponent(id)}/tree`)
 
-export const readFile = async (id: string, path: string): Promise<string> => {
+export const readFile = async (id: string, path: string): Promise<{content: string, etag: string | null}> => {
   const r = await fetch(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`)
   if (!r.ok) throw await asError(r)
-  return r.text()
+  const etag = r.headers.get('ETag')
+  const content = await r.text()
+  return { content, etag }
 }
 
-export const writeFile = (id: string, path: string, content: string, mime = 'text/markdown') =>
-  fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`, {
+export const writeFile = (id: string, path: string, content: string, etag: string | null = null, mime = 'text/markdown') => {
+  const headers: Record<string, string> = { 'Content-Type': mime }
+  if (etag) headers['If-Match'] = etag
+  return fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`, {
     method: 'PUT',
-    headers: { 'Content-Type': mime },
+    headers,
     body: content,
   })
+}
 
 export const deleteFile = (id: string, path: string) =>
   fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`, {

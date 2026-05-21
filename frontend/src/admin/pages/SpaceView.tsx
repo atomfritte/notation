@@ -16,6 +16,7 @@ export function SpaceView() {
   
   const [tree, setTree] = useState<api.Entry[]>([])
   const [content, setContent] = useState<string>('')
+  const [etag, setEtag] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   
@@ -61,9 +62,15 @@ export function SpaceView() {
   useEffect(() => {
     if (!spaceID || !file) {
       setContent('')
+      setEtag(null)
       return
     }
-    api.readFile(spaceID, file).then(setContent).catch(e => setErr(String(e)))
+    api.readFile(spaceID, file)
+      .then(res => {
+        setContent(res.content)
+        setEtag(res.etag)
+      })
+      .catch(e => setErr(String(e)))
     setEditing(false)
     refreshComments()
   }, [spaceID, file, refreshComments])
@@ -92,6 +99,24 @@ export function SpaceView() {
       setErr(String(e))
     }
   }
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Toggle Sidebar (Cmd/Ctrl + \)
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault()
+        setSidebarOpen(prev => !prev)
+      }
+      // New File (Alt + N)
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        onNewFile()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [setSidebarOpen])
 
   async function handleAddComment(text: string) {
     if (!spaceID || !file) return
@@ -197,7 +222,7 @@ export function SpaceView() {
         <header className="h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 bg-[#0a0a0a]/80 backdrop-blur-sm">
           <div className="flex items-center gap-2 overflow-hidden">
             {!sidebarOpen && (
-              <button onClick={() => setSidebarOpen(true)} className="p-1.5 mr-1 text-zinc-400 hover:bg-zinc-800 rounded-md transition-colors" title="Open Sidebar">
+              <button onClick={() => setSidebarOpen(true)} className="p-1.5 mr-1 text-zinc-400 hover:bg-zinc-800 rounded-md transition-colors" title="Open Sidebar (Cmd/Ctrl + \)">
                 <PanelLeft size={18} />
               </button>
             )}
@@ -277,8 +302,10 @@ export function SpaceView() {
                     spaceID={spaceID}
                     path={file}
                     initial={content}
-                    onSaved={c => {
+                    etag={etag}
+                    onSaved={(c, newEtag) => {
                       setContent(c)
+                      setEtag(newEtag)
                       refreshTree()
                       // Optional: switch back to preview after save?
                       // setEditing(false) 
