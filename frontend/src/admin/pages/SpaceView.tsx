@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
-import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History, Printer } from 'lucide-react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History, Printer, ChevronLeft } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
@@ -311,14 +311,21 @@ export function SpaceView() {
       
       <aside className={`flex-shrink-0 flex flex-col bg-zinc-50 dark:bg-[#111111] transition-all duration-300 ease-in-out border-r border-zinc-200 dark:border-zinc-800/50 relative ${sidebarOpen ? 'w-64' : 'w-0 border-r-0'}`}>
         <div className="w-64 h-full flex flex-col absolute top-0 left-0">
-          <div className="h-12 flex items-center px-4 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors mt-2 mx-2 rounded-md">
+          {/* Clickable header takes you back to the Spaces overview. The
+             avatar swaps to a left-chevron on hover so the action is obvious. */}
+          <Link
+            to="/admin"
+            className="h-12 flex items-center px-4 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 transition-colors mt-2 mx-2 rounded-md group"
+            title="Back to all Spaces"
+          >
             <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200 font-medium w-full">
-              <div className="w-5 h-5 rounded bg-zinc-900 text-white dark:bg-[#BFF355]/20 dark:text-[#BFF355] flex items-center justify-center font-bold text-xs uppercase">
-                 {spaceID.charAt(0)}
+              <div className="w-5 h-5 rounded bg-zinc-900 text-white dark:bg-[#BFF355]/20 dark:text-[#BFF355] flex items-center justify-center font-bold text-xs uppercase relative">
+                <span className="group-hover:opacity-0 transition-opacity">{spaceID.charAt(0)}</span>
+                <ChevronLeft size={12} className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <span className="truncate">{spaceID}</span>
             </div>
-          </div>
+          </Link>
 
           <div className="px-3 mt-4 space-y-0.5">
             <button onClick={() => setSidebarTab('bookmarks')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'bookmarks' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
@@ -456,7 +463,7 @@ export function SpaceView() {
 
             {file && (
               <div className="flex items-center text-sm text-zinc-500 dark:text-zinc-400">
-                <span className="hover:text-zinc-800 dark:hover:text-zinc-200 hover:underline cursor-pointer truncate max-w-[100px]">{spaceID}</span>
+                <Link to="/admin" className="hover:text-zinc-800 dark:hover:text-zinc-200 hover:underline truncate max-w-[100px]" title="Back to all Spaces">{spaceID}</Link>
                 {pathParts.map((part, i) => (
                   <span key={i} className="flex items-center">
                     <span className="mx-1.5 text-zinc-300 dark:text-zinc-600">/</span>
