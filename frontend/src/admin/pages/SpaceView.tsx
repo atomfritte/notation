@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, MoreHorizontal, Moon, Sun } from 'lucide-react'
+import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, MoreHorizontal, Moon, Sun, Edit2, Trash, BookmarkMinus } from 'lucide-react'
 import * as api from '../lib/api'
 import { FileTree } from '../components/FileTree'
 import { MarkdownView } from '../components/MarkdownView'
@@ -8,6 +8,7 @@ import { Editor } from '../components/Editor'
 import { SharePanel } from '../components/SharePanel'
 import { MCPPanel } from '../components/MCPPanel'
 import { CommentThread } from '../components/CommentThread'
+import { ContextMenu, type MenuItem } from '../components/ui/ContextMenu'
 
 export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
@@ -25,10 +26,12 @@ export function SpaceView() {
   
   const [comments, setComments] = useState<api.CommentItem[]>([])
   const [showComments, setShowComments] = useState(false)
+  const [pendingComment, setPendingComment] = useState<string>('')
   const [bookmarks, setBookmarks] = useState<string[]>([])
   
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number, y: number, items: MenuItem[] } | null>(null)
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('notation_theme') as 'light' | 'dark') || 'dark'
@@ -38,6 +41,113 @@ export function SpaceView() {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('notation_theme', theme)
   }, [theme])
+
+  // --- Callbacks (Declared first to avoid use-before-declaration) ---
+
+  const refreshTree = useCallback(() => {
+    if (!spaceID) return
+    api.getTree(spaceID).then(setTree).catch(e => setErr(String(e)))
+  }, [spaceID])
+
+  const toggleBookmark = useCallback((path: string) => {
+    setBookmarks(prev => {
+      const next = prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+      localStorage.setItem(`notation_bookmarks_${spaceID}`, JSON.stringify(next))
+      return next
+    })
+  }, [spaceID])
+
+  const handleFileContextMenu = useCallback((e: React.MouseEvent, path: string, _isDir: boolean) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCtxMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        {
+          label: 'Rename',
+          icon: <Edit2 size={14} />,
+          onClick: async () => {
+            const newName = window.prompt('Rename to:', path)
+            if (newName && newName !== path) {
+              try {
+                await api.renameFile(spaceID, path, newName)
+                refreshTree()
+                if (file === path) setSearchParams({ file: newName })
+              } catch (err) { setErr(String(err)) }
+            }
+          }
+        },
+        {
+          label: 'Delete',
+          icon: <Trash size={14} />,
+          danger: true,
+          onClick: async () => {
+            if (window.confirm(`Delete ${path}?`)) {
+              try {
+                await api.deleteFile(spaceID, path)
+                refreshTree()
+                if (file === path) setSearchParams({ file: '' })
+              } catch (err) { setErr(String(err)) }
+            }
+          }
+        }
+      ]
+    })
+  }, [spaceID, file, refreshTree, setSearchParams])
+
+  const handleBookmarkContextMenu = useCallback((e: React.MouseEvent, path: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCtxMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        {
+          label: 'Remove Bookmark',
+          icon: <BookmarkMinus size={14} />,
+          danger: true,
+          onClick: () => toggleBookmark(path)
+        }
+      ]
+    })
+  }, [toggleBookmark])
+
+  const refreshComments = useCallback(() => {
+    if (!spaceID || !file) {
+      setComments([])
+      return
+    }
+    api.getComments(spaceID, file).then(setComments).catch(console.error)
+  }, [spaceID, file])
+
+  const selectFile = useCallback(
+    (p: string) => {
+      setSearchParams({ file: p })
+    },
+    [setSearchParams],
+  )
+
+  async function onNewFile() {
+    const path = window.prompt('New page path (e.g. notes/meeting):')?.trim()
+    if (!path) return
+    const mdPath = path.toLowerCase().endsWith('.md') ? path : path + '.md'
+    const title = mdPath.split('/').pop()?.replace(/\.md$/i, '')
+    try {
+      await api.writeFile(spaceID, mdPath, `# ${title}\n\n`)
+      refreshTree()
+      setSearchParams({ file: mdPath })
+      setEditing(true)
+    } catch (e) { setErr(String(e)) }
+  }
+
+  const handleAddComment = async (text: string) => {
+    if (!spaceID || !file) return
+    await api.postComment(spaceID, file, text)
+    refreshComments()
+  }
+
+  // --- Effects ---
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -57,28 +167,7 @@ export function SpaceView() {
     } catch { /* ignore */ }
   }, [spaceID])
 
-  const toggleBookmark = useCallback((path: string) => {
-    setBookmarks(prev => {
-      const next = prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
-      localStorage.setItem(`notation_bookmarks_${spaceID}`, JSON.stringify(next))
-      return next
-    })
-  }, [spaceID])
-
-  const refreshTree = useCallback(() => {
-    if (!spaceID) return
-    api.getTree(spaceID).then(setTree).catch(e => setErr(String(e)))
-  }, [spaceID])
-
   useEffect(refreshTree, [refreshTree])
-
-  const refreshComments = useCallback(() => {
-    if (!spaceID || !file) {
-      setComments([])
-      return
-    }
-    api.getComments(spaceID, file).then(setComments).catch(console.error)
-  }, [spaceID, file])
 
   useEffect(() => {
     if (!spaceID || !file) {
@@ -96,30 +185,6 @@ export function SpaceView() {
     refreshComments()
   }, [spaceID, file, refreshComments])
 
-  const selectFile = useCallback(
-    (p: string) => {
-      setSearchParams({ file: p })
-    },
-    [setSearchParams],
-  )
-
-  async function onNewFile() {
-    const path = window.prompt('New page path (e.g. notes/meeting):')?.trim()
-    if (!path) return
-    
-    const mdPath = path.toLowerCase().endsWith('.md') ? path : path + '.md'
-    const title = mdPath.split('/').pop()?.replace(/\.md$/i, '')
-    
-    try {
-      await api.writeFile(spaceID, mdPath, `# ${title}\n\n`)
-      refreshTree()
-      setSearchParams({ file: mdPath })
-      setEditing(true)
-    } catch (e) {
-      setErr(String(e))
-    }
-  }
-
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
@@ -134,12 +199,6 @@ export function SpaceView() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [setSidebarOpen])
-
-  async function handleAddComment(text: string) {
-    if (!spaceID || !file) return
-    await api.postComment(spaceID, file, text)
-    refreshComments()
-  }
 
   if (!spaceID) return <p className="p-8 text-zinc-400">missing workspace</p>
 
@@ -162,11 +221,10 @@ export function SpaceView() {
 
   return (
     <div className="flex h-screen bg-white dark:bg-[#0a0a0a] text-zinc-900 dark:text-zinc-300 font-sans overflow-hidden selection:bg-[#BFF355]/30">
+      {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
       
-      {/* NOTION-LIKE SIDEBAR */}
       <aside className={`flex-shrink-0 flex flex-col bg-zinc-50 dark:bg-[#111111] transition-all duration-300 ease-in-out border-r border-zinc-200 dark:border-zinc-800/50 relative ${sidebarOpen ? 'w-64' : 'w-0 border-r-0'}`}>
         <div className="w-64 h-full flex flex-col absolute top-0 left-0">
-          
           <div className="h-12 flex items-center px-4 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors mt-2 mx-2 rounded-md">
             <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200 font-medium w-full">
               <div className="w-5 h-5 rounded bg-zinc-900 text-white dark:bg-[#BFF355]/20 dark:text-[#BFF355] flex items-center justify-center font-bold text-xs uppercase">
@@ -200,7 +258,7 @@ export function SpaceView() {
 
           <div className="flex-1 overflow-y-auto px-2 pb-4 no-scrollbar">
             {sidebarTab === 'files' && (
-              <FileTree entries={tree} current={file} onSelect={selectFile} />
+              <FileTree entries={tree} current={file} onSelect={selectFile} onContextMenu={handleFileContextMenu} />
             )}
             
             {sidebarTab === 'bookmarks' && (
@@ -212,6 +270,7 @@ export function SpaceView() {
                     <button
                       key={b}
                       onClick={() => selectFile(b)}
+                      onContextMenu={(e) => handleBookmarkContextMenu(e, b)}
                       className={`flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-md transition-colors ${file === b ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100 font-medium' : 'text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200'}`}
                     >
                       <FileText size={14} className="opacity-70" />
@@ -221,25 +280,19 @@ export function SpaceView() {
                 )}
               </div>
             )}
-
             {sidebarTab === 'shares' && <SharePanel spaceID={spaceID} />}
             {sidebarTab === 'mcp' && <MCPPanel spaceID={spaceID} />}
           </div>
 
           <div className="p-2 border-t border-zinc-200 dark:border-zinc-800/50">
-             <button
-                onClick={onNewFile}
-                className="w-full flex items-center gap-2 px-3 py-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800/50 rounded-md transition-colors text-sm font-medium"
-              >
+             <button onClick={onNewFile} className="w-full flex items-center gap-2 px-3 py-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800/50 rounded-md transition-colors text-sm font-medium">
                 <Plus size={16} /> New Page
               </button>
           </div>
         </div>
       </aside>
 
-      {/* Main Document Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-[#0a0a0a] relative">
-        
         <header className="h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 bg-white/80 dark:bg-[#0a0a0a]/80 backdrop-blur-sm">
           <div className="flex items-center gap-2 overflow-hidden">
             {!sidebarOpen && (
@@ -270,36 +323,21 @@ export function SpaceView() {
 
           {file && (
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => setEditing(v => !v)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-zinc-900 bg-zinc-100 dark:text-[#BFF355] dark:bg-[#BFF355]/10' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}
-              >
+              <button onClick={() => setEditing(v => !v)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-zinc-900 bg-zinc-100 dark:text-[#BFF355] dark:bg-[#BFF355]/10' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}>
                 {editing ? <Eye size={16} /> : <Edit3 size={16} />}
               </button>
-              <button
-                onClick={() => toggleBookmark(file)}
-                className={`p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-zinc-900 dark:text-[#BFF355]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}
-                title="Favorite"
-              >
+              <button onClick={() => toggleBookmark(file)} className={`p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-zinc-900 dark:text-[#BFF355]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Favorite">
                 <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
               </button>
-              <button
-                onClick={() => setShowComments(!showComments)}
-                className={`p-1.5 rounded-md transition-colors flex items-center gap-1 ${showComments ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-200' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}
-                title="Comments"
-              >
+              <button onClick={() => setShowComments(!showComments)} className={`p-1.5 rounded-md transition-colors flex items-center gap-1 ${showComments ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-200' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Comments">
                 <MessageSquare size={18} />
                 {comments.length > 0 && <span className="text-xs font-bold text-zinc-900 dark:text-[#BFF355]">{comments.length}</span>}
               </button>
               
               <div className="relative" ref={menuRef}>
-                <button 
-                  onClick={() => setMenuOpen(!menuOpen)}
-                  className={`p-1.5 rounded-md transition-colors ${menuOpen ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-200' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}
-                >
+                <button onClick={() => setMenuOpen(!menuOpen)} className={`p-1.5 rounded-md transition-colors ${menuOpen ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-200' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}>
                   <MoreHorizontal size={18} />
                 </button>
-                
                 {menuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                      <div className="px-3 py-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Appearance</div>
@@ -317,7 +355,6 @@ export function SpaceView() {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          
           <div className="flex-1 overflow-y-auto relative no-scrollbar">
             {err && <div className="absolute top-0 left-0 right-0 p-3 bg-red-50 dark:bg-red-900/50 text-red-600 dark:text-red-200 text-sm border-b border-red-200 dark:border-red-900/50 z-20 flex justify-between items-center">
                {err}
@@ -345,6 +382,10 @@ export function SpaceView() {
                       setEtag(newEtag)
                       refreshTree()
                     }}
+                    onCommentRequest={(selectedText) => {
+                      setShowComments(true)
+                      setPendingComment(`> ${selectedText.split('\n').join('\n> ')}\n\n`)
+                    }}
                   />
                 ) : (
                   <div className={content.startsWith('# ') ? 'pt-8' : 'pt-0'}>
@@ -367,13 +408,20 @@ export function SpaceView() {
             <div className="w-[320px] border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0a0a0a] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
               <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-950">
                  <h3 className="font-semibold text-sm text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-                    <MessageSquare size={16} /> 
-                    Updates
+                    <MessageSquare size={16} /> Updates
                  </h3>
                  <button onClick={() => setShowComments(false)} className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">&times;</button>
               </div>
               <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950/50">
-                 <CommentThread comments={comments} canAdd={true} onAdd={handleAddComment} />
+                 <CommentThread 
+                   comments={comments} 
+                   canAdd={true} 
+                   initialText={pendingComment}
+                   onAdd={async (text) => {
+                     await handleAddComment(text)
+                     setPendingComment('')
+                   }} 
+                 />
               </div>
             </div>
           )}

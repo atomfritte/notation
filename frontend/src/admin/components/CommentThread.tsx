@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 
 export type CommentItem = {
   id: string
@@ -10,13 +10,20 @@ export type CommentItem = {
 type Props = {
   comments: CommentItem[]
   canAdd: boolean
+  initialText?: string
   onAdd?: (text: string) => Promise<void>
 }
 
-export function CommentThread({ comments, canAdd, onAdd }: Props) {
+export function CommentThread({ comments, canAdd, initialText, onAdd }: Props) {
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (initialText) {
+      setText(prev => prev ? prev + '\n\n' + initialText : initialText)
+    }
+  }, [initialText])
 
   async function submit(e: FormEvent) {
     e.preventDefault()

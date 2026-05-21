@@ -45,6 +45,11 @@
   @apply text-lime-600 dark:text-[#BFF355];
 }
 
+/* Highlight / Bookmark passages */
+mark {
+  @apply bg-lime-200 text-zinc-900 dark:bg-[#BFF355]/30 dark:text-[#BFF355] rounded-sm px-1 py-0.5;
+}
+
 /* Override prose colors for dark mode */
 .prose {
   @apply max-w-none transition-colors duration-200;

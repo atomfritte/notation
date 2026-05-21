@@ -6,10 +6,11 @@ type Props = {
   entries: Entry[]
   current: string
   onSelect: (path: string) => void
+  onContextMenu?: (e: React.MouseEvent, path: string, isDir: boolean) => void
   depth?: number
 }
 
-export function FileTree({ entries, current, onSelect, depth = 0 }: Props) {
+export function FileTree({ entries, current, onSelect, onContextMenu, depth = 0 }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
 
   const toggle = (path: string) => {
@@ -50,10 +51,11 @@ export function FileTree({ entries, current, onSelect, depth = 0 }: Props) {
           <li key={e.path}>
             <button
               onClick={() => onSelect(e.path)}
+              onContextMenu={(evt) => onContextMenu?.(evt, e.path, false)}
               className={`flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-md transition-colors ${
                 isActive 
-                  ? 'bg-zinc-800 text-zinc-100 font-medium' 
-                  : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+                  ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100 font-medium' 
+                  : 'text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200'
               }`}
               style={{ paddingLeft: depth * 12 + (e.is_dir ? 8 : 28) }}
             >

@@ -5,9 +5,58 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { insertNewlineContinueMarkup } from '@codemirror/lang-markdown'
 import { keymap } from '@codemirror/view'
-import { EditorSelection } from '@codemirror/state'
+import { EditorSelection, StateField } from '@codemirror/state'
 import { autocompletion, CompletionContext } from '@codemirror/autocomplete'
+import { Tooltip, showTooltip } from '@codemirror/view'
 import * as api from '../lib/api'
+
+const selectionTooltip = StateField.define<readonly Tooltip[]>({
+  create: getTooltip,
+  update(tooltips, tr) {
+    if (!tr.docChanged && !tr.selection) return tooltips
+    return getTooltip(tr.state)
+  },
+  provide: f => showTooltip.computeN([f], state => state.field(f))
+})
+
+function getTooltip(state: any): readonly Tooltip[] {
+  const ranges = state.selection.ranges
+  if (ranges.length === 0) return []
+  const range = ranges[0]
+  if (range.empty) return []
+  
+  const text = state.sliceDoc(range.from, range.to)
+  
+  return [{
+    pos: range.from,
+    above: true,
+    strictSide: true,
+    arrow: true,
+    create: (view: EditorView) => {
+      const dom = document.createElement("div")
+      dom.className = "flex items-center gap-1 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-md shadow-xl px-1 py-1 text-xs font-medium"
+      
+      const btnMark = document.createElement("button")
+      btnMark.textContent = "Highlight"
+      btnMark.className = "px-2 py-1 hover:bg-zinc-700 dark:hover:bg-zinc-300 rounded cursor-pointer transition-colors"
+      btnMark.onclick = () => {
+        toggleHTMLTag("mark")(view)
+      }
+      
+      const btnComment = document.createElement("button")
+      btnComment.textContent = "Comment"
+      btnComment.className = "px-2 py-1 hover:bg-zinc-700 dark:hover:bg-zinc-300 rounded cursor-pointer transition-colors text-[#BFF355] dark:text-lime-700"
+      btnComment.onclick = () => {
+        toggleHTMLTag("mark")(view)
+        view.dom.dispatchEvent(new CustomEvent('editor-comment-request', { detail: text, bubbles: true }))
+      }
+      
+      dom.appendChild(btnMark)
+      dom.appendChild(btnComment)
+      return { dom }
+    }
+  }]
+}
 
 type Props = {
   spaceID: string
@@ -17,6 +66,7 @@ type Props = {
   theme: 'light' | 'dark'
   allFiles: string[]
   onSaved: (content: string, etag: string | null) => void
+  onCommentRequest?: (text: string) => void
 }
 
 // Custom Markdown Bold/Italic shortcuts
@@ -49,10 +99,43 @@ const toggleFormat = (mark: string) => (view: EditorView) => {
   return true;
 };
 
+const toggleHTMLTag = (tag: string) => (view: EditorView) => {
+  const { state } = view;
+  const openTag = `<${tag}>`;
+  const closeTag = `</${tag}>`;
+  const tr = state.changeByRange(range => {
+    const lenOpen = openTag.length;
+    const lenClose = closeTag.length;
+    const isMarked = range.from >= lenOpen && range.to <= state.doc.length - lenClose &&
+                     state.sliceDoc(range.from - lenOpen, range.from) === openTag &&
+                     state.sliceDoc(range.to, range.to + lenClose) === closeTag;
+    if (isMarked) {
+      return {
+        changes: [
+          { from: range.from - lenOpen, to: range.from, insert: "" },
+          { from: range.to, to: range.to + lenClose, insert: "" }
+        ],
+        range: EditorSelection.range(range.from - lenOpen, range.to - lenOpen)
+      }
+    } else {
+      return {
+        changes: [
+          { from: range.from, insert: openTag },
+          { from: range.to, insert: closeTag }
+        ],
+        range: EditorSelection.range(range.from + lenOpen, range.to + lenOpen)
+      }
+    }
+  });
+  view.dispatch(tr);
+  return true;
+};
+
 const markdownKeybindings = keymap.of([
   { key: "Enter", run: insertNewlineContinueMarkup },
   { key: "Mod-b", run: toggleFormat("**") },
-  { key: "Mod-i", run: toggleFormat("*") }
+  { key: "Mod-i", run: toggleFormat("*") },
+  { key: "Mod-e", run: toggleHTMLTag("mark") } // Cmd+E for Bookmark/Highlight
 ]);
 
 const customTheme = EditorView.theme({
@@ -89,7 +172,7 @@ const customTheme = EditorView.theme({
   ".cm-header-3": { fontSize: "1.4em", marginTop: "0.6em", marginBottom: "0.3em" },
 })
 
-export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved }: Props) {
+export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved, onCommentRequest }: Props) {
   const [content, setContent] = useState(initial)
   const [currentEtag, setCurrentEtag] = useState(etag)
   const [saving, setSaving] = useState(false)
@@ -195,8 +278,22 @@ export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved 
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  useEffect(() => {
+    function handleCommentRequest(e: Event) {
+      const customEvent = e as CustomEvent<string>
+      if (onCommentRequest) {
+        onCommentRequest(customEvent.detail)
+      }
+    }
+    const editorNode = document.getElementById('cm-container')
+    if (editorNode) {
+      editorNode.addEventListener('editor-comment-request', handleCommentRequest)
+      return () => editorNode.removeEventListener('editor-comment-request', handleCommentRequest)
+    }
+  }, [onCommentRequest])
+
   return (
-    <div className="relative min-h-full pb-20">
+    <div className="relative min-h-full pb-20" id="cm-container">
       <div className="max-w-3xl mx-auto p-8">
         <CodeMirror
           value={content}
@@ -207,7 +304,8 @@ export function Editor({ spaceID, path, initial, etag, theme, allFiles, onSaved 
             EditorView.lineWrapping,
             markdownKeybindings,
             customTheme,
-            autocompletion({ override: [wikiLinkCompletion] })
+            autocompletion({ override: [wikiLinkCompletion] }),
+            selectionTooltip
           ]}
           basicSetup={{
             lineNumbers: false,

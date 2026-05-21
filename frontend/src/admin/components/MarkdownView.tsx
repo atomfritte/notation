@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
+import rehypeRaw from 'rehype-raw'
 import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
 
@@ -48,6 +49,7 @@ export function MarkdownView({ content }: Props) {
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkWikiLink]}
           rehypePlugins={[
+            rehypeRaw,
             rehypeSlug,
             [rehypeAutolinkHeadings, { behavior: 'wrap' }],
           ]}
