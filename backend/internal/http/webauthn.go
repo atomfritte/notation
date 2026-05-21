@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -47,15 +48,43 @@ const (
 )
 
 func newWebAuthnHandlers(ah *authHandlers) (*webauthnHandlers, error) {
+	// Build the set of acceptable origins for the WebAuthn ceremony. The
+	// browser sends an Origin header on register / login and go-webauthn
+	// refuses the assertion if it isn't on this list, hence the dreaded
+	// "verify failed: Error validating origin" when this list is wrong.
+	//
+	// Sources in priority order:
+	//   1. NOTATION_BASE_URL — explicit, full origin from the deploy.
+	//   2. https://<RPID> — fallback derived from the relying-party id. This
+	//      covers the common case where the operator only sets NOTATION_RP_ID
+	//      (which is the only setting that *has* to be right for passkeys to
+	//      bind to the correct domain).
+	//   3. localhost dev defaults — last resort so `go run` works out of the
+	//      box without env vars.
 	origins := []string{}
 	if ah.cfg.BaseURL != "" {
 		origins = append(origins, ah.cfg.BaseURL)
 	}
-	// Always allow the local origin too so dev (vite at :5173, server at :8080)
-	// works when BASE_URL is unset.
+	if ah.cfg.RPID != "" {
+		derived := "https://" + ah.cfg.RPID
+		seen := false
+		for _, o := range origins {
+			if o == derived {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			origins = append(origins, derived)
+		}
+	}
 	if len(origins) == 0 {
 		origins = []string{"http://localhost:5173", "http://localhost:8080"}
 	}
+	slog.Default().Info("webauthn config",
+		"rp_id", ah.cfg.RPID,
+		"origins", origins,
+	)
 	wa, err := webauthn.New(&webauthn.Config{
 		RPDisplayName: "notation",
 		RPID:          ah.cfg.RPID,
