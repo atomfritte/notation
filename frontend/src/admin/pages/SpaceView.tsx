@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History } from 'lucide-react'
+import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History, Printer } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
@@ -499,6 +499,16 @@ export function SpaceView() {
                 {comments.length > 0 && <span className="text-xs font-bold text-zinc-900 dark:text-[#BFF355]">{comments.length}</span>}
               </button>
               
+              {isMarkdownFile(file) && !editing && (
+                <button
+                  onClick={() => window.print()}
+                  className="p-1.5 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
+                  title="Print this page"
+                >
+                  <Printer size={18} />
+                </button>
+              )}
+
               <button
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                 className="p-1.5 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
@@ -535,7 +545,17 @@ export function SpaceView() {
                 }}
               />
             ) : file ? (
-              <div className="pb-32 animate-in fade-in duration-300">
+              // In edit mode the editor manages its own scroll, so the wrapper
+              // must give it a definite height — otherwise Monaco's `height: 100%`
+              // collapses to zero and the text is invisible. In read mode we
+              // want the natural-flow content with bottom padding instead.
+              <div
+                className={
+                  editing
+                    ? 'absolute inset-0 flex flex-col animate-in fade-in duration-300'
+                    : 'pb-32 animate-in fade-in duration-300'
+                }
+              >
                 {!editing && !content.startsWith('# ') && (
                    <div className="max-w-3xl mx-auto px-8 pt-12 pb-4">
                       <h1 className="text-4xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{displayTitle}</h1>
@@ -561,6 +581,10 @@ export function SpaceView() {
                         setContent(c)
                         setEtag(newEtag)
                         refreshTree()
+                        // Drop back to read mode after a successful save — the
+                        // user can re-enter edit via the Eye/Edit toggle in
+                        // the header.
+                        setEditing(false)
                       }}
                       onCommentRequest={(selectedText) => {
                         setShowComments(true)

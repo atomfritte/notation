@@ -2,6 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- Print stylesheet ----------------------------------------------------
+ *
+ * When the user hits Cmd/Ctrl-P (or the Print button in the page header) we
+ * strip away every piece of chrome and let only the article content land on
+ * paper. Anything marked .no-print is hidden, as are the sidebar, the page
+ * header, every floating widget, and the Monaco editor (the print button is
+ * only visible in read mode, but be defensive).
+ *
+ * Colours are forced back to black-on-white because most printer drivers
+ * already strip the page background — leaving dark mode in place would just
+ * inflate the page count from blank backgrounds.
+ */
+@media print {
+  html, body, #root {
+    background: #ffffff !important;
+    color: #000000 !important;
+    height: auto !important;
+  }
+  aside,
+  header,
+  .no-print,
+  .selection-toolbar,
+  .monaco-editor {
+    display: none !important;
+  }
+  main,
+  main > * {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    flex: none !important;
+    position: static !important;
+  }
+  article.prose {
+    max-width: none !important;
+    color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11pt;
+  }
+  article.prose a {
+    color: #000 !important;
+    text-decoration: underline;
+  }
+  /* Keep code blocks legible without the dark theme. */
+  article.prose pre,
+  article.prose code {
+    background: #f5f5f5 !important;
+    color: #000 !important;
+    border: 1px solid #ddd;
+  }
+  /* Don't orphan headings or split tight blocks across pages. */
+  article.prose h1,
+  article.prose h2,
+  article.prose h3,
+  article.prose h4 {
+    page-break-after: avoid;
+  }
+  article.prose img,
+  article.prose pre,
+  article.prose blockquote,
+  article.prose table {
+    page-break-inside: avoid;
+  }
+}
+
 @layer base {
   html, body, #root { 
     @apply h-full bg-white text-zinc-800 dark:bg-[#0a0a0a] dark:text-zinc-300 transition-colors duration-200; 

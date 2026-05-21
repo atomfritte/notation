@@ -46,6 +46,12 @@ export type AnchorPayload = { quote: string; prefix: string; suffix: string }
 type CommentLite = {
   id: string
   anchor?: AnchorPayload
+  // Optional preview metadata — when present, surfaced in the on-hover
+  // tooltip over the rendered anchor mark. Existing callers can keep
+  // passing the minimal id-only shape.
+  text?: string
+  author?: string
+  created_at?: string
 }
 
 type Props = {
@@ -77,6 +83,18 @@ export function MarkdownView({
   const scrollRef = useRef<HTMLDivElement>(null)
   const articleRef = useRef<HTMLElement>(null)
   const [tool, setTool] = useState<{ x: number; y: number; anchor: AnchorPayload } | null>(null)
+  const [hoverTip, setHoverTip] = useState<
+    { x: number; y: number; comment: CommentLite } | null
+  >(null)
+
+  // O(1) lookup from comment id → metadata so the hover handler doesn't scan
+  // the array on every mouse move.
+  const commentsByID = useRef<Map<string, CommentLite>>(new Map())
+  useEffect(() => {
+    const m = new Map<string, CommentLite>()
+    for (const c of comments ?? []) m.set(c.id, c)
+    commentsByID.current = m
+  }, [comments])
 
   // Scroll to anchor on hash change or content load.
   useEffect(() => {
@@ -157,12 +175,30 @@ export function MarkdownView({
     function onMouseOver(e: MouseEvent) {
       const t = e.target as HTMLElement
       const m = t.closest('mark.comment-anchor') as HTMLElement | null
-      if (m?.dataset.commentId) onHoverMark?.(m.dataset.commentId)
+      if (m?.dataset.commentId) {
+        onHoverMark?.(m.dataset.commentId)
+        // Show a quick preview of the comment text + author next to the mark
+        // so the reader can skim threads without opening the sidebar.
+        const c = commentsByID.current.get(m.dataset.commentId)
+        if (c && c.text) {
+          const rect = m.getBoundingClientRect()
+          // Clamp x so the bubble never spills off the right edge.
+          const maxX = Math.max(8, window.innerWidth - 360)
+          setHoverTip({
+            x: Math.min(rect.left, maxX),
+            y: rect.bottom + 8,
+            comment: c,
+          })
+        }
+      }
     }
     function onMouseOut(e: MouseEvent) {
       const t = e.target as HTMLElement
       const m = t.closest('mark.comment-anchor')
-      if (m) onHoverMark?.(null)
+      if (m) {
+        onHoverMark?.(null)
+        setHoverTip(null)
+      }
     }
     function onClick(e: MouseEvent) {
       const t = e.target as HTMLElement
@@ -319,8 +355,45 @@ export function MarkdownView({
           </button>
         </div>
       )}
+
+      {/* Tooltip preview of the comment text when hovering an anchor mark.
+          pointer-events-none so the tooltip itself never re-triggers mouseover
+          / mouseout on the underlying mark; no-print so it never ends up on
+          paper. */}
+      {hoverTip && hoverTip.comment.text && (
+        <div
+          className="fixed z-50 pointer-events-none px-3 py-2 max-w-sm rounded-md shadow-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs no-print"
+          style={{ left: hoverTip.x, top: hoverTip.y }}
+        >
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+              {hoverTip.comment.author || 'unknown'}
+            </span>
+            {hoverTip.comment.created_at && (
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                {formatRelative(hoverTip.comment.created_at)}
+              </span>
+            )}
+          </div>
+          <div className="text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-words">
+            {hoverTip.comment.text.length > 240
+              ? hoverTip.comment.text.slice(0, 240) + '…'
+              : hoverTip.comment.text}
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+function formatRelative(iso: string): string {
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return ''
+  const diffSec = Math.round((Date.now() - t) / 1000)
+  if (diffSec < 60) return `${diffSec}s ago`
+  if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`
+  if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`
+  return new Date(t).toLocaleDateString()
 }
 
 /* ---- Anchor resolution & marking ----------------------------------------- */
