@@ -30,10 +30,11 @@ export function MCPIntegrationModal({ open, spaceID, url, rawToken, onClose }: P
   const serverName = `notation-${spaceID}`
 
   // `claude mcp add` takes the name and URL positionally; --transport and -H
-  // are options. `--url` is NOT a valid flag.
+  // are options. `--url` is NOT a valid flag. Project scope so the server
+  // shows up in the .mcp.json of the current project (sharable, opt-in).
   const cliClaude = `claude mcp add ${serverName} "${url}" \\
   --transport http \\
-  --scope user \\
+  --scope project \\
   --header "Authorization: Bearer ${token}"`
 
   const claudeJson = JSON.stringify(
