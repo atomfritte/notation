@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, MoreHorizontal, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload } from 'lucide-react'
+import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
+import { MarkdownView } from '../components/MarkdownView'
 import { Editor } from '../components/Editor'
 import { SharePanel } from '../components/SharePanel'
 import { MCPPanel } from '../components/MCPPanel'
@@ -16,6 +17,7 @@ import { HistoryPanel } from '../components/HistoryPanel'
 import { AuditPanel } from '../components/AuditPanel'
 import { FileViewer } from '../components/FileViewer'
 import { BacklinksPanel } from '../components/BacklinksPanel'
+import { HistoryView } from '../components/HistoryView'
 
 export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
@@ -35,14 +37,15 @@ export function SpaceView() {
   const [showOutline, setShowOutline] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
+  const [historyMode, setHistoryMode] = useState(false)
   
   const [comments, setComments] = useState<api.CommentItem[]>([])
   const [showComments, setShowComments] = useState(false)
   const [pendingComment, setPendingComment] = useState<string>('')
+  const [pendingAnchor, setPendingAnchor] = useState<api.CommentAnchor | null>(null)
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
   const [bookmarks, setBookmarks] = useState<string[]>([])
   
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
   const [ctxMenu, setCtxMenu] = useState<{ x: number, y: number, items: MenuItem[] } | null>(null)
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -153,23 +156,36 @@ export function SpaceView() {
     } catch (e) { setErr(String(e)) }
   }
 
-  const handleAddComment = async (text: string) => {
+  const handleAddComment = async (
+    text: string,
+    opts?: { parentID?: string; anchor?: api.CommentAnchor },
+  ) => {
     if (!spaceID || !file) return
-    await api.postComment(spaceID, file, text)
+    // pendingAnchor was captured from the viewer's selection toolbar. We only
+    // attach it to top-level comments (replies inherit position from parent).
+    const anchor = opts?.anchor ?? (opts?.parentID ? undefined : pendingAnchor ?? undefined)
+    await api.postComment(spaceID, file, text, { parentID: opts?.parentID, anchor })
+    setPendingAnchor(null)
     refreshComments()
   }
 
-  // --- Effects ---
+  function onNewAnchorComment(anchor: api.CommentAnchor) {
+    setPendingAnchor(anchor)
+    setShowComments(true)
+    setPendingComment(`> ${anchor.quote.split('\n').join('\n> ')}\n\n`)
+  }
 
+  // When the viewer asks us to focus a comment (mark click) or hover-blink it
+  // (mark hover), make sure the comments panel is visible and scroll to it.
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    if (!activeCommentId) return
+    const panel = document.getElementById('comments-panel')
+    if (!panel) return
+    const el = panel.querySelector(`[data-comment-id="${CSS.escape(activeCommentId)}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [activeCommentId])
+
+  // --- Effects ---
 
   useEffect(() => {
     if (!spaceID) return
@@ -200,6 +216,7 @@ export function SpaceView() {
       setEtag(null)
     }
     setEditing(false)
+    setHistoryMode(false)
     refreshComments()
   }, [spaceID, file, refreshComments])
 
@@ -429,7 +446,14 @@ export function SpaceView() {
                   <List size={18} />
                 </button>
               )}
-              {isTextFile(file) && (
+              <button
+                onClick={() => { setHistoryMode(v => !v); setEditing(false) }}
+                className={`p-1.5 rounded-md transition-colors ${historyMode ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[#BFF355]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}
+                title="Version history"
+              >
+                <History size={18} />
+              </button>
+              {isTextFile(file) && !historyMode && (
                 <button onClick={() => setEditing(v => !v)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-zinc-900 bg-zinc-100 dark:text-[#BFF355] dark:bg-[#BFF355]/10' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}>
                   {editing ? <Eye size={16} /> : <Edit3 size={16} />}
                 </button>
@@ -442,22 +466,13 @@ export function SpaceView() {
                 {comments.length > 0 && <span className="text-xs font-bold text-zinc-900 dark:text-[#BFF355]">{comments.length}</span>}
               </button>
               
-              <div className="relative" ref={menuRef}>
-                <button onClick={() => setMenuOpen(!menuOpen)} className={`p-1.5 rounded-md transition-colors ${menuOpen ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-200' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}>
-                  <MoreHorizontal size={18} />
-                </button>
-                {menuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                     <div className="px-3 py-1.5 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Appearance</div>
-                     <button onClick={() => { setTheme('light'); setMenuOpen(false); }} className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${theme === 'light' ? 'text-zinc-900 font-medium bg-zinc-50 dark:bg-zinc-800/50' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}>
-                       <Sun size={14} /> Light
-                     </button>
-                     <button onClick={() => { setTheme('dark'); setMenuOpen(false); }} className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${theme === 'dark' ? 'text-zinc-900 dark:text-zinc-200 font-medium bg-zinc-50 dark:bg-zinc-800/50' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}>
-                       <Moon size={14} /> Dark
-                     </button>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="p-1.5 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
+                title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+              >
+                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
             </div>
           )}
         </header>
@@ -469,14 +484,31 @@ export function SpaceView() {
                <button onClick={() => setErr(null)} className="text-red-400 hover:text-red-600 dark:hover:text-red-200">&times;</button>
             </div>}
             
-            {file ? (
+            {file && historyMode ? (
+              <HistoryView
+                spaceID={spaceID}
+                path={file}
+                theme={theme}
+                onClose={() => setHistoryMode(false)}
+                onRestored={() => {
+                  // Refresh content + tree after a restore.
+                  if (isTextFile(file)) {
+                    api.readFile(spaceID, file).then(res => {
+                      setContent(res.content)
+                      setEtag(res.etag)
+                    }).catch(e => setErr(String(e)))
+                  }
+                  refreshTree()
+                }}
+              />
+            ) : file ? (
               <div className="pb-32 animate-in fade-in duration-300">
                 {!editing && !content.startsWith('# ') && (
                    <div className="max-w-3xl mx-auto px-8 pt-12 pb-4">
                       <h1 className="text-4xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{displayTitle}</h1>
                    </div>
                 )}
-                
+
                 {editing ? (
                   <Editor
                     spaceID={spaceID}
@@ -497,7 +529,22 @@ export function SpaceView() {
                   />
                 ) : (
                   <div className={isMarkdownFile(file) && content.startsWith('# ') ? 'pt-8' : 'pt-0'}>
-                    <FileViewer spaceID={spaceID} path={file} content={content} theme={theme} />
+                    {isMarkdownFile(file) ? (
+                      <MarkdownView
+                        content={content}
+                        theme={theme}
+                        comments={comments}
+                        activeCommentID={activeCommentId}
+                        onHoverMark={setActiveCommentId}
+                        onSelectAnchor={(id) => {
+                          setShowComments(true)
+                          setActiveCommentId(id)
+                        }}
+                        onNewAnchorComment={onNewAnchorComment}
+                      />
+                    ) : (
+                      <FileViewer spaceID={spaceID} path={file} content={content} theme={theme} />
+                    )}
                   </div>
                 )}
               </div>
@@ -520,20 +567,34 @@ export function SpaceView() {
           )}
 
           {showComments && file && (
-            <div className="w-[320px] border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0a0a0a] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
+            <div id="comments-panel" className="w-[320px] border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0a0a0a] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
               <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-950">
                  <h3 className="font-semibold text-sm text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-                    <MessageSquare size={16} /> Updates
+                    <MessageSquare size={16} /> Comments
                  </h3>
-                 <button onClick={() => setShowComments(false)} className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">&times;</button>
+                 <button onClick={() => { setShowComments(false); setPendingAnchor(null); setPendingComment('') }} className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">&times;</button>
               </div>
+              {pendingAnchor && (
+                <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/50 text-xs">
+                  <div className="text-amber-900 dark:text-amber-300 font-semibold mb-1">Anchoring to selection</div>
+                  <div className="text-amber-800 dark:text-amber-400/80 italic line-clamp-2">“{pendingAnchor.quote}”</div>
+                  <button
+                    onClick={() => { setPendingAnchor(null); setPendingComment('') }}
+                    className="mt-1 text-amber-700 dark:text-amber-300 hover:underline"
+                  >
+                    drop anchor
+                  </button>
+                </div>
+              )}
               <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950/50">
                  <CommentThread
                    comments={comments}
                    canAdd={true}
                    initialText={pendingComment}
-                   onAdd={async (text) => {
-                     await handleAddComment(text)
+                   activeID={activeCommentId}
+                   onHoverComment={setActiveCommentId}
+                   onAdd={async (text, opts) => {
+                     await handleAddComment(text, opts)
                      setPendingComment('')
                    }}
                  />

@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import * as api from './lib/api'
 import { FileTree } from '../admin/components/FileTree'
 import { FileViewer } from '../admin/components/FileViewer'
+import { MarkdownView } from '../admin/components/MarkdownView'
 import { CommentThread } from '../admin/components/CommentThread'
 import { isTextFile, isMarkdownFile } from '../admin/lib/fileTypes'
 
@@ -21,7 +22,12 @@ function ShareUI() {
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   )
 
-  // React to OS theme changes.
+  // Coordinate hover/click between the viewer's anchor marks and the
+  // CommentThread rows. Same pattern as the admin SpaceView.
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
+  const [pendingAnchor, setPendingAnchor] = useState<api.CommentAnchor | null>(null)
+  const [pendingComment, setPendingComment] = useState<string>('')
+
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = (e: MediaQueryListEvent) => setTheme(e.matches ? 'dark' : 'light')
@@ -67,6 +73,15 @@ function ShareUI() {
     refreshComments()
   }, [file, refreshComments])
 
+  // Scroll the comments column to whichever entry is active.
+  useEffect(() => {
+    if (!activeCommentId) return
+    const panel = document.getElementById('share-comments-panel')
+    if (!panel) return
+    const el = panel.querySelector(`[data-comment-id="${CSS.escape(activeCommentId)}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [activeCommentId])
+
   const select = useCallback((p: string) => setSearchParams({ file: p }), [setSearchParams])
 
   async function save() {
@@ -84,10 +99,17 @@ function ShareUI() {
     }
   }
 
-  async function addComment(text: string) {
+  async function addComment(text: string, opts?: { parentID?: string; anchor?: api.CommentAnchor }) {
     if (!file) return
-    await api.postComment(file, text)
+    const anchor = opts?.anchor ?? (opts?.parentID ? undefined : pendingAnchor ?? undefined)
+    await api.postComment(file, text, { parentID: opts?.parentID, anchor })
+    setPendingAnchor(null)
     refreshComments()
+  }
+
+  function onNewAnchorComment(anchor: api.CommentAnchor) {
+    setPendingAnchor(anchor)
+    setPendingComment(`> ${anchor.quote.split('\n').join('\n> ')}\n\n`)
   }
 
   if (err && !info) {
@@ -138,9 +160,7 @@ function ShareUI() {
         {file ? (
           <>
             <header className="h-12 flex justify-between items-center px-4 border-b border-zinc-200 dark:border-zinc-800/50 flex-shrink-0 text-sm">
-              <span className="text-zinc-500 dark:text-zinc-400 truncate">
-                {file.replace(/\.md$/i, '')}
-              </span>
+              <span className="text-zinc-500 dark:text-zinc-400 truncate">{file.replace(/\.md$/i, '')}</span>
               {canEdit && isTextFile(file) && (
                 <button
                   onClick={() => setEditing(v => !v)}
@@ -176,6 +196,16 @@ function ShareUI() {
                   className="flex-1 p-6 font-mono text-sm resize-none outline-none w-full bg-white dark:bg-[#0a0a0a] text-zinc-800 dark:text-zinc-200"
                 />
               </div>
+            ) : isMarkdownFile(file) ? (
+              <MarkdownView
+                content={content}
+                theme={theme}
+                comments={comments}
+                activeCommentID={activeCommentId}
+                onHoverMark={setActiveCommentId}
+                onSelectAnchor={setActiveCommentId}
+                onNewAnchorComment={canComment ? onNewAnchorComment : undefined}
+              />
             ) : (
               <FileViewer
                 spaceID={info.space.id}
@@ -186,24 +216,41 @@ function ShareUI() {
               />
             )}
             {!editing && canComment && isMarkdownFile(file) && (
-              <div className="border-t border-zinc-200 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-950/50 max-h-80 overflow-y-auto">
+              <div
+                id="share-comments-panel"
+                className="border-t border-zinc-200 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-950/50 max-h-80 overflow-y-auto"
+              >
+                {pendingAnchor && (
+                  <div className="px-4 pt-3 text-xs">
+                    <div className="text-amber-700 dark:text-amber-300 font-semibold mb-1">Anchoring to selection</div>
+                    <div className="italic text-zinc-600 dark:text-zinc-400 line-clamp-2">“{pendingAnchor.quote}”</div>
+                    <button
+                      onClick={() => { setPendingAnchor(null); setPendingComment('') }}
+                      className="mt-1 text-amber-700 dark:text-amber-300 hover:underline"
+                    >
+                      drop anchor
+                    </button>
+                  </div>
+                )}
                 <CommentThread
                   comments={comments}
                   canAdd={canComment}
-                  onAdd={canComment ? addComment : undefined}
+                  initialText={pendingComment}
+                  activeID={activeCommentId}
+                  onHoverComment={setActiveCommentId}
+                  onAdd={canComment ? async (text, opts) => {
+                    await addComment(text, opts)
+                    setPendingComment('')
+                  } : undefined}
                 />
               </div>
             )}
             {err && info && (
-              <div className="p-2 text-red-600 dark:text-red-400 text-sm border-t border-red-200 dark:border-red-900/50">
-                {err}
-              </div>
+              <div className="p-2 text-red-600 dark:text-red-400 text-sm border-t border-red-200 dark:border-red-900/50">{err}</div>
             )}
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-zinc-500">
-            Select a file from the tree.
-          </div>
+          <div className="flex-1 flex items-center justify-center text-zinc-500">Select a file from the tree.</div>
         )}
       </main>
     </div>
@@ -218,9 +265,7 @@ export function App() {
         <Route path="/s/:token/*" element={<ShareUI />} />
         <Route
           path="*"
-          element={
-            <div className="p-8 text-red-600 dark:text-red-400">Invalid share URL.</div>
-          }
+          element={<div className="p-8 text-red-600 dark:text-red-400">Invalid share URL.</div>}
         />
       </Routes>
     </BrowserRouter>

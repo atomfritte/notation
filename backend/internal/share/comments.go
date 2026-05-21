@@ -15,19 +15,40 @@ import (
 	"time"
 )
 
+// Anchor pins a comment to a specific text range using the W3C Web Annotation
+// "TextQuoteSelector" pattern: quote = the selected text, prefix/suffix =
+// short windows of surrounding text used to disambiguate when the same quote
+// occurs multiple times in the document. Resolves robustly across small edits.
+type Anchor struct {
+	Quote  string `json:"quote"`
+	Prefix string `json:"prefix"`
+	Suffix string `json:"suffix"`
+}
+
 type Comment struct {
 	ID        string    `json:"id"`
+	ParentID  string    `json:"parent_id,omitempty"`
 	Path      string    `json:"path"`
 	CreatedAt time.Time `json:"created_at"`
 	Author    string    `json:"author"`
 	Text      string    `json:"text"`
+	Anchor    *Anchor   `json:"anchor,omitempty"`
 }
 
-var ErrCommentNotFound = errors.New("comment not found")
+type CommentInput struct {
+	Text     string
+	ParentID string
+	Anchor   *Anchor
+}
+
+var (
+	ErrCommentNotFound = errors.New("comment not found")
+	ErrCommentNested   = errors.New("replies cannot be nested further")
+	ErrCommentPath     = errors.New("parent comment is on a different file")
+)
 
 // CommentStore persists comments per Space as JSONL in
-// <space>/.notation/comments.jsonl. Document-level for now (no line/range
-// anchoring) — sufficient for the comment-mode share level.
+// <space>/.notation/comments.jsonl.
 type CommentStore struct {
 	spacesDir string
 	mu        sync.Mutex
@@ -76,19 +97,42 @@ func (c *CommentStore) save(spaceID string, comments []Comment) error {
 	return atomicWriteFile(c.path(spaceID), buf.Bytes(), 0o640)
 }
 
-func (c *CommentStore) Add(spaceID, filePath, author, text string) (Comment, error) {
+// Add appends a comment. Reply semantics: if ParentID is set, the parent must
+// exist on the same path and itself be a top-level comment (replies cannot be
+// nested further — keeps the UI sane).
+func (c *CommentStore) Add(spaceID, filePath, author string, in CommentInput) (Comment, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	list, err := c.load(spaceID)
 	if err != nil {
 		return Comment{}, err
 	}
+	if in.ParentID != "" {
+		var parent *Comment
+		for i := range list {
+			if list[i].ID == in.ParentID {
+				parent = &list[i]
+				break
+			}
+		}
+		if parent == nil {
+			return Comment{}, ErrCommentNotFound
+		}
+		if parent.ParentID != "" {
+			return Comment{}, ErrCommentNested
+		}
+		if parent.Path != filePath {
+			return Comment{}, ErrCommentPath
+		}
+	}
 	nc := Comment{
 		ID:        "c_" + randID(12),
+		ParentID:  in.ParentID,
 		Path:      filePath,
 		CreatedAt: time.Now().UTC(),
 		Author:    author,
-		Text:      strings.TrimSpace(text),
+		Text:      strings.TrimSpace(in.Text),
+		Anchor:    in.Anchor,
 	}
 	list = append(list, nc)
 	if err := c.save(spaceID, list); err != nil {
@@ -120,6 +164,8 @@ func (c *CommentStore) ListAll(spaceID string) ([]Comment, error) {
 	return c.load(spaceID)
 }
 
+// Delete removes a comment by ID. If the deleted comment is a top-level entry,
+// all of its replies are also removed (cascade).
 func (c *CommentStore) Delete(spaceID, commentID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -130,8 +176,10 @@ func (c *CommentStore) Delete(spaceID, commentID string) error {
 	out := list[:0]
 	found := false
 	for _, x := range list {
-		if x.ID == commentID {
-			found = true
+		if x.ID == commentID || x.ParentID == commentID {
+			if x.ID == commentID {
+				found = true
+			}
 			continue
 		}
 		out = append(out, x)

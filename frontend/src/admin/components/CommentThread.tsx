@@ -1,29 +1,61 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { MessageSquare, Quote } from 'lucide-react'
 
 export type CommentItem = {
   id: string
+  parent_id?: string
   created_at: string
   author: string
   text: string
+  anchor?: { quote: string; prefix: string; suffix: string }
 }
 
 type Props = {
   comments: CommentItem[]
   canAdd: boolean
   initialText?: string
-  onAdd?: (text: string) => Promise<void>
+  onAdd?: (text: string, opts?: { parentID?: string }) => Promise<void>
+  /** Comment ID currently hovered/highlighted somewhere else (e.g. matching
+   *  anchor mark in the viewer). The matching sidebar entry pulses to match. */
+  activeID?: string | null
+  /** Notify parent when a comment row is hovered, so the viewer can blink the
+   *  corresponding anchor mark. */
+  onHoverComment?: (id: string | null) => void
 }
 
-export function CommentThread({ comments, canAdd, initialText, onAdd }: Props) {
+/**
+ * CommentThread renders a 2-level threaded list of comments. Top-level entries
+ * each have a Reply affordance that opens an inline composer; replies render
+ * indented underneath. Anchored comments (with a `quote`) show the quoted
+ * snippet so the author of the comment has context even when the original
+ * paragraph scrolls out of view.
+ */
+export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, onHoverComment }: Props) {
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [replyTo, setReplyTo] = useState<string | null>(null)
 
+  // initialText is set when the editor's selection toolbar triggers a comment.
   useEffect(() => {
     if (initialText) {
-      setText(prev => prev ? prev + '\n\n' + initialText : initialText)
+      setText(prev => (prev ? prev + '\n\n' + initialText : initialText))
     }
   }, [initialText])
+
+  // Group: parents → replies (sorted by creation time within each group).
+  const { tops, repliesByParent } = useMemo(() => {
+    const tops: CommentItem[] = []
+    const repliesByParent: Record<string, CommentItem[]> = {}
+    for (const c of comments) {
+      if (c.parent_id) {
+        ;(repliesByParent[c.parent_id] ??= []).push(c)
+      } else {
+        tops.push(c)
+      }
+    }
+    return { tops, repliesByParent }
+  }, [comments])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -31,36 +63,63 @@ export function CommentThread({ comments, canAdd, initialText, onAdd }: Props) {
     setSubmitting(true)
     setErr(null)
     try {
-      await onAdd(text)
+      await onAdd(text, replyTo ? { parentID: replyTo } : undefined)
       setText('')
-    } catch (e) {
-      setErr(String(e))
+      setReplyTo(null)
+    } catch (err) {
+      setErr(String(err))
     } finally {
       setSubmitting(false)
     }
   }
 
+  async function submitReply(parentID: string, replyText: string) {
+    if (!onAdd) return
+    await onAdd(replyText, { parentID })
+  }
+
   return (
     <aside className="p-4">
       <h3 className="font-semibold text-sm mb-3 text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-        Comments 
-        {comments.length > 0 && <span className="bg-zinc-100 dark:bg-zinc-800 text-lime-600 dark:text-[#BFF355] px-2 py-0.5 rounded-full text-xs font-bold">{comments.length}</span>}
+        Comments
+        {comments.length > 0 && (
+          <span className="bg-zinc-100 dark:bg-zinc-800 text-lime-600 dark:text-[#BFF355] px-2 py-0.5 rounded-full text-xs font-bold">
+            {comments.length}
+          </span>
+        )}
       </h3>
-      {comments.length === 0 && (
-        <p className="text-xs text-zinc-500 italic mb-3">No comments yet.</p>
-      )}
-      <ul className="space-y-3 mb-4">
-        {comments.map(c => (
-          <li key={c.id} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md p-3 text-sm">
-            <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-2">
-              <span className="font-semibold text-zinc-700 dark:text-zinc-300">{c.author}</span>
-              <span>{new Date(c.created_at).toLocaleString()}</span>
-            </div>
-            <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-300">{c.text}</p>
+
+      {tops.length === 0 && <p className="text-xs text-zinc-500 italic mb-3">No comments yet.</p>}
+
+      <ul className="space-y-4 mb-4">
+        {tops.map(c => (
+          <li key={c.id}>
+            <CommentRow
+              comment={c}
+              active={activeID === c.id}
+              canReply={canAdd}
+              onHoverComment={onHoverComment}
+              onReply={canAdd && onAdd ? (text) => submitReply(c.id, text) : undefined}
+            />
+            {repliesByParent[c.id]?.length ? (
+              <ul className="pl-5 mt-2 border-l-2 border-zinc-200 dark:border-zinc-800 space-y-2">
+                {repliesByParent[c.id].map(r => (
+                  <li key={r.id}>
+                    <CommentRow
+                      comment={r}
+                      active={activeID === r.id}
+                      onHoverComment={onHoverComment}
+                      compact
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </li>
         ))}
       </ul>
-      {canAdd && onAdd && (
+
+      {canAdd && onAdd && !replyTo && (
         <form onSubmit={submit} className="flex flex-col gap-2">
           <textarea
             value={text}
@@ -81,5 +140,106 @@ export function CommentThread({ comments, canAdd, initialText, onAdd }: Props) {
       )}
       {err && <p className="text-red-500 text-xs mt-2">{err}</p>}
     </aside>
+  )
+}
+
+function CommentRow({
+  comment,
+  active,
+  canReply,
+  compact,
+  onReply,
+  onHoverComment,
+}: {
+  comment: CommentItem
+  active: boolean
+  canReply?: boolean
+  compact?: boolean
+  onReply?: (text: string) => Promise<void>
+  onHoverComment?: (id: string | null) => void
+}) {
+  const [replyOpen, setReplyOpen] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function send(e: FormEvent) {
+    e.preventDefault()
+    if (!onReply || !replyText.trim()) return
+    setBusy(true)
+    try {
+      await onReply(replyText)
+      setReplyText('')
+      setReplyOpen(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      data-comment-id={comment.id}
+      onMouseEnter={() => onHoverComment?.(comment.id)}
+      onMouseLeave={() => onHoverComment?.(null)}
+      className={
+        'rounded-md border text-sm transition-all ' +
+        (active
+          ? 'border-[#BFF355] bg-[#BFF355]/5 dark:bg-[#BFF355]/10 shadow-sm'
+          : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900') +
+        (compact ? ' p-2' : ' p-3')
+      }
+    >
+      <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1.5">
+        <span className="font-semibold text-zinc-700 dark:text-zinc-300 truncate">{comment.author}</span>
+        <span className="flex-shrink-0">{new Date(comment.created_at).toLocaleString()}</span>
+      </div>
+      {comment.anchor?.quote && (
+        <div className="text-xs text-zinc-600 dark:text-zinc-400 mb-2 pl-2 border-l-2 border-zinc-300 dark:border-zinc-700 italic flex items-start gap-1">
+          <Quote size={10} className="mt-0.5 flex-shrink-0 opacity-60" />
+          <span className="line-clamp-2">{comment.anchor.quote}</span>
+        </div>
+      )}
+      <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-300">{comment.text}</p>
+
+      {canReply && onReply && !replyOpen && (
+        <button
+          onClick={() => setReplyOpen(true)}
+          className="mt-2 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 flex items-center gap-1"
+        >
+          <MessageSquare size={11} /> Reply
+        </button>
+      )}
+      {replyOpen && onReply && (
+        <form onSubmit={send} className="mt-2 flex flex-col gap-1.5">
+          <textarea
+            value={replyText}
+            onChange={e => setReplyText(e.target.value)}
+            placeholder="Write a reply…"
+            autoFocus
+            rows={2}
+            disabled={busy}
+            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-lime-500 dark:focus:border-[#BFF355] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[#BFF355] outline-none rounded-md p-2 text-sm text-zinc-900 dark:text-zinc-100 resize-none"
+          />
+          <div className="flex gap-1.5 justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setReplyOpen(false)
+                setReplyText('')
+              }}
+              className="px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!replyText.trim() || busy}
+              className="px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40"
+            >
+              {busy ? '…' : 'Reply'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   )
 }

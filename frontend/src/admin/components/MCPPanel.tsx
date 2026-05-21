@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Plug, Plus } from 'lucide-react'
+import { MCPIntegrationModal } from './MCPIntegrationModal'
 
 type MCPToken = {
   id: string
@@ -16,11 +18,22 @@ type CreateResp = {
 
 type Props = { spaceID: string }
 
+/**
+ * MCPPanel — sidebar tab for managing Bearer tokens that grant MCP access to
+ * this Space. Clicking a token (or finishing creation) opens
+ * MCPIntegrationModal with paste-ready Claude Code / Cursor / HTTP snippets.
+ */
 export function MCPPanel({ spaceID }: Props) {
   const [tokens, setTokens] = useState<MCPToken[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [label, setLabel] = useState('')
-  const [created, setCreated] = useState<CreateResp | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [modal, setModal] = useState<{ url: string; rawToken?: string } | null>(null)
+
+  // The MCP path is configurable server-side (NOTATION_MCP_PATH) but defaults
+  // to /mcp. We compute the URL client-side for existing tokens since the
+  // server only includes it in the creation response.
+  const inferredURL = `${window.location.origin}/mcp/${spaceID}`
 
   const refresh = useCallback(() => {
     fetch(`/api/admin/spaces/${encodeURIComponent(spaceID)}/mcp-tokens`)
@@ -37,7 +50,6 @@ export function MCPPanel({ spaceID }: Props) {
   async function onCreate(e: FormEvent) {
     e.preventDefault()
     setErr(null)
-    setCreated(null)
     try {
       const r = await fetch(`/api/admin/spaces/${encodeURIComponent(spaceID)}/mcp-tokens`, {
         method: 'POST',
@@ -49,15 +61,17 @@ export function MCPPanel({ spaceID }: Props) {
         throw new Error(j.error || `HTTP ${r.status}`)
       }
       const data: CreateResp = await r.json()
-      setCreated(data)
       setLabel('')
+      setShowForm(false)
       refresh()
+      setModal({ url: data.url, rawToken: data.raw })
     } catch (e) {
       setErr(String(e))
     }
   }
 
-  async function onDelete(id: string) {
+  async function onDelete(id: string, ev: React.MouseEvent) {
+    ev.stopPropagation()
     if (!window.confirm(`Revoke MCP token ${id}?`)) return
     const r = await fetch(
       `/api/admin/spaces/${encodeURIComponent(spaceID)}/mcp-tokens/${encodeURIComponent(id)}`,
@@ -67,124 +81,102 @@ export function MCPPanel({ spaceID }: Props) {
     else setErr(`HTTP ${r.status}`)
   }
 
-  function copy(text: string) {
-    void navigator.clipboard?.writeText(text).catch(() => {})
-  }
-
-  const claudeConfig = created
-    ? `{
-  "mcpServers": {
-    "notation-${spaceID}": {
-      "type": "http",
-      "url": "${created.url}",
-      "headers": {
-        "Authorization": "Bearer ${created.raw}"
-      }
-    }
-  }
-}`
-    : ''
-
   return (
-    <div className="mt-4 pt-4 border-t">
-      <h3 className="font-semibold text-sm mb-3">MCP Tokens</h3>
-      <p className="text-xs text-gray-600 mb-3">
-        Connect Claude Code (or any MCP client) to this Space. Each token grants
-        full read+write access to <span className="font-mono">{spaceID}</span>.
-      </p>
+    <>
+      <div className="p-3">
+        <h3 className="font-semibold text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wider px-2 mb-2 flex items-center gap-1">
+          <Plug size={12} /> MCP Tokens
+        </h3>
+        <p className="text-xs text-zinc-500 px-2 mb-3 leading-relaxed">
+          Connect Claude Code, Cursor or any MCP client to read & edit this Space.
+        </p>
 
-      <form onSubmit={onCreate} className="space-y-2 mb-3">
-        <div>
-          <label className="block text-xs text-gray-600 mb-1">Label (e.g. laptop)</label>
-          <input
-            value={label}
-            onChange={e => setLabel(e.target.value)}
-            className="border px-2 py-1 rounded text-sm w-full"
-            placeholder="optional"
-          />
-        </div>
-        <button
-          type="submit"
-          className="px-3 py-1 bg-purple-600 text-white text-sm rounded w-full"
-        >
-          Create MCP token
-        </button>
-      </form>
+        {!showForm && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors mb-3"
+          >
+            <Plus size={12} /> New token
+          </button>
+        )}
 
-      {created && (
-        <div className="mb-3 p-2 bg-yellow-50 border border-yellow-300 rounded text-xs">
-          <p className="font-semibold text-yellow-900 mb-1">
-            Save this token now — it cannot be recovered:
-          </p>
-          <div className="space-y-1">
-            <div>
-              <div className="text-gray-700">URL:</div>
-              <code className="block break-all bg-white p-1 rounded select-all">{created.url}</code>
-            </div>
-            <div>
-              <div className="text-gray-700">Token:</div>
-              <code className="block break-all bg-white p-1 rounded select-all">{created.raw}</code>
-            </div>
-            <details className="mt-2">
-              <summary className="cursor-pointer text-blue-700">Claude Code config snippet</summary>
-              <pre className="mt-1 bg-white p-2 rounded overflow-auto text-xs select-all">{claudeConfig}</pre>
+        {showForm && (
+          <form onSubmit={onCreate} className="space-y-2 mb-3 px-1">
+            <input
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1.5 rounded-md text-xs w-full text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+              placeholder="Label (e.g. claude-laptop)"
+              autoFocus
+            />
+            <div className="flex gap-1">
               <button
-                onClick={() => copy(claudeConfig)}
-                className="text-blue-600 hover:underline mt-1"
+                type="submit"
+                className="flex-1 px-2 py-1 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 text-xs font-medium rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944]"
               >
-                copy snippet
+                Create
               </button>
-            </details>
-          </div>
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={() => copy(created.raw)}
-              className="text-blue-600 hover:underline"
-            >
-              copy token
-            </button>
-            <button
-              onClick={() => setCreated(null)}
-              className="text-gray-600 hover:underline"
-            >
-              dismiss
-            </button>
-          </div>
-        </div>
-      )}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false)
+                  setLabel('')
+                }}
+                className="px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
 
-      {tokens.length === 0 ? (
-        <p className="text-xs text-gray-500 italic">No MCP tokens yet.</p>
-      ) : (
-        <ul className="space-y-1 text-xs">
-          {tokens.map(t => (
-            <li key={t.id} className="p-2 bg-white border rounded">
-              <div className="flex justify-between items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="font-mono">{t.id}</div>
-                  {t.label && <div className="text-gray-700 mt-0.5">{t.label}</div>}
-                  <div className="text-gray-500 mt-0.5">
-                    created {new Date(t.created_at).toLocaleString()}
-                  </div>
-                  {t.last_used && (
-                    <div className="text-gray-500 mt-0.5">
-                      last used {new Date(t.last_used).toLocaleString()}
+        {tokens.length === 0 ? (
+          <p className="text-xs text-zinc-500 italic px-2">No tokens yet.</p>
+        ) : (
+          <ul className="space-y-1">
+            {tokens.map(t => (
+              <li
+                key={t.id}
+                onClick={() => setModal({ url: inferredURL })}
+                className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer transition-colors"
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-mono text-xs text-zinc-900 dark:text-zinc-100">{t.id}</div>
+                    {t.label && (
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 truncate">{t.label}</div>
+                    )}
+                    <div className="text-[10px] text-zinc-500 mt-0.5">
+                      created {new Date(t.created_at).toLocaleString()}
+                      {t.last_used && (
+                        <>
+                          {' · '}last used {new Date(t.last_used).toLocaleString()}
+                        </>
+                      )}
                     </div>
-                  )}
+                  </div>
+                  <button
+                    onClick={(e) => onDelete(t.id, e)}
+                    className="text-xs text-red-600 dark:text-red-400 hover:underline flex-shrink-0"
+                  >
+                    revoke
+                  </button>
                 </div>
-                <button
-                  onClick={() => onDelete(t.id)}
-                  className="text-red-600 hover:underline flex-shrink-0"
-                >
-                  revoke
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+              </li>
+            ))}
+          </ul>
+        )}
 
-      {err && <p className="text-red-600 mt-2 text-xs">{err}</p>}
-    </div>
+        {err && <p className="text-red-600 dark:text-red-400 mt-2 text-xs px-2">{err}</p>}
+      </div>
+
+      <MCPIntegrationModal
+        open={modal !== null}
+        spaceID={spaceID}
+        url={modal?.url ?? ''}
+        rawToken={modal?.rawToken}
+        onClose={() => setModal(null)}
+      />
+    </>
   )
 }

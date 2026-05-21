@@ -145,7 +145,9 @@ func (h *shareHandlers) putFile(w http.ResponseWriter, r *http.Request) {
 }
 
 type postCommentReq struct {
-	Text string `json:"text"`
+	Text     string        `json:"text"`
+	ParentID string        `json:"parent_id,omitempty"`
+	Anchor   *share.Anchor `json:"anchor,omitempty"`
 }
 
 func (h *shareHandlers) postComment(w http.ResponseWriter, r *http.Request) {
@@ -172,9 +174,13 @@ func (h *shareHandlers) postComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "text required")
 		return
 	}
-	c, err := h.comments.Add(spaceID, upath, actor(sh), req.Text)
+	c, err := h.comments.Add(spaceID, upath, actor(sh), share.CommentInput{
+		Text:     req.Text,
+		ParentID: req.ParentID,
+		Anchor:   req.Anchor,
+	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeCommentError(w, err)
 		return
 	}
 	h.audit1(spaceID, "comment.add", upath, sh, r, nil)
@@ -202,6 +208,19 @@ func (h *shareHandlers) listComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+func writeCommentError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, share.ErrCommentNotFound):
+		writeError(w, http.StatusNotFound, "parent comment not found")
+	case errors.Is(err, share.ErrCommentNested):
+		writeError(w, http.StatusBadRequest, "replies cannot be nested further")
+	case errors.Is(err, share.ErrCommentPath):
+		writeError(w, http.StatusBadRequest, "parent comment is on a different file")
+	default:
+		writeError(w, http.StatusInternalServerError, err.Error())
+	}
 }
 
 func writeShareError(w http.ResponseWriter, err error) {

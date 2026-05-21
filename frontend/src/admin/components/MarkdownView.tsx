@@ -7,48 +7,60 @@ import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import rehypeRaw from 'rehype-raw'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
+import { MessageSquare } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
 import { Mermaid } from './Mermaid'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github-dark.css'
 
-type Props = {
-  content: string
-  /** theme drives Mermaid + KaTeX coloring; defaults to dark since the app does too */
-  theme?: 'light' | 'dark'
+export type AnchorPayload = { quote: string; prefix: string; suffix: string }
+
+type CommentLite = {
+  id: string
+  anchor?: AnchorPayload
 }
 
-/**
- * MarkdownView renders Markdown with five deep-link/rich-content behaviors:
- *
- *   1. Headings get id="slug" via rehype-slug, then rehype-autolink-headings
- *      wraps each heading in <a href="#slug"> so visitors can copy a permalink
- *      by clicking the heading.
- *   2. Wiki-style [[file]] and [[file#section]] links are rewritten by
- *      remarkWikiLink into ?file=<path>#<anchor> hrefs.
- *   3. The custom `a` component intercepts every link click and routes it
- *      through React Router, preserving the SPA pathname while updating the
- *      ?file and #hash parts. After a navigation, the effect below scrolls the
- *      pane to the new anchor (smooth) or to the top (instant) on file change.
- *   4. ```mermaid code blocks render as SVG diagrams (lazy-loaded mermaid lib).
- *   5. $inline$ and $$block$$ math render via KaTeX; other code blocks get
- *      syntax-highlighted by highlight.js.
- */
-export function MarkdownView({ content, theme = 'dark' }: Props) {
-  const location = useLocation()
-  const ref = useRef<HTMLDivElement>(null)
+type Props = {
+  content: string
+  theme?: 'light' | 'dark'
+  /** Comments with anchors are rendered as <mark> overlays on the matching text. */
+  comments?: CommentLite[]
+  /** Comment ID to flash/highlight (sidebar → viewer coordination). */
+  activeCommentID?: string | null
+  /** Called when the cursor enters/leaves an anchor mark in the viewer. */
+  onHoverMark?: (id: string | null) => void
+  /** Called when the user clicks an anchor mark — opens the matching comment. */
+  onSelectAnchor?: (id: string) => void
+  /** Called when the user selects text in the viewer and clicks the "Comment"
+   *  toolbar. Receives a text-quote selector payload. */
+  onNewAnchorComment?: (anchor: AnchorPayload) => void
+}
 
+export function MarkdownView({
+  content,
+  theme = 'dark',
+  comments,
+  activeCommentID,
+  onHoverMark,
+  onSelectAnchor,
+  onNewAnchorComment,
+}: Props) {
+  const location = useLocation()
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const articleRef = useRef<HTMLElement>(null)
+  const [tool, setTool] = useState<{ x: number; y: number; anchor: AnchorPayload } | null>(null)
+
+  // Scroll to anchor on hash change or content load.
   useEffect(() => {
-    if (!ref.current) return
+    if (!scrollRef.current) return
     if (!location.hash) {
-      ref.current.scrollTo({ top: 0 })
+      scrollRef.current.scrollTo({ top: 0 })
       return
     }
     const id = decodeURIComponent(location.hash.slice(1))
-    // requestAnimationFrame waits for the markdown to be in the DOM.
     const frame = requestAnimationFrame(() => {
-      const el = ref.current?.querySelector(`[id="${CSS.escape(id)}"]`)
+      const el = scrollRef.current?.querySelector(`[id="${CSS.escape(id)}"]`)
       if (el && 'scrollIntoView' in el) {
         ;(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' })
       }
@@ -56,9 +68,114 @@ export function MarkdownView({ content, theme = 'dark' }: Props) {
     return () => cancelAnimationFrame(frame)
   }, [location.hash, content])
 
+  // Apply / refresh anchor marks whenever content or comments change.
+  useEffect(() => {
+    const article = articleRef.current
+    if (!article) return
+    // Defer until react-markdown has flushed the DOM.
+    const frame = requestAnimationFrame(() => {
+      removeAnchorMarks(article)
+      if (comments && comments.length > 0) applyAnchorMarks(article, comments)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [content, comments])
+
+  // Listen for selection changes inside the article and surface the toolbar.
+  useEffect(() => {
+    function update() {
+      if (!onNewAnchorComment || !articleRef.current) return
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+        setTool(null)
+        return
+      }
+      const range = sel.getRangeAt(0)
+      const quote = sel.toString()
+      if (quote.trim().length < 2) {
+        setTool(null)
+        return
+      }
+      if (!articleRef.current.contains(range.startContainer) || !articleRef.current.contains(range.endContainer)) {
+        setTool(null)
+        return
+      }
+      const rect = range.getBoundingClientRect()
+      const container = scrollRef.current?.getBoundingClientRect()
+      if (!container) return
+      const anchor = buildAnchor(articleRef.current, range, quote)
+      setTool({
+        x: rect.right - container.left,
+        y: rect.bottom - container.top + 6,
+        anchor,
+      })
+    }
+    function clear(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      // Don't dismiss when the click is inside our floating toolbar.
+      if (target.closest('.selection-toolbar')) return
+      setTool(null)
+    }
+    document.addEventListener('selectionchange', update)
+    document.addEventListener('mousedown', clear)
+    return () => {
+      document.removeEventListener('selectionchange', update)
+      document.removeEventListener('mousedown', clear)
+    }
+  }, [onNewAnchorComment])
+
+  // Hover / click interactions on rendered marks.
+  useEffect(() => {
+    const article = articleRef.current
+    if (!article) return
+    function onMouseOver(e: MouseEvent) {
+      const t = e.target as HTMLElement
+      const m = t.closest('mark.comment-anchor') as HTMLElement | null
+      if (m?.dataset.commentId) onHoverMark?.(m.dataset.commentId)
+    }
+    function onMouseOut(e: MouseEvent) {
+      const t = e.target as HTMLElement
+      const m = t.closest('mark.comment-anchor')
+      if (m) onHoverMark?.(null)
+    }
+    function onClick(e: MouseEvent) {
+      const t = e.target as HTMLElement
+      const m = t.closest('mark.comment-anchor') as HTMLElement | null
+      if (m?.dataset.commentId) {
+        e.preventDefault()
+        onSelectAnchor?.(m.dataset.commentId)
+      }
+    }
+    article.addEventListener('mouseover', onMouseOver)
+    article.addEventListener('mouseout', onMouseOut)
+    article.addEventListener('click', onClick)
+    return () => {
+      article.removeEventListener('mouseover', onMouseOver)
+      article.removeEventListener('mouseout', onMouseOut)
+      article.removeEventListener('click', onClick)
+    }
+  }, [onHoverMark, onSelectAnchor])
+
+  // React to activeCommentID changes: toggle `data-active` on matching marks.
+  useEffect(() => {
+    const article = articleRef.current
+    if (!article) return
+    article.querySelectorAll<HTMLElement>('mark.comment-anchor').forEach(m => {
+      m.dataset.active = m.dataset.commentId === activeCommentID ? 'true' : 'false'
+    })
+    if (activeCommentID) {
+      const marks = article.querySelectorAll<HTMLElement>(
+        `mark.comment-anchor[data-comment-id="${CSS.escape(activeCommentID)}"]`,
+      )
+      marks.forEach(m => {
+        m.classList.add('comment-anchor-blink')
+        window.setTimeout(() => m.classList.remove('comment-anchor-blink'), 1300)
+      })
+    }
+  }, [activeCommentID])
+
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto">
-      <article className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-8">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
+      <article ref={articleRef} className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-8">
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]}
           rehypePlugins={[
@@ -86,10 +203,7 @@ export function MarkdownView({ content, theme = 'dark' }: Props) {
               }
               if (href.startsWith('#')) {
                 return (
-                  <Link
-                    to={{ pathname: location.pathname, search: location.search, hash: href }}
-                    className={className}
-                  >
+                  <Link to={{ pathname: location.pathname, search: location.search, hash: href }} className={className}>
                     {children}
                   </Link>
                 )
@@ -97,10 +211,7 @@ export function MarkdownView({ content, theme = 'dark' }: Props) {
               if (href.startsWith('?')) {
                 const url = new URL(href, 'http://_/')
                 return (
-                  <Link
-                    to={{ pathname: location.pathname, search: url.search, hash: url.hash }}
-                    className={className}
-                  >
+                  <Link to={{ pathname: location.pathname, search: url.search, hash: url.hash }} className={className}>
                     {children}
                   </Link>
                 )
@@ -112,7 +223,6 @@ export function MarkdownView({ content, theme = 'dark' }: Props) {
                   </Link>
                 )
               }
-              // Relative path → treat as a file reference inside the current Space.
               const cleaned = href.replace(/^\.\//, '')
               const [path, anchor] = cleaned.split('#')
               return (
@@ -131,8 +241,6 @@ export function MarkdownView({ content, theme = 'dark' }: Props) {
             code({ className, children, ...rest }) {
               const match = /language-(\w+)/.exec(className || '')
               const lang = match?.[1]
-              // Inline `code` is detected by react-markdown via parent type; here we
-              // only need to special-case block-level mermaid.
               if (lang === 'mermaid') {
                 return <Mermaid chart={String(children).trimEnd()} theme={theme} />
               }
@@ -154,17 +262,190 @@ export function MarkdownView({ content, theme = 'dark' }: Props) {
           {content}
         </ReactMarkdown>
       </article>
+
+      {tool && onNewAnchorComment && (
+        <div
+          className="selection-toolbar"
+          style={{ left: tool.x, top: tool.y }}
+          onMouseDown={e => e.preventDefault()}
+        >
+          <button
+            onClick={() => {
+              onNewAnchorComment(tool.anchor)
+              window.getSelection()?.removeAllRanges()
+              setTool(null)
+            }}
+          >
+            <MessageSquare size={12} /> Comment
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-/**
- * CodeBlockWrapper adds a hover-revealed "Copy" button to every fenced code
- * block (except mermaid, which the `code` override handles before <pre> is
- * even reached). The button copies the raw code text, which we extract by
- * walking the React child tree — react-markdown nests text inside spans for
- * syntax-highlighted tokens, so a simple String() coercion would miss content.
- */
+/* ---- Anchor resolution & marking ----------------------------------------- */
+
+const CONTEXT_LEN = 30
+
+function buildAnchor(article: HTMLElement, range: Range, quote: string): AnchorPayload {
+  const fullText = article.textContent ?? ''
+  const offset = absoluteOffset(article, range.startContainer, range.startOffset)
+  const prefix = fullText.slice(Math.max(0, offset - CONTEXT_LEN), offset)
+  const suffix = fullText.slice(offset + quote.length, offset + quote.length + CONTEXT_LEN)
+  return { quote, prefix, suffix }
+}
+
+function absoluteOffset(root: Node, node: Node, offsetInNode: number): number {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let abs = 0
+  let cur = walker.nextNode()
+  while (cur) {
+    if (cur === node) return abs + offsetInNode
+    abs += (cur.textContent ?? '').length
+    cur = walker.nextNode()
+  }
+  // If the start container is an element, walk inside it to find the offset.
+  if (node.nodeType !== Node.TEXT_NODE) {
+    const childWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+    let c = childWalker.nextNode()
+    let i = 0
+    while (c && i < offsetInNode) {
+      abs += (c.textContent ?? '').length
+      c = childWalker.nextNode()
+      i++
+    }
+  }
+  return abs
+}
+
+function removeAnchorMarks(article: HTMLElement) {
+  const marks = article.querySelectorAll('mark.comment-anchor')
+  marks.forEach(m => {
+    const parent = m.parentNode
+    if (!parent) return
+    while (m.firstChild) parent.insertBefore(m.firstChild, m)
+    parent.removeChild(m)
+    parent.normalize()
+  })
+}
+
+function applyAnchorMarks(article: HTMLElement, comments: CommentLite[]) {
+  for (const c of comments) {
+    if (!c.anchor) continue
+    const range = findAnchorRange(article, c.anchor)
+    if (!range) continue
+    wrapRangeWithMark(range, c.id)
+  }
+}
+
+function findAnchorRange(article: HTMLElement, anchor: AnchorPayload): Range | null {
+  const fullText = article.textContent ?? ''
+  if (!anchor.quote) return null
+  const withContext = anchor.prefix + anchor.quote + anchor.suffix
+  let idx = fullText.indexOf(withContext)
+  let start: number
+  if (idx >= 0) {
+    start = idx + anchor.prefix.length
+  } else {
+    // Fallback: try with only prefix or only suffix to disambiguate.
+    const withPrefix = anchor.prefix + anchor.quote
+    idx = anchor.prefix ? fullText.indexOf(withPrefix) : -1
+    if (idx >= 0) {
+      start = idx + anchor.prefix.length
+    } else {
+      idx = fullText.indexOf(anchor.quote)
+      if (idx < 0) return null
+      start = idx
+    }
+  }
+  const end = start + anchor.quote.length
+  return rangeForOffsets(article, start, end)
+}
+
+function rangeForOffsets(root: HTMLElement, start: number, end: number): Range | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let abs = 0
+  let startNode: Text | null = null
+  let startOff = 0
+  let endNode: Text | null = null
+  let endOff = 0
+  let cur = walker.nextNode() as Text | null
+  while (cur) {
+    const len = (cur.textContent ?? '').length
+    if (!startNode && abs + len > start) {
+      startNode = cur
+      startOff = start - abs
+    }
+    if (abs + len >= end) {
+      endNode = cur
+      endOff = end - abs
+      break
+    }
+    abs += len
+    cur = walker.nextNode() as Text | null
+  }
+  if (!startNode || !endNode) return null
+  const r = document.createRange()
+  try {
+    r.setStart(startNode, startOff)
+    r.setEnd(endNode, endOff)
+  } catch {
+    return null
+  }
+  return r
+}
+
+function wrapRangeWithMark(range: Range, commentID: string) {
+  // Easy case: range within a single text node → surroundContents works cleanly.
+  if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+    const m = document.createElement('mark')
+    m.className = 'comment-anchor'
+    m.dataset.commentId = commentID
+    try {
+      range.surroundContents(m)
+    } catch {
+      /* ignore — exotic node hierarchy */
+    }
+    return
+  }
+  // Multi-node: collect every text node intersecting the range and wrap each
+  // sub-slice. surroundContents fails when wrapping crosses non-text elements,
+  // so we slice node-by-node.
+  const root = range.commonAncestorContainer
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const candidates: Text[] = []
+  while (walker.nextNode()) {
+    const n = walker.currentNode as Text
+    if (range.intersectsNode(n)) candidates.push(n)
+  }
+  for (let i = 0; i < candidates.length; i++) {
+    const n = candidates[i]
+    if (!n.textContent) continue
+    const sub = document.createRange()
+    try {
+      if (i === 0) {
+        sub.setStart(range.startContainer, range.startOffset)
+      } else {
+        sub.setStart(n, 0)
+      }
+      if (i === candidates.length - 1) {
+        sub.setEnd(range.endContainer, range.endOffset)
+      } else {
+        sub.setEnd(n, (n.textContent ?? '').length)
+      }
+      const m = document.createElement('mark')
+      m.className = 'comment-anchor'
+      m.dataset.commentId = commentID
+      sub.surroundContents(m)
+    } catch {
+      /* skip slivers we can't wrap */
+    }
+  }
+}
+
+/* ---- Code block helpers (unchanged) -------------------------------------- */
+
 function CodeBlockWrapper({ className, children, ...rest }: { className?: string; children?: ReactNode } & React.HTMLAttributes<HTMLPreElement>) {
   const code = useMemo(() => extractText(children), [children])
   const [copied, setCopied] = useState(false)

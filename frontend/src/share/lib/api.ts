@@ -15,12 +15,20 @@ export type Entry = {
   children?: Entry[]
 }
 
+export type CommentAnchor = {
+  quote: string
+  prefix: string
+  suffix: string
+}
+
 export type Comment = {
   id: string
+  parent_id?: string
   path: string
   created_at: string
   author: string
   text: string
+  anchor?: CommentAnchor
 }
 
 function tokenFromPath(): string {
@@ -78,11 +86,19 @@ export async function listComments(path: string): Promise<Comment[]> {
   return r.json()
 }
 
-export async function postComment(path: string, text: string): Promise<Comment> {
+export async function postComment(
+  path: string,
+  text: string,
+  opts: { parentID?: string; anchor?: CommentAnchor } = {},
+): Promise<Comment> {
   const r = await fetch(`${API}/comments/${encodePath(path)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({
+      text,
+      parent_id: opts.parentID,
+      anchor: opts.anchor,
+    }),
   })
   if (!r.ok) throw await asError(r)
   return r.json()

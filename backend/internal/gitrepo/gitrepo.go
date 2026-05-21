@@ -231,6 +231,41 @@ func (m *Manager) Log(spaceID string, limit int) ([]Commit, error) {
 	return commits, nil
 }
 
+// ShowFileAtCommit returns the bytes of `userPath` as they existed at the
+// given commit (`git show <hash>:<path>`). Used by the history viewer to
+// render or restore past versions. Path is canonicalized via SafeJoin to
+// reject traversal before git sees it.
+func (m *Manager) ShowFileAtCommit(spaceID, hash, userPath string) ([]byte, error) {
+	if !commitHashRe.MatchString(hash) {
+		return nil, ErrInvalidHash
+	}
+	if _, err := space.SafeJoin(m.store.FilesDir(spaceID), userPath); err != nil {
+		return nil, err
+	}
+	dir := m.store.FilesDir(spaceID)
+	out, err := run(dir, nil, "show", hash+":"+userPath)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// FileDiff returns the unified diff of a specific path between two commits.
+func (m *Manager) FileDiff(spaceID, from, to, userPath string) (string, error) {
+	if !commitHashRe.MatchString(from) || !commitHashRe.MatchString(to) {
+		return "", ErrInvalidHash
+	}
+	if _, err := space.SafeJoin(m.store.FilesDir(spaceID), userPath); err != nil {
+		return "", err
+	}
+	dir := m.store.FilesDir(spaceID)
+	out, err := run(dir, nil, "diff", "--no-color", from+".."+to, "--", userPath)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
 // Diff returns the unified diff of a single commit.
 func (m *Manager) Diff(spaceID, hash string) (string, error) {
 	if !commitHashRe.MatchString(hash) {

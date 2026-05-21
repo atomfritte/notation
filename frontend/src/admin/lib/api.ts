@@ -131,21 +131,38 @@ export const snapshot = (id: string, message: string) =>
     body: JSON.stringify({ message }),
   })
 
+export type CommentAnchor = {
+  quote: string
+  prefix: string
+  suffix: string
+}
+
 export type CommentItem = {
   id: string
+  parent_id?: string
   created_at: string
   author: string
   text: string
+  anchor?: CommentAnchor
 }
 
 export const getComments = (id: string, path: string) =>
   fetchJSON<CommentItem[]>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/${encodePath(path)}`)
 
-export const postComment = (id: string, path: string, text: string) =>
+export const postComment = (
+  id: string,
+  path: string,
+  text: string,
+  opts: { parentID?: string; anchor?: CommentAnchor } = {},
+) =>
   fetchJSON<CommentItem>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/${encodePath(path)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({
+      text,
+      parent_id: opts.parentID,
+      anchor: opts.anchor,
+    }),
   })
 
 export type SearchMatch = {
@@ -178,3 +195,33 @@ export const getDiff = async (id: string, hash: string): Promise<string> => {
   if (!r.ok) throw await asError(r)
   return r.text()
 }
+
+export const getFileHistory = (id: string, path: string) =>
+  fetchJSON<Commit[]>(`/api/admin/spaces/${encodeURIComponent(id)}/file-history/${encodePath(path)}`)
+
+export const getFileAtCommit = async (id: string, hash: string, path: string): Promise<string> => {
+  const r = await fetch(
+    `/api/admin/spaces/${encodeURIComponent(id)}/file-at/${encodeURIComponent(hash)}/${encodePath(path)}`,
+  )
+  if (!r.ok) throw await asError(r)
+  return r.text()
+}
+
+export const fileAtURL = (id: string, hash: string, path: string) =>
+  `/api/admin/spaces/${encodeURIComponent(id)}/file-at/${encodeURIComponent(hash)}/${encodePath(path)}`
+
+export const getFileDiff = async (id: string, path: string, from: string, to: string): Promise<string> => {
+  const params = new URLSearchParams({ from, to })
+  const r = await fetch(
+    `/api/admin/spaces/${encodeURIComponent(id)}/file-diff/${encodePath(path)}?${params}`,
+  )
+  if (!r.ok) throw await asError(r)
+  return r.text()
+}
+
+export const restoreFile = (id: string, path: string, hash: string) =>
+  fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/restore/${encodePath(path)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hash }),
+  })

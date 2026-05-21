@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -436,6 +437,115 @@ func (h *adminHandlers) deleteMCPToken(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ---- per-file history (restore + compare) ----
+
+func (h *adminHandlers) fileHistory(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	upath := chi.URLParam(r, "*")
+	commits, err := h.git.FileHistory(id, upath, 100)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "log: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, commits)
+}
+
+func (h *adminHandlers) fileAt(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	hash := chi.URLParam(r, "hash")
+	upath := chi.URLParam(r, "*")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	data, err := h.git.ShowFileAtCommit(id, hash, upath)
+	if err != nil {
+		if errors.Is(err, gitrepo.ErrInvalidHash) {
+			writeError(w, http.StatusBadRequest, "invalid commit hash")
+			return
+		}
+		writeFileError(w, err)
+		return
+	}
+	mtype := mime.TypeByExtension(filepath.Ext(upath))
+	if mtype == "" {
+		mtype = http.DetectContentType(data)
+	}
+	w.Header().Set("Content-Type", mtype)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
+func (h *adminHandlers) fileDiffAcross(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	upath := chi.URLParam(r, "*")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
+	if from == "" || to == "" {
+		writeError(w, http.StatusBadRequest, "from and to query params required")
+		return
+	}
+	diff, err := h.git.FileDiff(id, from, to, upath)
+	if err != nil {
+		if errors.Is(err, gitrepo.ErrInvalidHash) {
+			writeError(w, http.StatusBadRequest, "invalid commit hash")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "diff: "+err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte(diff))
+}
+
+type restoreReq struct {
+	Hash string `json:"hash"`
+}
+
+func (h *adminHandlers) restoreFile(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	upath := chi.URLParam(r, "*")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	var req restoreReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	data, err := h.git.ShowFileAtCommit(id, req.Hash, upath)
+	if err != nil {
+		if errors.Is(err, gitrepo.ErrInvalidHash) {
+			writeError(w, http.StatusBadRequest, "invalid commit hash")
+			return
+		}
+		writeFileError(w, err)
+		return
+	}
+	if _, err := h.store.WriteFile(id, upath, bytes.NewReader(data), h.cfg.MaxUploadBytes); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	short := req.Hash
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	h.git.Schedule(id, gitrepo.Author{
+		Name:  adminAuthor(r).Name + " (restore " + short + ")",
+		Email: adminAuthor(r).Email,
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ---- search + audit ----
 
 func (h *adminHandlers) search(w http.ResponseWriter, r *http.Request) {
@@ -618,9 +728,13 @@ func (h *adminHandlers) postComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	author := adminAuthor(r).Name
-	c, err := h.comments.Add(id, upath, author, req.Text)
+	c, err := h.comments.Add(id, upath, author, share.CommentInput{
+		Text:     req.Text,
+		ParentID: req.ParentID,
+		Anchor:   req.Anchor,
+	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeCommentError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, c)

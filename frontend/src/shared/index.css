@@ -50,6 +50,36 @@ mark {
   @apply bg-lime-200 text-zinc-900 dark:bg-[#BFF355]/30 dark:text-[#BFF355] rounded-sm px-1 py-0.5;
 }
 
+/* Comment anchors: subtler than yellow highlight, clickable. The active +
+   blink classes are toggled via JS from the sidebar hover handler. */
+mark.comment-anchor {
+  @apply bg-amber-100/70 text-zinc-900 dark:bg-amber-500/15 dark:text-zinc-200 border-b border-amber-400/70 dark:border-amber-500/40 rounded-none px-0 py-0 cursor-pointer transition-colors;
+}
+mark.comment-anchor:hover,
+mark.comment-anchor[data-active="true"] {
+  @apply bg-amber-200 dark:bg-amber-500/30;
+}
+mark.comment-anchor.comment-anchor-blink {
+  animation: comment-anchor-blink 0.4s ease-in-out 3;
+}
+@keyframes comment-anchor-blink {
+  0%, 100% { background-color: rgba(252, 211, 77, 0.35); }
+  50%      { background-color: rgba(245, 158, 11, 0.7); }
+}
+
+/* Floating selection toolbar above the user's text selection in the viewer */
+.selection-toolbar {
+  @apply absolute z-50 flex items-center bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md shadow-xl text-xs font-medium;
+  animation: selection-toolbar-in 0.12s ease-out;
+}
+@keyframes selection-toolbar-in {
+  from { opacity: 0; transform: translateY(-2px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+.selection-toolbar button {
+  @apply px-3 py-1.5 hover:bg-zinc-700 dark:hover:bg-zinc-300 transition-colors cursor-pointer flex items-center gap-1.5 first:rounded-l-md last:rounded-r-md;
+}
+
 /* Override prose colors for dark mode */
 .prose {
   @apply max-w-none transition-colors duration-200;
