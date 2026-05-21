@@ -19,6 +19,7 @@
     "@monaco-editor/react": "^4.6.0",
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@simplewebauthn/browser": "^11.0.0",
     "@uiw/react-codemirror": "^4.25.9",
     "monaco-editor": "^0.52.0",
     "highlight.js": "^11.10.0",

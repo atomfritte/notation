@@ -2,10 +2,21 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+)
+
+// AuthMode controls how /api/admin/* and the admin SPA are protected.
+type AuthMode string
+
+const (
+	AuthModeSession  AuthMode = "session"  // notation's own passkey + session-cookie auth (default)
+	AuthModeAuthelia AuthMode = "authelia" // legacy: trust Authelia ForwardAuth header
+	AuthModeBoth     AuthMode = "both"     // require Authelia outer + session inner
 )
 
 type Config struct {
@@ -20,6 +31,12 @@ type Config struct {
 	DevBypassAuth     bool
 	MaxUploadBytes    int64
 	CommitDebounceMS  int
+
+	// Auth
+	AuthMode        AuthMode
+	RPID            string
+	SessionLifetime time.Duration
+	TrustProxy      bool
 }
 
 func Load() (*Config, error) {
@@ -35,6 +52,10 @@ func Load() (*Config, error) {
 		DevBypassAuth:     getEnv("NOTATION_DEV_BYPASS_AUTH", "") == "1",
 		MaxUploadBytes:    getEnvInt64("NOTATION_MAX_UPLOAD_BYTES", 64*1024*1024),
 		CommitDebounceMS:  int(getEnvInt64("NOTATION_COMMIT_DEBOUNCE_MS", 5000)),
+		AuthMode:          AuthMode(getEnv("NOTATION_AUTH_MODE", string(AuthModeSession))),
+		RPID:              getEnv("NOTATION_RP_ID", ""),
+		SessionLifetime:   time.Duration(getEnvInt64("NOTATION_SESSION_LIFETIME_HOURS", 720)) * time.Hour,
+		TrustProxy:        getEnv("NOTATION_TRUST_PROXY", "") == "1",
 	}
 	if !strings.HasPrefix(cfg.SharePath, "/") || cfg.SharePath == "/" {
 		return nil, fmt.Errorf("NOTATION_SHARE_PATH must be a non-root absolute path, got %q", cfg.SharePath)
@@ -45,7 +66,39 @@ func Load() (*Config, error) {
 	if cfg.SharePath == cfg.MCPPath {
 		return nil, fmt.Errorf("share and MCP paths must differ")
 	}
+	switch cfg.AuthMode {
+	case AuthModeSession, AuthModeAuthelia, AuthModeBoth:
+	default:
+		return nil, fmt.Errorf("NOTATION_AUTH_MODE must be session|authelia|both, got %q", cfg.AuthMode)
+	}
+	if cfg.RPID == "" {
+		cfg.RPID = deriveRPID(cfg.BaseURL)
+	}
 	return cfg, nil
+}
+
+// deriveRPID extracts the bare host from a base URL so WebAuthn passkeys are
+// bound to the right domain. Falls back to "localhost" for dev when no base
+// URL is configured.
+func deriveRPID(baseURL string) string {
+	if baseURL == "" {
+		return "localhost"
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Host == "" {
+		return "localhost"
+	}
+	host := u.Hostname() // strips port
+	if host == "" {
+		return "localhost"
+	}
+	return host
+}
+
+// CookieSecure reports whether the session cookie should carry the Secure
+// flag. True for any https:// base URL.
+func (c *Config) CookieSecure() bool {
+	return strings.HasPrefix(c.BaseURL, "https://")
 }
 
 func (c *Config) SpacesDir() string {

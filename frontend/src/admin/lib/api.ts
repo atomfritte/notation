@@ -1,3 +1,21 @@
+import { getCSRF } from './auth'
+
+// Dispatched when any API call returns 401 — AuthGate listens and re-fetches
+// /api/auth/state to bounce the user back to the login screen.
+const AUTH_EXPIRED_EVENT = 'notation:auth-expired'
+
+function attachCSRF(init: RequestInit | undefined): RequestInit {
+  const out: RequestInit = init ? { ...init } : {}
+  const method = (out.method ?? 'GET').toUpperCase()
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return out
+  const csrf = getCSRF()
+  if (!csrf) return out
+  const headers = new Headers(out.headers)
+  headers.set('X-CSRF-Token', csrf)
+  out.headers = headers
+  return out
+}
+
 export type Meta = {
   id: string
   name: string
@@ -24,7 +42,10 @@ export type Commit = {
 }
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init)
+  const r = await fetch(url, attachCSRF(init))
+  if (r.status === 401) {
+    window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+  }
   if (!r.ok) throw await asError(r)
   if (r.status === 204) return undefined as T
   return r.json() as Promise<T>
@@ -38,7 +59,7 @@ async function asError(r: Response): Promise<Error> {
   } catch {
     /* ignore */
   }
-  return new Error(msg)
+  return Object.assign(new Error(msg), { status: r.status })
 }
 
 function encodePath(p: string): string {
@@ -90,11 +111,16 @@ export const writeFileBinary = async (id: string, path: string, blob: Blob): Pro
   const headers: Record<string, string> = {
     'Content-Type': blob.type || 'application/octet-stream',
   }
+  const csrf = getCSRF()
+  if (csrf) headers['X-CSRF-Token'] = csrf
   const r = await fetch(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`, {
     method: 'PUT',
     headers,
     body: blob,
   })
+  if (r.status === 401) {
+    window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+  }
   if (!r.ok) throw await asError(r)
 }
 

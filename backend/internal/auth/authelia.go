@@ -50,6 +50,13 @@ func AdminFromContext(ctx context.Context) (AdminUser, bool) {
 	return u, ok
 }
 
+// WithAdmin returns a derived context carrying the given AdminUser. Exported
+// so the http package's session middleware can populate the same key the
+// rest of the codebase already reads via AdminFromContext.
+func WithAdmin(ctx context.Context, u AdminUser) context.Context {
+	return context.WithValue(ctx, adminCtxKey{}, u)
+}
+
 func MeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, _ := AdminFromContext(r.Context())

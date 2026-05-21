@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
-	"github.com/yoogie27/notation/internal/auth"
+	"github.com/yoogie27/notation/internal/authstore"
 	"github.com/yoogie27/notation/internal/config"
 	"github.com/yoogie27/notation/internal/gitrepo"
 	"github.com/yoogie27/notation/internal/mcphandler"
@@ -18,19 +18,21 @@ import (
 )
 
 type Deps struct {
-	Cfg       *config.Config
-	Log       *slog.Logger
-	Store     *space.Store
-	Git       *gitrepo.Manager
-	Shares    *share.Store
-	Audit     *share.AuditLog
-	Lim       *share.Limiter
-	Comments  *share.CommentStore
-	MCPTokens *mcptoken.Store
-	MCP       *mcphandler.Server
+	Cfg           *config.Config
+	Log           *slog.Logger
+	Store         *space.Store
+	Git           *gitrepo.Manager
+	Shares        *share.Store
+	Audit         *share.AuditLog
+	Lim           *share.Limiter
+	Comments      *share.CommentStore
+	MCPTokens     *mcptoken.Store
+	MCP           *mcphandler.Server
+	AuthStore     *authstore.Store
+	SessionSecret []byte
 }
 
-func NewRouter(d Deps) http.Handler {
+func NewRouter(d Deps) (http.Handler, error) {
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
@@ -67,8 +69,6 @@ func NewRouter(d Deps) http.Handler {
 	})
 
 	// Authelia-bypass: MCP endpoints, Bearer-auth per space.
-	// Two routes: bare /{spaceID} and /{spaceID}/* so clients that append
-	// a trailing slash or path (`/messages`, `/sse`) still reach the handler.
 	mcpHandler := d.MCP.Handler()
 	r.Route(d.Cfg.MCPPath, func(mr chi.Router) {
 		mr.Use(d.Lim.Middleware)
@@ -76,55 +76,88 @@ func NewRouter(d Deps) http.Handler {
 		mr.Handle("/{spaceID}/*", mcpHandler)
 	})
 
-	// Admin: protected by Authelia ForwardAuth header.
-	ah := &adminHandlers{
+	// ---------- Auth API (mostly public) ----------
+	// /api/auth/* — state machine + bootstrap claim + passkey ceremonies.
+	// Login endpoints are public (rate-limited via loginGuard internally).
+	// Register + passkey-management require an active session.
+	ah := newAuthHandlers(d.Cfg, d.AuthStore, d.SessionSecret)
+	wah, err := newWebAuthnHandlers(ah)
+	if err != nil {
+		return nil, err
+	}
+	sessionMW := sessionAdminMiddleware(d.SessionSecret)
+	if d.Cfg.DevBypassAuth {
+		sessionMW = devBypassMiddleware()
+	}
+	r.Route("/api/auth", func(ar chi.Router) {
+		ar.Get("/state", ah.state)
+		ar.Post("/claim", ah.claim)
+		ar.Post("/passkey/login/begin", wah.loginBegin)
+		ar.Post("/passkey/login/finish", wah.loginFinish)
+		ar.Group(func(pr chi.Router) {
+			pr.Use(sessionMW)
+			pr.Post("/logout", ah.logout)
+			pr.Group(func(csrfR chi.Router) {
+				csrfR.Use(requireCSRF)
+				csrfR.Post("/passkey/register/begin", wah.registerBegin)
+				csrfR.Post("/passkey/register/finish", wah.registerFinish)
+				csrfR.Delete("/passkeys/{id}", wah.deletePasskey)
+			})
+			pr.Get("/passkeys", wah.listPasskeys)
+		})
+	})
+
+	// Admin SPA HTML — served public so the React AuthGate can render and
+	// route to claim / login screens. The JS bundle is also under
+	// /s/_assets/ which is already public. All sensitive data is behind
+	// /api/admin/* which IS auth-gated below.
+	r.Get("/", web.AdminIndex())
+	r.Get("/admin", web.AdminIndex())
+	r.Get("/admin/*", web.AdminIndex())
+
+	// ---------- Admin API (auth + CSRF on writes) ----------
+	ahdmin := &adminHandlers{
 		cfg: d.Cfg, store: d.Store, git: d.Git,
 		shares: d.Shares, mcpTokens: d.MCPTokens, comments: d.Comments,
 		audit: d.Audit,
 	}
-	adminMW := auth.AdminMiddleware(d.Cfg)
-	r.Group(func(ar chi.Router) {
+	adminMW := adminMiddleware(d.Cfg, d.SessionSecret)
+	r.Route("/api/admin", func(ar chi.Router) {
 		ar.Use(adminMW)
-		ar.Get("/api/admin/me", auth.MeHandler())
-		ar.Get("/api/admin/spaces", ah.listSpaces)
-		ar.Post("/api/admin/spaces", ah.createSpace)
-		ar.Route("/api/admin/spaces/{spaceID}", func(sr chi.Router) {
-			sr.Get("/", ah.getSpace)
-			sr.Delete("/", ah.deleteSpace)
-			sr.Get("/tree", ah.getTree)
-			sr.Post("/mkdir", ah.mkdir)
-			sr.Get("/file/*", ah.getFile)
-			sr.Put("/file/*", ah.putFile)
-			sr.Delete("/file/*", ah.deleteFile)
-			sr.Post("/rename/*", ah.renameFile)
-			sr.Get("/log", ah.getLog)
-			sr.Get("/diff/{hash}", ah.getDiff)
-			sr.Post("/snapshot", ah.snapshot)
-			sr.Get("/file-history/*", ah.fileHistory)
-			sr.Get("/file-at/{hash}/*", ah.fileAt)
-			sr.Get("/file-diff/*", ah.fileDiffAcross)
-			sr.Post("/restore/*", ah.restoreFile)
-			sr.Get("/shares", ah.listShares)
-			sr.Post("/shares", ah.createShare)
-			sr.Delete("/shares/{shareID}", ah.deleteShare)
-			sr.Get("/mcp-tokens", ah.listMCPTokens)
-			sr.Post("/mcp-tokens", ah.createMCPToken)
-			sr.Delete("/mcp-tokens/{tokenID}", ah.deleteMCPToken)
-			sr.Get("/comments/*", ah.listComments)
-			sr.Post("/comments/*", ah.postComment)
-			sr.Get("/search", ah.search)
-			sr.Get("/audit", ah.getAudit)
+		// CSRF middleware is a no-op for GET/HEAD/OPTIONS, so registering it
+		// for the whole subtree is safe and centralises the policy.
+		ar.Use(requireCSRF)
+		ar.Get("/me", adminMeHandler())
+		ar.Get("/spaces", ahdmin.listSpaces)
+		ar.Post("/spaces", ahdmin.createSpace)
+		ar.Route("/spaces/{spaceID}", func(sr chi.Router) {
+			sr.Get("/", ahdmin.getSpace)
+			sr.Delete("/", ahdmin.deleteSpace)
+			sr.Get("/tree", ahdmin.getTree)
+			sr.Post("/mkdir", ahdmin.mkdir)
+			sr.Get("/file/*", ahdmin.getFile)
+			sr.Put("/file/*", ahdmin.putFile)
+			sr.Delete("/file/*", ahdmin.deleteFile)
+			sr.Post("/rename/*", ahdmin.renameFile)
+			sr.Get("/log", ahdmin.getLog)
+			sr.Get("/diff/{hash}", ahdmin.getDiff)
+			sr.Post("/snapshot", ahdmin.snapshot)
+			sr.Get("/shares", ahdmin.listShares)
+			sr.Post("/shares", ahdmin.createShare)
+			sr.Delete("/shares/{shareID}", ahdmin.deleteShare)
+			sr.Get("/mcp-tokens", ahdmin.listMCPTokens)
+			sr.Post("/mcp-tokens", ahdmin.createMCPToken)
+			sr.Delete("/mcp-tokens/{tokenID}", ahdmin.deleteMCPToken)
+			sr.Get("/comments/*", ahdmin.listComments)
+			sr.Post("/comments/*", ahdmin.postComment)
+			sr.Get("/search", ahdmin.search)
+			sr.Get("/audit", ahdmin.getAudit)
+			sr.Get("/file-history/*", ahdmin.fileHistory)
+			sr.Get("/file-at/{hash}/*", ahdmin.fileAt)
+			sr.Get("/file-diff/*", ahdmin.fileDiffAcross)
+			sr.Post("/restore/*", ahdmin.restoreFile)
 		})
-		ar.Get("/", web.AdminIndex())
-		ar.Get("/admin", web.AdminIndex())
-		ar.Get("/admin/*", web.AdminIndex())
 	})
 
-	return r
-}
-
-func notImplemented(name string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "not implemented: "+name, http.StatusNotImplemented)
-	}
+	return r, nil
 }
