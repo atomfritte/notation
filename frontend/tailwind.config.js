@@ -1,8 +1,21 @@
-import typography from '@tailwindcss/typography'
-
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.*.html', './src/**/*.{ts,tsx}'],
-  theme: { extend: {} },
-  plugins: [typography],
+  darkMode: 'class',
+  content: [
+    "./index.admin.html",
+    "./index.share.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        lime: {
+          accent: '#BFF355',
+        }
+      }
+    },
+  },
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 }

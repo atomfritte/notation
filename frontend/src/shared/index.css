@@ -4,7 +4,7 @@
 
 @layer base {
   html, body, #root { 
-    @apply h-full bg-[#0a0a0a] text-zinc-300; 
+    @apply h-full bg-white text-zinc-800 dark:bg-[#0a0a0a] dark:text-zinc-300 transition-colors duration-200; 
   }
   body { 
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; 
@@ -18,23 +18,21 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-zinc-800 rounded-full border-2 border-solid border-[#0a0a0a];
+    @apply bg-zinc-300 rounded-full border-2 border-solid border-white dark:bg-zinc-800 dark:border-[#0a0a0a];
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-zinc-700;
+    @apply bg-zinc-400 dark:bg-zinc-700;
   }
 }
 
 /* wiki-link styling: a soft dotted underline distinguishes intra-space links from external ones */
 .prose .wiki-link {
   text-decoration: none;
-  border-bottom: 1px dashed #BFF355;
-  color: #BFF355;
+  @apply border-b border-dashed border-lime-600 text-lime-600 dark:border-[#BFF355] dark:text-[#BFF355];
   transition: all 0.2s ease-in-out;
 }
 .prose .wiki-link:hover { 
-  background-color: rgba(191, 243, 85, 0.1); 
-  border-bottom-style: solid;
+  @apply bg-lime-600/10 dark:bg-[#BFF355]/10 border-solid;
 }
 
 /* Heading anchors stay clickable but the wrap doesn't override heading color */
@@ -44,12 +42,15 @@
   transition: color 0.2s;
 }
 .prose h1 > a:hover, .prose h2 > a:hover, .prose h3 > a:hover, .prose h4 > a:hover {
-  color: #BFF355;
+  @apply text-lime-600 dark:text-[#BFF355];
 }
 
 /* Override prose colors for dark mode */
 .prose {
-  @apply prose-invert max-w-none;
+  @apply max-w-none transition-colors duration-200;
+}
+.dark .prose {
+  @apply prose-invert;
   --tw-prose-body: theme('colors.zinc.400');
   --tw-prose-headings: theme('colors.zinc.100');
   --tw-prose-links: #BFF355;
@@ -66,4 +67,3 @@
   --tw-prose-th-borders: theme('colors.zinc.800');
   --tw-prose-td-borders: theme('colors.zinc.800');
 }
-
