@@ -152,6 +152,12 @@ func (s *Store) WriteFile(spaceID, userPath string, r io.Reader, maxBytes int64)
 	return written, nil
 }
 
+// DeleteFile removes the file (or directory tree) at userPath. Symlinks are
+// rejected before any disk op. For directories we fall through to
+// os.RemoveAll on the absolute, sandbox-validated path because os.Root in
+// 1.24 doesn't expose a recursive removal primitive yet — SafeJoin has
+// already pinned the path inside the Space's files dir so the unsandboxed
+// RemoveAll can't escape.
 func (s *Store) DeleteFile(spaceID, userPath string) error {
 	rel, err := s.safeRel(spaceID, userPath)
 	if err != nil {
@@ -168,6 +174,13 @@ func (s *Store) DeleteFile(spaceID, userPath string) error {
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		return ErrSymlink
+	}
+	if info.IsDir() {
+		abs, err := SafeJoin(s.FilesDir(spaceID), userPath)
+		if err != nil {
+			return err
+		}
+		return os.RemoveAll(abs)
 	}
 	return root.Remove(rel)
 }

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History, Printer, ChevronLeft } from 'lucide-react'
+import { Folder, FolderPlus, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
@@ -165,44 +165,145 @@ export function SpaceView() {
     })
   }, [spaceID])
 
-  const handleFileContextMenu = useCallback((e: React.MouseEvent, path: string, _isDir: boolean) => {
+  // ---------- File-tree CRUD helpers ----------
+  // Each helper does its bit of API + tree-refresh + navigation; the context
+  // menu wires the user-visible labels to these. Keep them stable identities
+  // for useCallback so the menu builders below don't recreate every render.
+
+  const createFileIn = useCallback(async (parentDir: string) => {
+    const raw = window.prompt(parentDir ? `New page name in ${parentDir}:` : 'New page name:')
+    if (!raw) return
+    const name = raw.trim()
+    if (!name) return
+    const withExt = /\.[a-z0-9]+$/i.test(name) ? name : `${name}.md`
+    const target = parentDir ? `${parentDir}/${withExt}` : withExt
+    try {
+      const title = withExt.replace(/\.md$/i, '').split('/').pop()
+      await api.writeFile(spaceID, target, `# ${title}\n\n`)
+      refreshTree()
+      setSearchParams({ file: target })
+      setEditing(true)
+    } catch (err) { setErr(String(err)) }
+  }, [spaceID, refreshTree, setSearchParams])
+
+  const createFolderIn = useCallback(async (parentDir: string) => {
+    const raw = window.prompt(parentDir ? `New folder name in ${parentDir}:` : 'New folder name:')
+    if (!raw) return
+    const name = raw.trim().replace(/^\/+|\/+$/g, '')
+    if (!name) return
+    const target = parentDir ? `${parentDir}/${name}` : name
+    try {
+      await api.mkdir(spaceID, target)
+      refreshTree()
+    } catch (err) { setErr(String(err)) }
+  }, [spaceID, refreshTree])
+
+  const renamePath = useCallback(async (oldPath: string) => {
+    const newPath = window.prompt('Rename to (full path):', oldPath)
+    if (!newPath || newPath === oldPath) return
+    try {
+      await api.renameFile(spaceID, oldPath, newPath)
+      refreshTree()
+      if (file === oldPath) setSearchParams({ file: newPath })
+    } catch (err) { setErr(String(err)) }
+  }, [spaceID, file, refreshTree, setSearchParams])
+
+  const duplicatePath = useCallback(async (path: string) => {
+    try {
+      const dot = path.lastIndexOf('.')
+      const base = dot > 0 ? path.slice(0, dot) : path
+      const ext = dot > 0 ? path.slice(dot) : ''
+      const target = `${base}-copy${ext}`
+      const res = await api.readFile(spaceID, path)
+      await api.writeFile(spaceID, target, res.content)
+      refreshTree()
+    } catch (err) { setErr(String(err)) }
+  }, [spaceID, refreshTree])
+
+  const movePathToDir = useCallback(async (from: string, toDir: string) => {
+    // Reject same-dir moves and source-into-self.
+    const name = from.split('/').pop() || from
+    const target = toDir ? `${toDir}/${name}` : name
+    if (target === from) return
+    try {
+      await api.renameFile(spaceID, from, target)
+      refreshTree()
+      if (file === from) setSearchParams({ file: target })
+    } catch (err) { setErr(String(err)) }
+  }, [spaceID, file, refreshTree, setSearchParams])
+
+  const deletePath = useCallback(async (path: string, isDir: boolean) => {
+    const msg = isDir
+      ? `Delete folder "${path}" and ALL its contents? This cannot be undone.`
+      : `Delete ${path}?`
+    if (!window.confirm(msg)) return
+    try {
+      await api.deleteFile(spaceID, path)
+      refreshTree()
+      if (file === path) setSearchParams({ file: '' })
+    } catch (err) { setErr(String(err)) }
+  }, [spaceID, file, refreshTree, setSearchParams])
+
+  const copyPathToClipboard = useCallback(async (path: string) => {
+    try { await navigator.clipboard.writeText(path) }
+    catch (err) { setErr(String(err)) }
+  }, [])
+
+  const uploadInto = useCallback(async (fileList: FileList, parentDir: string) => {
+    const files = Array.from(fileList)
+    if (files.length === 0) return
+    setUploadStatus(`Uploading ${files.length}…`)
+    let ok = 0
+    for (const f of files) {
+      const target = parentDir ? `${parentDir}/${f.name}` : f.name
+      try {
+        await api.writeFileBinary(spaceID, target, f)
+        ok++
+      } catch (err) {
+        console.error('upload failed', target, err)
+      }
+    }
+    setUploadStatus(`Uploaded ${ok}/${files.length}${parentDir ? ' to ' + parentDir : ''}`)
+    setTimeout(() => setUploadStatus(null), 3000)
+    refreshTree()
+  }, [spaceID, refreshTree])
+
+  // ---------- Context-menu builders ----------
+
+  const handleFileContextMenu = useCallback((e: React.MouseEvent, path: string, isDir: boolean) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const items: MenuItem[] = isDir
+      ? [
+          { label: 'New page in here',   icon: <FilePlus size={14} />,   onClick: () => createFileIn(path) },
+          { label: 'New folder in here', icon: <FolderPlus size={14} />, onClick: () => createFolderIn(path) },
+          { label: 'Rename',             icon: <Edit2 size={14} />,      onClick: () => renamePath(path) },
+          { label: 'Copy path',          icon: <Copy size={14} />,       onClick: () => copyPathToClipboard(path) },
+          { label: 'Delete folder',      icon: <Trash size={14} />, danger: true, onClick: () => deletePath(path, true) },
+        ]
+      : [
+          { label: 'Open',               icon: <FileText size={14} />,   onClick: () => setSearchParams({ file: path }) },
+          { label: 'Open in new tab',    icon: <ExternalLink size={14} />, onClick: () => window.open(`${window.location.pathname}?file=${encodeURIComponent(path)}`, '_blank', 'noopener') },
+          { label: 'Rename',             icon: <Edit2 size={14} />,      onClick: () => renamePath(path) },
+          { label: 'Duplicate',          icon: <Files size={14} />,      onClick: () => duplicatePath(path) },
+          { label: 'Copy path',          icon: <Copy size={14} />,       onClick: () => copyPathToClipboard(path) },
+          { label: 'Delete',             icon: <Trash size={14} />, danger: true, onClick: () => deletePath(path, false) },
+        ]
+    setCtxMenu({ x: e.clientX, y: e.clientY, items })
+  }, [setSearchParams, createFileIn, createFolderIn, renamePath, duplicatePath, copyPathToClipboard, deletePath])
+
+  const handleTreeBackgroundContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setCtxMenu({
       x: e.clientX,
       y: e.clientY,
       items: [
-        {
-          label: 'Rename',
-          icon: <Edit2 size={14} />,
-          onClick: async () => {
-            const newName = window.prompt('Rename to:', path)
-            if (newName && newName !== path) {
-              try {
-                await api.renameFile(spaceID, path, newName)
-                refreshTree()
-                if (file === path) setSearchParams({ file: newName })
-              } catch (err) { setErr(String(err)) }
-            }
-          }
-        },
-        {
-          label: 'Delete',
-          icon: <Trash size={14} />,
-          danger: true,
-          onClick: async () => {
-            if (window.confirm(`Delete ${path}?`)) {
-              try {
-                await api.deleteFile(spaceID, path)
-                refreshTree()
-                if (file === path) setSearchParams({ file: '' })
-              } catch (err) { setErr(String(err)) }
-            }
-          }
-        }
-      ]
+        { label: 'New page',   icon: <FilePlus size={14} />,   onClick: () => createFileIn('') },
+        { label: 'New folder', icon: <FolderPlus size={14} />, onClick: () => createFolderIn('') },
+      ],
     })
-  }, [spaceID, file, refreshTree, setSearchParams])
+  }, [createFileIn, createFolderIn])
 
   const handleBookmarkContextMenu = useCallback((e: React.MouseEvent, path: string) => {
     e.preventDefault()
@@ -457,7 +558,15 @@ export function SpaceView() {
 
           <div className="flex-1 overflow-y-auto px-2 pb-4 no-scrollbar">
             {sidebarTab === 'files' && (
-              <FileTree entries={tree} current={file} onSelect={selectFile} onContextMenu={handleFileContextMenu} />
+              <FileTree
+                entries={tree}
+                current={file}
+                onSelect={selectFile}
+                onContextMenu={handleFileContextMenu}
+                onBackgroundContextMenu={handleTreeBackgroundContextMenu}
+                onMove={movePathToDir}
+                onExternalDrop={uploadInto}
+              />
             )}
             
             {sidebarTab === 'bookmarks' && (
