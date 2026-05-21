@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { ChevronRight, ChevronDown, FileText } from 'lucide-react'
 import type { Entry } from '../lib/api'
 
 type Props = {
@@ -8,36 +10,59 @@ type Props = {
 }
 
 export function FileTree({ entries, current, onSelect, depth = 0 }: Props) {
-  if (entries.length === 0 && depth === 0) {
-    return <p className="text-sm text-gray-500 italic">(empty)</p>
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+
+  const toggle = (path: string) => {
+    setCollapsed(prev => ({ ...prev, [path]: !prev[path] }))
   }
+
+  if (entries.length === 0 && depth === 0) {
+    return <p className="text-sm text-zinc-600 px-3 py-2">No pages inside</p>
+  }
+
   return (
-    <ul className="text-sm">
-      {entries.map(e => (
-        <li key={e.path}>
-          {e.is_dir ? (
-            <>
-              <div className="text-gray-600 py-0.5" style={{ paddingLeft: depth * 12 }}>
-                <span className="opacity-60">📁</span> {e.name}
+    <ul className="text-sm select-none">
+      {entries.map(e => {
+        const isCollapsed = collapsed[e.path]
+        const isActive = current === e.path
+
+        if (e.is_dir) {
+          return (
+            <li key={e.path}>
+              <div 
+                className="flex items-center gap-1.5 text-zinc-400 py-1 px-2 hover:bg-zinc-800/50 rounded-md cursor-pointer transition-colors"
+                style={{ paddingLeft: depth * 12 + 8 }}
+                onClick={() => toggle(e.path)}
+              >
+                <div className="w-4 h-4 flex items-center justify-center rounded hover:bg-zinc-700/50">
+                   {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                </div>
+                <span className="font-medium text-zinc-300 truncate">{e.name}</span>
               </div>
-              {e.children && (
+              {!isCollapsed && e.children && (
                 <FileTree entries={e.children} current={current} onSelect={onSelect} depth={depth + 1} />
               )}
-            </>
-          ) : (
+            </li>
+          )
+        }
+
+        return (
+          <li key={e.path}>
             <button
               onClick={() => onSelect(e.path)}
-              className={
-                'text-left w-full hover:bg-gray-100 py-0.5 rounded ' +
-                (current === e.path ? 'bg-blue-100 text-blue-900' : '')
-              }
-              style={{ paddingLeft: depth * 12 + 4 }}
+              className={`flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-md transition-colors ${
+                isActive 
+                  ? 'bg-zinc-800 text-zinc-100 font-medium' 
+                  : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+              }`}
+              style={{ paddingLeft: depth * 12 + (e.is_dir ? 8 : 28) }}
             >
-              <span className="opacity-60">📄</span> {e.name}
+              <FileText size={14} className={isActive ? 'text-[#BFF355]' : 'opacity-70'} />
+              <span className="truncate">{e.name.replace(/\.md$/i, '')}</span>
             </button>
-          )}
-        </li>
-      ))}
+          </li>
+        )
+      })}
     </ul>
   )
 }

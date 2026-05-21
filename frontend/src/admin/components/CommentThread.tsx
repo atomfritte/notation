@@ -13,12 +13,6 @@ type Props = {
   onAdd?: (text: string) => Promise<void>
 }
 
-/**
- * CommentThread renders a flat list of document-level comments (oldest first)
- * plus an inline form when the viewer has comment or edit permissions.
- * Anchored / inline comments are out of scope for stage 6 — they'd require a
- * selection-position model the markdown viewer doesn't expose yet.
- */
 export function CommentThread({ comments, canAdd, onAdd }: Props) {
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -40,44 +34,45 @@ export function CommentThread({ comments, canAdd, onAdd }: Props) {
   }
 
   return (
-    <aside className="border-t bg-gray-50 p-4">
-      <h3 className="font-semibold text-sm mb-3">
-        Comments {comments.length > 0 && <span className="text-gray-500">({comments.length})</span>}
+    <aside className="border-t border-zinc-800 bg-zinc-950 p-4">
+      <h3 className="font-semibold text-sm mb-3 text-zinc-100 flex items-center gap-2">
+        Comments 
+        {comments.length > 0 && <span className="bg-zinc-800 text-[#BFF355] px-2 py-0.5 rounded-full text-xs">{comments.length}</span>}
       </h3>
       {comments.length === 0 && (
-        <p className="text-xs text-gray-500 italic mb-3">No comments yet.</p>
+        <p className="text-xs text-zinc-500 italic mb-3">No comments yet.</p>
       )}
-      <ul className="space-y-2 mb-3">
+      <ul className="space-y-3 mb-4">
         {comments.map(c => (
-          <li key={c.id} className="bg-white border rounded p-2 text-sm">
-            <div className="flex justify-between text-xs text-gray-500 mb-1">
-              <span className="font-mono">{c.author}</span>
+          <li key={c.id} className="bg-zinc-900 border border-zinc-800 rounded p-3 text-sm">
+            <div className="flex justify-between text-xs text-zinc-400 mb-2">
+              <span className="font-medium text-zinc-300">{c.author}</span>
               <span>{new Date(c.created_at).toLocaleString()}</span>
             </div>
-            <p className="whitespace-pre-wrap">{c.text}</p>
+            <p className="whitespace-pre-wrap text-zinc-300">{c.text}</p>
           </li>
         ))}
       </ul>
       {canAdd && onAdd && (
-        <form onSubmit={submit} className="flex gap-2 items-stretch">
+        <form onSubmit={submit} className="flex flex-col gap-2">
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder="Add a comment…"
-            className="flex-1 border rounded px-2 py-1 text-sm resize-none"
+            className="w-full bg-zinc-900 border border-zinc-800 focus:border-[#BFF355] focus:ring-1 focus:ring-[#BFF355] outline-none rounded p-2 text-sm text-zinc-100 resize-none transition-all"
             rows={2}
             disabled={submitting}
           />
           <button
             type="submit"
             disabled={!text.trim() || submitting}
-            className="px-3 py-1 bg-blue-600 text-white text-sm rounded disabled:opacity-40"
+            className="self-end px-4 py-1.5 bg-[#BFF355] text-zinc-950 font-semibold text-sm rounded disabled:opacity-40 hover:bg-[#a6d944] transition-colors"
           >
-            {submitting ? '…' : 'Post'}
+            {submitting ? 'Posting…' : 'Post Comment'}
           </button>
         </form>
       )}
-      {err && <p className="text-red-600 text-xs mt-2">{err}</p>}
+      {err && <p className="text-red-500 text-xs mt-2">{err}</p>}
     </aside>
   )
 }

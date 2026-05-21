@@ -107,3 +107,20 @@ export const snapshot = (id: string, message: string) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message }),
   })
+
+export type CommentItem = {
+  id: string
+  created_at: string
+  author: string
+  text: string
+}
+
+export const getComments = (id: string, path: string) =>
+  fetchJSON<CommentItem[]>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/${encodePath(path)}`)
+
+export const postComment = (id: string, path: string, text: string) =>
+  fetchJSON<CommentItem>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/${encodePath(path)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })

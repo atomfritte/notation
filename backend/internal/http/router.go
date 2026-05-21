@@ -76,7 +76,7 @@ func NewRouter(d Deps) http.Handler {
 	// Admin: protected by Authelia ForwardAuth header.
 	ah := &adminHandlers{
 		cfg: d.Cfg, store: d.Store, git: d.Git,
-		shares: d.Shares, mcpTokens: d.MCPTokens,
+		shares: d.Shares, mcpTokens: d.MCPTokens, comments: d.Comments,
 	}
 	adminMW := auth.AdminMiddleware(d.Cfg)
 	r.Group(func(ar chi.Router) {
@@ -102,6 +102,8 @@ func NewRouter(d Deps) http.Handler {
 			sr.Get("/mcp-tokens", ah.listMCPTokens)
 			sr.Post("/mcp-tokens", ah.createMCPToken)
 			sr.Delete("/mcp-tokens/{tokenID}", ah.deleteMCPToken)
+			sr.Get("/comments/*", ah.listComments)
+			sr.Post("/comments/*", ah.postComment)
 		})
 		ar.Get("/", web.AdminIndex())
 		ar.Get("/admin", web.AdminIndex())

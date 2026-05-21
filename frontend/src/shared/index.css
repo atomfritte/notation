@@ -2,23 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root { height: 100%; }
-body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+@layer base {
+  html, body, #root { 
+    @apply h-full bg-[#0a0a0a] text-zinc-300; 
+  }
+  body { 
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; 
+  }
+  
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-zinc-800 rounded-full border-2 border-solid border-[#0a0a0a];
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-zinc-700;
+  }
+}
 
 /* wiki-link styling: a soft dotted underline distinguishes intra-space links from external ones */
 .prose .wiki-link {
   text-decoration: none;
-  border-bottom: 1px dashed currentColor;
-  color: #5b21b6;
+  border-bottom: 1px dashed #BFF355;
+  color: #BFF355;
+  transition: all 0.2s ease-in-out;
 }
-.prose .wiki-link:hover { background-color: #ede9fe; }
+.prose .wiki-link:hover { 
+  background-color: rgba(191, 243, 85, 0.1); 
+  border-bottom-style: solid;
+}
 
 /* Heading anchors stay clickable but the wrap doesn't override heading color */
 .prose h1 > a, .prose h2 > a, .prose h3 > a, .prose h4 > a, .prose h5 > a, .prose h6 > a {
   color: inherit;
   text-decoration: none;
+  transition: color 0.2s;
 }
 .prose h1 > a:hover, .prose h2 > a:hover, .prose h3 > a:hover, .prose h4 > a:hover {
-  text-decoration: underline;
-  text-decoration-style: dotted;
+  color: #BFF355;
 }
+
+/* Override prose colors for dark mode */
+.prose {
+  @apply prose-invert max-w-none;
+  --tw-prose-body: theme('colors.zinc.400');
+  --tw-prose-headings: theme('colors.zinc.100');
+  --tw-prose-links: #BFF355;
+  --tw-prose-bold: theme('colors.zinc.100');
+  --tw-prose-counters: theme('colors.zinc.500');
+  --tw-prose-bullets: theme('colors.zinc.500');
+  --tw-prose-hr: theme('colors.zinc.700');
+  --tw-prose-quotes: theme('colors.zinc.300');
+  --tw-prose-quote-borders: #BFF355;
+  --tw-prose-captions: theme('colors.zinc.500');
+  --tw-prose-code: theme('colors.zinc.300');
+  --tw-prose-pre-code: theme('colors.zinc.300');
+  --tw-prose-pre-bg: theme('colors.zinc.900');
+  --tw-prose-th-borders: theme('colors.zinc.800');
+  --tw-prose-td-borders: theme('colors.zinc.800');
+}
+

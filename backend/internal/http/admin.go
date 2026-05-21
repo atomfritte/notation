@@ -26,6 +26,7 @@ type adminHandlers struct {
 	git       *gitrepo.Manager
 	shares    *share.Store
 	mcpTokens *mcptoken.Store
+	comments  *share.CommentStore
 }
 
 func adminAuthor(r *http.Request) gitrepo.Author {
@@ -506,4 +507,54 @@ func writeFileError(w http.ResponseWriter, err error) {
 	default:
 		writeError(w, http.StatusInternalServerError, err.Error())
 	}
+}
+
+// ---- comments ----
+
+func (h *adminHandlers) listComments(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	upath := chi.URLParam(r, "*")
+	if _, err := h.store.Stat(id, upath); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	list, err := h.comments.ListForFile(id, upath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (h *adminHandlers) postComment(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	upath := chi.URLParam(r, "*")
+	if _, err := h.store.Stat(id, upath); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	var req postCommentReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32*1024)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		writeError(w, http.StatusBadRequest, "text required")
+		return
+	}
+	author := adminAuthor(r).Name
+	c, err := h.comments.Add(id, upath, author, req.Text)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, c)
 }
