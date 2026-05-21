@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import * as api from './lib/api'
 import { FileTree } from '../admin/components/FileTree'
-import { MarkdownView } from '../admin/components/MarkdownView'
+import { FileViewer } from '../admin/components/FileViewer'
 import { CommentThread } from '../admin/components/CommentThread'
+import { isTextFile, isMarkdownFile } from '../admin/lib/fileTypes'
 
 function ShareUI() {
   const [info, setInfo] = useState<api.SpaceInfo | null>(null)
@@ -16,6 +17,21 @@ function ShareUI() {
   const [err, setErr] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const file = searchParams.get('file') ?? ''
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+  )
+
+  // React to OS theme changes.
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = (e: MediaQueryListEvent) => setTheme(e.matches ? 'dark' : 'light')
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
 
   useEffect(() => {
     api.getSpace().then(setInfo).catch(e => setErr(String(e)))
@@ -37,12 +53,17 @@ function ShareUI() {
       setEditing(false)
       return
     }
-    api.readFile(file)
-      .then(c => {
-        setContent(c)
-        setEditBuffer(c)
-      })
-      .catch(e => setErr(String(e)))
+    if (isTextFile(file)) {
+      api.readFile(file)
+        .then(c => {
+          setContent(c)
+          setEditBuffer(c)
+        })
+        .catch(e => setErr(String(e)))
+    } else {
+      setContent('')
+      setEditBuffer('')
+    }
     refreshComments()
   }, [file, refreshComments])
 
@@ -72,76 +93,117 @@ function ShareUI() {
   if (err && !info) {
     return (
       <div className="p-8 max-w-xl mx-auto">
-        <h1 className="text-xl font-bold mb-2">Share unavailable</h1>
-        <p className="text-red-600">{err}</p>
+        <h1 className="text-xl font-bold mb-2 text-zinc-900 dark:text-zinc-100">Share unavailable</h1>
+        <p className="text-red-600 dark:text-red-400">{err}</p>
       </div>
     )
   }
-  if (!info) return <div className="p-8 text-gray-500">loading…</div>
+  if (!info) return <div className="p-8 text-zinc-500">loading…</div>
 
   const canEdit = info.permission === 'edit'
   const canComment = info.permission === 'comment' || info.permission === 'edit'
 
   return (
-    <div className="flex h-full">
-      <aside className="w-72 border-r overflow-y-auto p-3 bg-gray-50 flex-shrink-0">
-        <h1 className="text-lg font-bold mb-1 truncate">{info.space.name}</h1>
-        <p className="text-xs text-gray-500 mb-3">
-          {info.permission} share{info.label ? ` · ${info.label}` : ''}
-        </p>
-        <FileTree entries={tree} current={file} onSelect={select} />
+    <div className="flex h-screen bg-white dark:bg-[#0a0a0a] text-zinc-900 dark:text-zinc-300 overflow-hidden selection:bg-[#BFF355]/30">
+      <aside className="w-64 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/50 bg-zinc-50 dark:bg-[#111111] flex flex-col">
+        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800/50">
+          <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200 font-medium">
+            <div className="w-5 h-5 rounded bg-zinc-900 text-white dark:bg-[#BFF355]/20 dark:text-[#BFF355] flex items-center justify-center font-bold text-xs uppercase">
+              {info.space.id.charAt(0)}
+            </div>
+            <span className="truncate">{info.space.name}</span>
+          </div>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-2 flex items-center gap-1.5">
+            <span
+              className={
+                'px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ' +
+                (info.permission === 'edit'
+                  ? 'bg-[#BFF355]/20 text-zinc-900 dark:text-[#BFF355]'
+                  : info.permission === 'comment'
+                  ? 'bg-amber-200/40 text-amber-900 dark:bg-amber-500/10 dark:text-amber-300'
+                  : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400')
+              }
+            >
+              {info.permission}
+            </span>
+            {info.label && <span className="truncate">{info.label}</span>}
+          </p>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2">
+          <FileTree entries={tree} current={file} onSelect={select} />
+        </div>
       </aside>
+
       <main className="flex-1 flex flex-col min-w-0">
         {file ? (
           <>
-            <div className="px-3 py-2 border-b text-sm flex justify-between items-center flex-shrink-0">
-              <span className="text-gray-600 truncate">{file}</span>
-              {canEdit && (
+            <header className="h-12 flex justify-between items-center px-4 border-b border-zinc-200 dark:border-zinc-800/50 flex-shrink-0 text-sm">
+              <span className="text-zinc-500 dark:text-zinc-400 truncate">
+                {file.replace(/\.md$/i, '')}
+              </span>
+              {canEdit && isTextFile(file) && (
                 <button
                   onClick={() => setEditing(v => !v)}
-                  className="text-blue-600 hover:underline"
+                  className={
+                    'px-3 py-1 rounded-md transition-colors text-sm font-medium ' +
+                    (editing
+                      ? 'bg-zinc-100 text-zinc-900 dark:bg-[#BFF355]/10 dark:text-[#BFF355]'
+                      : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800')
+                  }
                 >
                   {editing ? 'Preview' : 'Edit'}
                 </button>
               )}
-            </div>
+            </header>
             {editing ? (
               <div className="flex-1 flex flex-col">
-                <div className="px-3 py-2 border-b flex gap-3 items-center text-sm">
+                <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800/50 flex gap-3 items-center text-sm">
                   <button
                     onClick={save}
                     disabled={saving || editBuffer === content}
-                    className="px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-40"
+                    className="px-3 py-1 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 rounded-md disabled:opacity-40 font-medium"
                   >
                     {saving ? 'Saving…' : 'Save'}
                   </button>
                   {editBuffer !== content && (
-                    <span className="text-orange-600">unsaved changes</span>
+                    <span className="text-amber-600 dark:text-amber-400 text-xs">unsaved changes</span>
                   )}
                 </div>
                 <textarea
                   value={editBuffer}
                   onChange={e => setEditBuffer(e.target.value)}
                   spellCheck={false}
-                  className="flex-1 p-4 font-mono text-sm resize-none outline-none w-full"
+                  className="flex-1 p-6 font-mono text-sm resize-none outline-none w-full bg-white dark:bg-[#0a0a0a] text-zinc-800 dark:text-zinc-200"
                 />
               </div>
             ) : (
-              <MarkdownView content={content} />
-            )}
-            {!editing && (
-              <CommentThread
-                comments={comments}
-                canAdd={canComment}
-                onAdd={canComment ? addComment : undefined}
+              <FileViewer
+                spaceID={info.space.id}
+                path={file}
+                content={content}
+                theme={theme}
+                urlFor={(p) => api.fileURLForShare(p)}
               />
+            )}
+            {!editing && canComment && isMarkdownFile(file) && (
+              <div className="border-t border-zinc-200 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-950/50 max-h-80 overflow-y-auto">
+                <CommentThread
+                  comments={comments}
+                  canAdd={canComment}
+                  onAdd={canComment ? addComment : undefined}
+                />
+              </div>
+            )}
+            {err && info && (
+              <div className="p-2 text-red-600 dark:text-red-400 text-sm border-t border-red-200 dark:border-red-900/50">
+                {err}
+              </div>
             )}
           </>
         ) : (
-          <div className="p-8 text-gray-500">Select a file from the tree.</div>
-        )}
-        {err && info && (
-          <div className="p-2 text-red-600 text-sm border-t">{err}</div>
+          <div className="flex-1 flex items-center justify-center text-zinc-500">
+            Select a file from the tree.
+          </div>
         )}
       </main>
     </div>
@@ -156,7 +218,9 @@ export function App() {
         <Route path="/s/:token/*" element={<ShareUI />} />
         <Route
           path="*"
-          element={<div className="p-8 text-red-600">Invalid share URL.</div>}
+          element={
+            <div className="p-8 text-red-600 dark:text-red-400">Invalid share URL.</div>
+          }
         />
       </Routes>
     </BrowserRouter>

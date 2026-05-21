@@ -1,0 +1,166 @@
+import { useEffect, useRef, useState } from 'react'
+import { Search, X } from 'lucide-react'
+import * as api from '../lib/api'
+
+type Props = {
+  open: boolean
+  spaceID: string
+  onClose: () => void
+  onSelect: (path: string, line?: number) => void
+}
+
+/**
+ * SearchPanel — full-text search modal across all files in the Space.
+ * Triggered by Cmd+Shift+F. Hits the backend's /search endpoint which uses
+ * the in-memory grep helper (case-insensitive substring across all .* files
+ * matching the optional glob).
+ */
+export function SearchPanel({ open, spaceID, onClose, onSelect }: Props) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<api.SearchMatch[]>([])
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (open) {
+      setQ('')
+      setResults([])
+      setErr(null)
+      const t = setTimeout(() => inputRef.current?.focus(), 10)
+      return () => clearTimeout(t)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open || q.trim().length < 2) {
+      setResults([])
+      return
+    }
+    setLoading(true)
+    setErr(null)
+    const controller = new AbortController()
+    const t = setTimeout(() => {
+      api
+        .searchSpace(spaceID, q)
+        .then(r => setResults(r))
+        .catch(e => {
+          if ((e as Error).name !== 'AbortError') setErr(String(e))
+        })
+        .finally(() => setLoading(false))
+    }, 200) // simple debounce
+    return () => {
+      controller.abort()
+      clearTimeout(t)
+    }
+  }, [q, open, spaceID])
+
+  if (!open) return null
+
+  // Group matches by file
+  const grouped: Record<string, api.SearchMatch[]> = {}
+  for (const m of results) {
+    ;(grouped[m.path] ??= []).push(m)
+  }
+  const files = Object.keys(grouped)
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[8vh] bg-black/40 backdrop-blur-sm animate-in fade-in duration-100"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150 flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
+          <Search size={18} className="text-zinc-400" />
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Escape') onClose()
+            }}
+            placeholder="Search across all pages…"
+            className="flex-1 bg-transparent outline-none text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+          />
+          {loading && <span className="text-xs text-zinc-400">searching…</span>}
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto">
+          {err && <div className="p-4 text-sm text-red-600">{err}</div>}
+          {!err && q.trim().length >= 2 && results.length === 0 && !loading && (
+            <div className="p-6 text-center text-sm text-zinc-500 italic">No matches</div>
+          )}
+          {q.trim().length < 2 && (
+            <div className="p-6 text-center text-sm text-zinc-500 italic">Type at least 2 characters</div>
+          )}
+          {files.map(path => (
+            <div key={path} className="border-b border-zinc-100 dark:border-zinc-800/50 last:border-0">
+              <button
+                onClick={() => {
+                  onSelect(path)
+                  onClose()
+                }}
+                className="w-full text-left px-4 py-2 text-xs font-mono text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-950/30 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                {path.replace(/\.md$/i, '')}
+              </button>
+              <ul>
+                {grouped[path].map((m, i) => (
+                  <li
+                    key={i}
+                    onClick={() => {
+                      onSelect(path, m.line)
+                      onClose()
+                    }}
+                    className="px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/30 cursor-pointer flex gap-3"
+                  >
+                    <span className="text-zinc-400 select-none w-8 text-right shrink-0">{m.line}</span>
+                    <span className="text-zinc-600 dark:text-zinc-300 truncate">
+                      <Highlight text={m.content} query={q} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>
+  const lower = text.toLowerCase()
+  const q = query.toLowerCase()
+  const parts: Array<{ s: string; hit: boolean }> = []
+  let i = 0
+  while (i < text.length) {
+    const next = lower.indexOf(q, i)
+    if (next === -1) {
+      parts.push({ s: text.slice(i), hit: false })
+      break
+    }
+    if (next > i) parts.push({ s: text.slice(i, next), hit: false })
+    parts.push({ s: text.slice(next, next + q.length), hit: true })
+    i = next + q.length
+  }
+  return (
+    <>
+      {parts.map((p, k) =>
+        p.hit ? (
+          <mark key={k} className="bg-[#BFF355]/30 text-zinc-900 dark:text-[#BFF355] rounded px-0.5">
+            {p.s}
+          </mark>
+        ) : (
+          <span key={k}>{p.s}</span>
+        ),
+      )}
+    </>
+  )
+}

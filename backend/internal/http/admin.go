@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ type adminHandlers struct {
 	shares    *share.Store
 	mcpTokens *mcptoken.Store
 	comments  *share.CommentStore
+	audit     *share.AuditLog
 }
 
 func adminAuthor(r *http.Request) gitrepo.Author {
@@ -432,6 +434,54 @@ func (h *adminHandlers) deleteMCPToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- search + audit ----
+
+func (h *adminHandlers) search(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeJSON(w, http.StatusOK, []space.Match{})
+		return
+	}
+	glob := r.URL.Query().Get("glob")
+	limit := 200
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 1000 {
+			limit = n
+		}
+	}
+	matches, err := h.store.Search(id, q, glob, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "search: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, matches)
+}
+
+func (h *adminHandlers) getAudit(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	limit := 200
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 5000 {
+			limit = n
+		}
+	}
+	entries, err := h.audit.Read(id, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "audit: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, entries)
 }
 
 func mcpURL(cfg *config.Config, r *http.Request, spaceID string) string {

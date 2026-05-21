@@ -77,6 +77,7 @@ func NewRouter(d Deps) http.Handler {
 	ah := &adminHandlers{
 		cfg: d.Cfg, store: d.Store, git: d.Git,
 		shares: d.Shares, mcpTokens: d.MCPTokens, comments: d.Comments,
+		audit: d.Audit,
 	}
 	adminMW := auth.AdminMiddleware(d.Cfg)
 	r.Group(func(ar chi.Router) {
@@ -104,6 +105,8 @@ func NewRouter(d Deps) http.Handler {
 			sr.Delete("/mcp-tokens/{tokenID}", ah.deleteMCPToken)
 			sr.Get("/comments/*", ah.listComments)
 			sr.Post("/comments/*", ah.postComment)
+			sr.Get("/search", ah.search)
+			sr.Get("/audit", ah.getAudit)
 		})
 		ar.Get("/", web.AdminIndex())
 		ar.Get("/admin", web.AdminIndex())

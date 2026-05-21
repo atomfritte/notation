@@ -87,3 +87,9 @@ export async function postComment(path: string, text: string): Promise<Comment> 
   if (!r.ok) throw await asError(r)
   return r.json()
 }
+
+/** Direct URL for downloading or rendering a file via <img>/<iframe> on the
+ * share side. Encodes path components individually so slashes survive. */
+export function fileURLForShare(path: string): string {
+  return `${API}/file/${encodePath(path)}`
+}

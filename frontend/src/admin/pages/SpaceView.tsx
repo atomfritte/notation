@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, MoreHorizontal, Moon, Sun, Edit2, Trash, BookmarkMinus } from 'lucide-react'
+import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, MoreHorizontal, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload } from 'lucide-react'
 import * as api from '../lib/api'
+import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
-import { MarkdownView } from '../components/MarkdownView'
 import { Editor } from '../components/Editor'
 import { SharePanel } from '../components/SharePanel'
 import { MCPPanel } from '../components/MCPPanel'
 import { CommentThread } from '../components/CommentThread'
 import { ContextMenu, type MenuItem } from '../components/ui/ContextMenu'
+import { CommandPalette } from '../components/CommandPalette'
+import { SearchPanel } from '../components/SearchPanel'
+import { Outline } from '../components/Outline'
+import { HistoryPanel } from '../components/HistoryPanel'
+import { AuditPanel } from '../components/AuditPanel'
+import { FileViewer } from '../components/FileViewer'
+import { BacklinksPanel } from '../components/BacklinksPanel'
 
 export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
@@ -22,7 +29,12 @@ export function SpaceView() {
   const [err, setErr] = useState<string | null>(null)
   
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [sidebarTab, setSidebarTab] = useState<'files' | 'bookmarks' | 'shares' | 'mcp'>('files')
+  const [sidebarTab, setSidebarTab] = useState<'files' | 'bookmarks' | 'shares' | 'mcp' | 'history' | 'audit'>('files')
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [showOutline, setShowOutline] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   
   const [comments, setComments] = useState<api.CommentItem[]>([])
   const [showComments, setShowComments] = useState(false)
@@ -175,25 +187,69 @@ export function SpaceView() {
       setEtag(null)
       return
     }
-    api.readFile(spaceID, file)
-      .then(res => {
-        setContent(res.content)
-        setEtag(res.etag)
-      })
-      .catch(e => setErr(String(e)))
+    if (isTextFile(file)) {
+      api.readFile(spaceID, file)
+        .then(res => {
+          setContent(res.content)
+          setEtag(res.etag)
+        })
+        .catch(e => setErr(String(e)))
+    } else {
+      // Binary file — viewer streams via direct URL, no content fetch needed.
+      setContent('')
+      setEtag(null)
+    }
     setEditing(false)
     refreshComments()
   }, [spaceID, file, refreshComments])
 
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOver(false)
+    const files = Array.from(e.dataTransfer?.files ?? [])
+    if (files.length === 0) return
+    setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`)
+    let ok = 0
+    let lastPath = ''
+    for (const f of files) {
+      try {
+        await api.writeFileBinary(spaceID, f.name, f)
+        ok++
+        lastPath = f.name
+      } catch (err) {
+        console.error('upload failed', f.name, err)
+      }
+    }
+    setUploadStatus(
+      ok === files.length
+        ? `Uploaded ${ok} file${ok === 1 ? '' : 's'}`
+        : `Uploaded ${ok}/${files.length} (some failed)`,
+    )
+    setTimeout(() => setUploadStatus(null), 3000)
+    refreshTree()
+    if (files.length === 1 && ok === 1) setSearchParams({ file: lastPath })
+  }
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key === '\\') {
         e.preventDefault()
         setSidebarOpen(prev => !prev)
       }
       if (e.altKey && e.key.toLowerCase() === 'n') {
         e.preventDefault()
         onNewFile()
+      }
+      // Cmd/Ctrl+K — file palette
+      if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(true)
+      }
+      // Cmd/Ctrl+Shift+F — full-text search
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setSearchOpen(true)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -247,6 +303,12 @@ export function SpaceView() {
             <button onClick={() => setSidebarTab('mcp')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'mcp' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
               <Settings size={16} /> Integration
             </button>
+            <button onClick={() => setSidebarTab('history')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'history' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
+              <GitCommit size={16} /> History
+            </button>
+            <button onClick={() => setSidebarTab('audit')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'audit' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
+              <ShieldCheck size={16} /> Audit
+            </button>
           </div>
 
           <div className="px-5 mt-6 mb-2 text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
@@ -254,6 +316,8 @@ export function SpaceView() {
             {sidebarTab === 'bookmarks' && 'Favorites'}
             {sidebarTab === 'shares' && 'Active Shares'}
             {sidebarTab === 'mcp' && 'Settings'}
+            {sidebarTab === 'history' && 'Recent Commits'}
+            {sidebarTab === 'audit' && 'Activity'}
           </div>
 
           <div className="flex-1 overflow-y-auto px-2 pb-4 no-scrollbar">
@@ -282,6 +346,8 @@ export function SpaceView() {
             )}
             {sidebarTab === 'shares' && <SharePanel spaceID={spaceID} />}
             {sidebarTab === 'mcp' && <MCPPanel spaceID={spaceID} />}
+            {sidebarTab === 'history' && <HistoryPanel spaceID={spaceID} />}
+            {sidebarTab === 'audit' && <AuditPanel spaceID={spaceID} />}
           </div>
 
           <div className="p-2 border-t border-zinc-200 dark:border-zinc-800/50">
@@ -292,7 +358,39 @@ export function SpaceView() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 bg-white dark:bg-[#0a0a0a] relative">
+      <main
+        className="flex-1 flex flex-col min-w-0 bg-white dark:bg-[#0a0a0a] relative"
+        onDragEnter={e => {
+          if (e.dataTransfer.types.includes('Files')) setDragOver(true)
+        }}
+        onDragOver={e => {
+          if (e.dataTransfer.types.includes('Files')) {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'copy'
+          }
+        }}
+        onDragLeave={e => {
+          // Only clear when leaving the main container itself, not on bubbling from children.
+          if (e.currentTarget === e.target) setDragOver(false)
+        }}
+        onDrop={handleDrop}
+      >
+        {dragOver && (
+          <div className="absolute inset-0 z-30 bg-[#BFF355]/10 dark:bg-[#BFF355]/15 border-4 border-dashed border-[#BFF355] flex items-center justify-center pointer-events-none">
+            <div className="bg-white dark:bg-zinc-900 rounded-lg px-6 py-4 shadow-xl flex items-center gap-3">
+              <Upload size={24} className="text-zinc-900 dark:text-[#BFF355]" />
+              <div>
+                <div className="text-zinc-900 dark:text-zinc-100 font-semibold">Drop to upload</div>
+                <div className="text-xs text-zinc-500">Files land in this Space's root</div>
+              </div>
+            </div>
+          </div>
+        )}
+        {uploadStatus && (
+          <div className="absolute top-3 right-3 z-30 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 px-3 py-1.5 text-xs font-medium rounded-md shadow-lg animate-in slide-in-from-top-2 duration-200">
+            {uploadStatus}
+          </div>
+        )}
         <header className="h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 bg-white/80 dark:bg-[#0a0a0a]/80 backdrop-blur-sm">
           <div className="flex items-center gap-2 overflow-hidden">
             {!sidebarOpen && (
@@ -323,9 +421,19 @@ export function SpaceView() {
 
           {file && (
             <div className="flex items-center gap-1">
-              <button onClick={() => setEditing(v => !v)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-zinc-900 bg-zinc-100 dark:text-[#BFF355] dark:bg-[#BFF355]/10' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}>
-                {editing ? <Eye size={16} /> : <Edit3 size={16} />}
+              <button onClick={() => setSearchOpen(true)} className="p-1.5 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800" title="Search (Cmd/Ctrl + Shift + F)">
+                <Search size={18} />
               </button>
+              {isMarkdownFile(file) && (
+                <button onClick={() => setShowOutline(v => !v)} className={`p-1.5 rounded-md transition-colors ${showOutline ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[#BFF355]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Outline">
+                  <List size={18} />
+                </button>
+              )}
+              {isTextFile(file) && (
+                <button onClick={() => setEditing(v => !v)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-zinc-900 bg-zinc-100 dark:text-[#BFF355] dark:bg-[#BFF355]/10' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}>
+                  {editing ? <Eye size={16} /> : <Edit3 size={16} />}
+                </button>
+              )}
               <button onClick={() => toggleBookmark(file)} className={`p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-zinc-900 dark:text-[#BFF355]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Favorite">
                 <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
               </button>
@@ -388,8 +496,8 @@ export function SpaceView() {
                     }}
                   />
                 ) : (
-                  <div className={content.startsWith('# ') ? 'pt-8' : 'pt-0'}>
-                    <MarkdownView content={content} />
+                  <div className={isMarkdownFile(file) && content.startsWith('# ') ? 'pt-8' : 'pt-0'}>
+                    <FileViewer spaceID={spaceID} path={file} content={content} theme={theme} />
                   </div>
                 )}
               </div>
@@ -404,6 +512,13 @@ export function SpaceView() {
             )}
           </div>
 
+          {showOutline && file && !editing && isMarkdownFile(file) && (
+            <div className="w-[240px] border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-[#0a0a0a] flex flex-col flex-shrink-0 animate-in slide-in-from-right-4 duration-200 overflow-y-auto">
+              <Outline content={content} />
+              <BacklinksPanel spaceID={spaceID} path={file} onSelect={selectFile} />
+            </div>
+          )}
+
           {showComments && file && (
             <div className="w-[320px] border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0a0a0a] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
               <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-950">
@@ -413,20 +528,33 @@ export function SpaceView() {
                  <button onClick={() => setShowComments(false)} className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">&times;</button>
               </div>
               <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950/50">
-                 <CommentThread 
-                   comments={comments} 
-                   canAdd={true} 
+                 <CommentThread
+                   comments={comments}
+                   canAdd={true}
                    initialText={pendingComment}
                    onAdd={async (text) => {
                      await handleAddComment(text)
                      setPendingComment('')
-                   }} 
+                   }}
                  />
               </div>
             </div>
           )}
         </div>
       </main>
+
+      <CommandPalette
+        open={paletteOpen}
+        files={allFiles}
+        onClose={() => setPaletteOpen(false)}
+        onSelect={(p) => selectFile(p)}
+      />
+      <SearchPanel
+        open={searchOpen}
+        spaceID={spaceID}
+        onClose={() => setSearchOpen(false)}
+        onSelect={(p) => selectFile(p)}
+      />
     </div>
   )
 }

@@ -84,6 +84,24 @@ export const writeFile = (id: string, path: string, content: string, etag: strin
   })
 }
 
+/** Upload a binary file (image, pdf, xlsx, …). Uses the same PUT endpoint as
+ * writeFile but sends a Blob and lets the browser set Content-Type. */
+export const writeFileBinary = async (id: string, path: string, blob: Blob): Promise<void> => {
+  const headers: Record<string, string> = {
+    'Content-Type': blob.type || 'application/octet-stream',
+  }
+  const r = await fetch(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`, {
+    method: 'PUT',
+    headers,
+    body: blob,
+  })
+  if (!r.ok) throw await asError(r)
+}
+
+/** Direct URL for downloading or rendering a file via <img>. */
+export const fileURL = (id: string, path: string) =>
+  `/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`
+
 export const deleteFile = (id: string, path: string) =>
   fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`, {
     method: 'DELETE',
@@ -129,3 +147,34 @@ export const postComment = (id: string, path: string, text: string) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
   })
+
+export type SearchMatch = {
+  path: string
+  line: number
+  content: string
+}
+
+export const searchSpace = (id: string, q: string, glob?: string) => {
+  const params = new URLSearchParams({ q })
+  if (glob) params.set('glob', glob)
+  return fetchJSON<SearchMatch[]>(`/api/admin/spaces/${encodeURIComponent(id)}/search?${params}`)
+}
+
+export type AuditEntry = {
+  ts: string
+  actor: string
+  action: string
+  path?: string
+  ip?: string
+  ua?: string
+  err?: string
+}
+
+export const getAudit = (id: string, limit = 200) =>
+  fetchJSON<AuditEntry[]>(`/api/admin/spaces/${encodeURIComponent(id)}/audit?limit=${limit}`)
+
+export const getDiff = async (id: string, hash: string): Promise<string> => {
+  const r = await fetch(`/api/admin/spaces/${encodeURIComponent(id)}/diff/${encodeURIComponent(hash)}`)
+  if (!r.ok) throw await asError(r)
+  return r.text()
+}

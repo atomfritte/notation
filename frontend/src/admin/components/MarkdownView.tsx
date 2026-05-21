@@ -1,16 +1,26 @@
-import { useEffect, useRef } from 'react'
+import { Children, isValidElement, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import rehypeRaw from 'rehype-raw'
+import rehypeKatex from 'rehype-katex'
+import rehypeHighlight from 'rehype-highlight'
 import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
+import { Mermaid } from './Mermaid'
+import 'katex/dist/katex.min.css'
+import 'highlight.js/styles/github-dark.css'
 
-type Props = { content: string }
+type Props = {
+  content: string
+  /** theme drives Mermaid + KaTeX coloring; defaults to dark since the app does too */
+  theme?: 'light' | 'dark'
+}
 
 /**
- * MarkdownView renders Markdown with three deep-link behaviors:
+ * MarkdownView renders Markdown with five deep-link/rich-content behaviors:
  *
  *   1. Headings get id="slug" via rehype-slug, then rehype-autolink-headings
  *      wraps each heading in <a href="#slug"> so visitors can copy a permalink
@@ -21,8 +31,11 @@ type Props = { content: string }
  *      through React Router, preserving the SPA pathname while updating the
  *      ?file and #hash parts. After a navigation, the effect below scrolls the
  *      pane to the new anchor (smooth) or to the top (instant) on file change.
+ *   4. ```mermaid code blocks render as SVG diagrams (lazy-loaded mermaid lib).
+ *   5. $inline$ and $$block$$ math render via KaTeX; other code blocks get
+ *      syntax-highlighted by highlight.js.
  */
-export function MarkdownView({ content }: Props) {
+export function MarkdownView({ content, theme = 'dark' }: Props) {
   const location = useLocation()
   const ref = useRef<HTMLDivElement>(null)
 
@@ -45,13 +58,15 @@ export function MarkdownView({ content }: Props) {
 
   return (
     <div ref={ref} className="flex-1 overflow-y-auto">
-      <article className="prose prose-slate max-w-3xl mx-auto p-8">
+      <article className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-8">
         <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkWikiLink]}
+          remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]}
           rehypePlugins={[
             rehypeRaw,
             rehypeSlug,
             [rehypeAutolinkHeadings, { behavior: 'wrap' }],
+            rehypeKatex,
+            [rehypeHighlight, { detect: true, ignoreMissing: true }],
           ]}
           components={{
             a: ({ href, children, className, ...rest }) => {
@@ -113,6 +128,27 @@ export function MarkdownView({ content }: Props) {
                 </Link>
               )
             },
+            code({ className, children, ...rest }) {
+              const match = /language-(\w+)/.exec(className || '')
+              const lang = match?.[1]
+              // Inline `code` is detected by react-markdown via parent type; here we
+              // only need to special-case block-level mermaid.
+              if (lang === 'mermaid') {
+                return <Mermaid chart={String(children).trimEnd()} theme={theme} />
+              }
+              return (
+                <code className={className} {...rest}>
+                  {children}
+                </code>
+              )
+            },
+            pre({ className, children, ...rest }) {
+              return (
+                <CodeBlockWrapper className={className} {...rest}>
+                  {children}
+                </CodeBlockWrapper>
+              )
+            },
           }}
         >
           {content}
@@ -120,4 +156,47 @@ export function MarkdownView({ content }: Props) {
       </article>
     </div>
   )
+}
+
+/**
+ * CodeBlockWrapper adds a hover-revealed "Copy" button to every fenced code
+ * block (except mermaid, which the `code` override handles before <pre> is
+ * even reached). The button copies the raw code text, which we extract by
+ * walking the React child tree — react-markdown nests text inside spans for
+ * syntax-highlighted tokens, so a simple String() coercion would miss content.
+ */
+function CodeBlockWrapper({ className, children, ...rest }: { className?: string; children?: ReactNode } & React.HTMLAttributes<HTMLPreElement>) {
+  const code = useMemo(() => extractText(children), [children])
+  const [copied, setCopied] = useState(false)
+
+  function copy() {
+    void navigator.clipboard?.writeText(code).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    })
+  }
+
+  return (
+    <pre className={`group relative ${className ?? ''}`} {...rest}>
+      <button
+        onClick={copy}
+        className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition px-2 py-1 text-xs bg-zinc-800 text-zinc-200 hover:bg-zinc-700 rounded shadow"
+        aria-label="Copy code"
+      >
+        {copied ? '✓ Copied' : 'Copy'}
+      </button>
+      {children}
+    </pre>
+  )
+}
+
+function extractText(node: ReactNode): string {
+  if (node == null || node === false) return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(extractText).join('')
+  if (isValidElement(node)) {
+    const props = node.props as { children?: ReactNode }
+    return Children.toArray(props.children).map(extractText).join('')
+  }
+  return ''
 }
