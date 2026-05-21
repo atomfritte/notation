@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { Folder, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History } from 'lucide-react'
 import * as api from '../lib/api'
@@ -225,10 +225,9 @@ export function SpaceView() {
     refreshComments()
   }, [spaceID, file, refreshComments])
 
-  async function handleDrop(e: React.DragEvent) {
-    e.preventDefault()
-    setDragOver(false)
-    const files = Array.from(e.dataTransfer?.files ?? [])
+  // uploadFiles is the single ingress point for the upload UX — both the
+  // drag-drop overlay AND the explicit "Upload" button call into it.
+  async function uploadFiles(files: File[]) {
     if (files.length === 0) return
     setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`)
     let ok = 0
@@ -251,6 +250,14 @@ export function SpaceView() {
     refreshTree()
     if (files.length === 1 && ok === 1) setSearchParams({ file: lastPath })
   }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOver(false)
+    await uploadFiles(Array.from(e.dataTransfer?.files ?? []))
+  }
+
+  const uploadInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -372,10 +379,30 @@ export function SpaceView() {
             {sidebarTab === 'audit' && <AuditPanel spaceID={spaceID} />}
           </div>
 
-          <div className="p-2 border-t border-zinc-200 dark:border-zinc-800/50">
-             <button onClick={onNewFile} className="w-full flex items-center gap-2 px-3 py-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800/50 rounded-md transition-colors text-sm font-medium">
-                <Plus size={16} /> New Page
-              </button>
+          <div className="p-2 border-t border-zinc-200 dark:border-zinc-800/50 flex gap-1">
+            <button
+              onClick={onNewFile}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800/50 rounded-md transition-colors text-sm font-medium"
+            >
+              <Plus size={16} /> New Page
+            </button>
+            <button
+              onClick={() => uploadInputRef.current?.click()}
+              title="Upload files (or drag-drop anywhere)"
+              className="px-3 py-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800/50 rounded-md transition-colors"
+            >
+              <Upload size={16} />
+            </button>
+            <input
+              ref={uploadInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={async e => {
+                await uploadFiles(Array.from(e.target.files ?? []))
+                e.target.value = ''
+              }}
+            />
           </div>
         </div>
       </aside>

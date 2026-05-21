@@ -1,10 +1,25 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Download, FileQuestion } from 'lucide-react'
 import * as api from '../lib/api'
-import { isMarkdownFile, isImageFile, isCodeFile, highlightLang } from '../lib/fileTypes'
+import {
+  isMarkdownFile,
+  isImageFile,
+  isCodeFile,
+  isPDFFile,
+  isAudioFile,
+  isVideoFile,
+  isWordFile,
+  isSpreadsheetFile,
+  highlightLang,
+} from '../lib/fileTypes'
 import { MarkdownView } from './MarkdownView'
+import { AudioView } from './viewers/AudioView'
+import { VideoView } from './viewers/VideoView'
 
-const PDF_EXTS = new Set(['pdf'])
+// Heavy viewers go in their own lazy chunks: SheetJS ~700KB, Mammoth ~1MB.
+// Loaded only when the user opens a spreadsheet / DOCX.
+const SpreadsheetView = lazy(() => import('./viewers/SpreadsheetView'))
+const WordView = lazy(() => import('./viewers/WordView'))
 
 type Props = {
   spaceID: string
@@ -20,17 +35,21 @@ type Props = {
  * FileViewer is the read-only dispatcher for any file in the Space. The
  * extension determines the rendering path:
  *
- *   .md / .markdown        → MarkdownView (with all the rehype goodies)
- *   .png .jpg .svg …       → ImageView (direct backend URL, browser handles it)
+ *   .md / .markdown        → MarkdownView (rehype pipeline + comments)
+ *   .png .jpg .gif .webp … → ImageView (direct backend URL)
+ *   .pdf                   → PDFView (iframe)
+ *   .mp4 .webm .mov        → VideoView (native <video> with Range support)
+ *   .mp3 .wav .ogg .flac   → AudioView (native <audio>)
+ *   .docx                  → WordView (mammoth + DOMPurify, lazy)
+ *   .xlsx .ods .csv .tsv   → SpreadsheetView (SheetJS + DOMPurify, lazy)
  *   .json .ts .py .go .yml → CodeView (highlight.js by language guess)
  *   anything else          → DownloadView (offers a download link)
  *
- * For binary file types the caller can pass an empty `content` — the viewer
+ * For binary types the caller can pass an empty `content` — the viewer
  * fetches via the file URL directly.
  */
 export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
   const resolveURL = urlFor ?? ((p: string) => api.fileURL(spaceID, p))
-  const ext = path.split('.').pop()?.toLowerCase() ?? ''
 
   if (isMarkdownFile(path)) {
     return <MarkdownView content={content} theme={theme} />
@@ -38,13 +57,41 @@ export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
   if (isImageFile(path)) {
     return <ImageView url={resolveURL(path)} path={path} />
   }
-  if (PDF_EXTS.has(ext)) {
+  if (isPDFFile(path)) {
     return <PDFView url={resolveURL(path)} path={path} />
+  }
+  if (isAudioFile(path)) {
+    return <AudioView url={resolveURL(path)} path={path} />
+  }
+  if (isVideoFile(path)) {
+    return <VideoView url={resolveURL(path)} path={path} />
+  }
+  if (isWordFile(path)) {
+    return (
+      <Suspense fallback={<LazyLoading />}>
+        <WordView url={resolveURL(path)} path={path} />
+      </Suspense>
+    )
+  }
+  if (isSpreadsheetFile(path)) {
+    return (
+      <Suspense fallback={<LazyLoading />}>
+        <SpreadsheetView url={resolveURL(path)} path={path} />
+      </Suspense>
+    )
   }
   if (isCodeFile(path)) {
     return <CodeView content={content} path={path} />
   }
   return <DownloadView url={resolveURL(path)} path={path} />
+}
+
+function LazyLoading() {
+  return (
+    <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
+      Loading viewer…
+    </div>
+  )
 }
 
 function ImageView({ url, path }: { url: string; path: string }) {

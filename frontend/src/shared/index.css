@@ -86,6 +86,38 @@ mark.comment-anchor.comment-anchor-blink {
   50%      { background-color: rgba(245, 158, 11, 0.9);  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.6); }
 }
 
+/* SheetJS sheet_to_html output — give the raw <table> a readable look that
+   matches the rest of the app. Borders + zebra striping + readable padding. */
+.sheetjs-table table {
+  @apply border-collapse text-sm w-auto;
+  border: 1px solid theme('colors.zinc.300');
+}
+.dark .sheetjs-table table {
+  border-color: theme('colors.zinc.700');
+}
+.sheetjs-table th,
+.sheetjs-table td {
+  @apply px-3 py-1.5 align-top;
+  border: 1px solid theme('colors.zinc.200');
+  white-space: pre-wrap;
+}
+.dark .sheetjs-table th,
+.dark .sheetjs-table td {
+  border-color: theme('colors.zinc.800');
+}
+.sheetjs-table tr:nth-child(odd) td {
+  @apply bg-zinc-50/60;
+}
+.dark .sheetjs-table tr:nth-child(odd) td {
+  @apply bg-zinc-900/40;
+}
+.sheetjs-table th {
+  @apply bg-zinc-100 font-semibold sticky top-0 z-10;
+}
+.dark .sheetjs-table th {
+  @apply bg-zinc-900;
+}
+
 /* Floating selection toolbar above the user's text selection in the viewer */
 .selection-toolbar {
   @apply absolute z-50 flex items-center bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md shadow-xl text-xs font-medium;

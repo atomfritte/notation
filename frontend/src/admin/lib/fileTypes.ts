@@ -1,12 +1,23 @@
 /**
  * File-type helpers. Path-extension based — keeps the runtime check trivial
  * and consistent with how the backend serves files.
+ *
+ * Dispatch precedence (highest first) in FileViewer:
+ *   markdown → image → pdf → audio → video → word → spreadsheet → code → download
  */
 
 const MARKDOWN_EXTS = new Set(['md', 'markdown', 'mdx'])
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'avif', 'bmp', 'ico'])
 
+const VIDEO_EXTS = new Set(['mp4', 'webm', 'mov', 'm4v', 'ogv'])
+const AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus'])
+const WORD_EXTS = new Set(['docx']) // mammoth supports .docx only (no legacy .doc)
+const SPREADSHEET_EXTS = new Set(['xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'csv', 'tsv'])
+const PDF_EXTS = new Set(['pdf'])
+
 // Everything we can sensibly syntax-highlight or show as plain text.
+// (Includes csv/tsv so they remain *editable* — but SpreadsheetView is
+// checked first in dispatch so the default view is the table.)
 const TEXT_EXTS = new Set([
   // Data
   'json', 'jsonc', 'yaml', 'yml', 'toml', 'xml', 'csv', 'tsv', 'env',
@@ -28,13 +39,13 @@ function ext(path: string): string {
   return path.slice(i + 1).toLowerCase()
 }
 
-export function isMarkdownFile(path: string): boolean {
-  return MARKDOWN_EXTS.has(ext(path))
-}
-
-export function isImageFile(path: string): boolean {
-  return IMAGE_EXTS.has(ext(path))
-}
+export function isMarkdownFile(path: string): boolean { return MARKDOWN_EXTS.has(ext(path)) }
+export function isImageFile(path: string): boolean    { return IMAGE_EXTS.has(ext(path)) }
+export function isPDFFile(path: string): boolean      { return PDF_EXTS.has(ext(path)) }
+export function isVideoFile(path: string): boolean    { return VIDEO_EXTS.has(ext(path)) }
+export function isAudioFile(path: string): boolean    { return AUDIO_EXTS.has(ext(path)) }
+export function isWordFile(path: string): boolean     { return WORD_EXTS.has(ext(path)) }
+export function isSpreadsheetFile(path: string): boolean { return SPREADSHEET_EXTS.has(ext(path)) }
 
 export function isTextFile(path: string): boolean {
   const e = ext(path)

@@ -135,11 +135,12 @@ func (h *adminHandlers) getFile(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	info, err := h.store.Stat(id, upath)
-	if err == nil {
+	var modTime time.Time
+	if info, err := h.store.Stat(id, upath); err == nil {
 		w.Header().Set("ETag", `W/"`+fmt.Sprintf("%x", info.ModTime().UnixNano())+`"`)
+		modTime = info.ModTime()
 	}
-	writeFileResponse(w, upath, data)
+	writeFileResponse(w, r, upath, data, modTime)
 }
 
 func (h *adminHandlers) putFile(w http.ResponseWriter, r *http.Request) {
@@ -463,7 +464,9 @@ func (h *adminHandlers) fileAt(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	writeFileResponse(w, upath, data)
+	// Historical bytes don't have a meaningful mtime — pass zero so
+	// ServeContent skips the Last-Modified header.
+	writeFileResponse(w, r, upath, data, time.Time{})
 }
 
 func (h *adminHandlers) fileDiffAcross(w http.ResponseWriter, r *http.Request) {

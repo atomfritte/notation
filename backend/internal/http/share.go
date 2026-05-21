@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -107,7 +108,11 @@ func (h *shareHandlers) getFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.audit1(spaceID, "read.file", upath, sh, r, nil)
-	writeFileResponse(w, upath, data)
+	var modTime time.Time
+	if info, err := h.store.Stat(spaceID, upath); err == nil {
+		modTime = info.ModTime()
+	}
+	writeFileResponse(w, r, upath, data, modTime)
 }
 
 func (h *shareHandlers) putFile(w http.ResponseWriter, r *http.Request) {
