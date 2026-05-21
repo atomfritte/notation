@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"mime"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -141,13 +139,7 @@ func (h *adminHandlers) getFile(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		w.Header().Set("ETag", `W/"`+fmt.Sprintf("%x", info.ModTime().UnixNano())+`"`)
 	}
-	mtype := mime.TypeByExtension(filepath.Ext(upath))
-	if mtype == "" {
-		mtype = http.DetectContentType(data)
-	}
-	w.Header().Set("Content-Type", mtype)
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write(data)
+	writeFileResponse(w, upath, data)
 }
 
 func (h *adminHandlers) putFile(w http.ResponseWriter, r *http.Request) {
@@ -471,13 +463,7 @@ func (h *adminHandlers) fileAt(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	mtype := mime.TypeByExtension(filepath.Ext(upath))
-	if mtype == "" {
-		mtype = http.DetectContentType(data)
-	}
-	w.Header().Set("Content-Type", mtype)
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write(data)
+	writeFileResponse(w, upath, data)
 }
 
 func (h *adminHandlers) fileDiffAcross(w http.ResponseWriter, r *http.Request) {

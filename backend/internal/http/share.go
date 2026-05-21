@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
-	"mime"
 	"net/http"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -108,14 +106,8 @@ func (h *shareHandlers) getFile(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	mtype := mime.TypeByExtension(filepath.Ext(upath))
-	if mtype == "" {
-		mtype = http.DetectContentType(data)
-	}
-	w.Header().Set("Content-Type", mtype)
-	w.Header().Set("Cache-Control", "no-store")
 	h.audit1(spaceID, "read.file", upath, sh, r, nil)
-	_, _ = w.Write(data)
+	writeFileResponse(w, upath, data)
 }
 
 func (h *shareHandlers) putFile(w http.ResponseWriter, r *http.Request) {

@@ -3,12 +3,24 @@ package http
 import (
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	chimw "github.com/go-chi/chi/v5/middleware"
+
+	"github.com/yoogie27/notation/internal/config"
 )
 
-func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
+// Match base64url-encoded 32-byte share / mcp / bootstrap tokens (43 chars).
+// We don't want these in plaintext server logs — anyone with log access could
+// replay them. Tighter than a generic catch-all so legitimate long filenames
+// don't get redacted.
+var tokenRedactRe = regexp.MustCompile(`[A-Za-z0-9_-]{43}`)
+
+func requestLogger(log *slog.Logger, cfg *config.Config) func(http.Handler) http.Handler {
+	sharePrefix := cfg.SharePath + "/"
+	mcpPrefix := cfg.MCPPath + "/"
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -16,7 +28,7 @@ func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(ww, r)
 			log.Info("http",
 				"method", r.Method,
-				"path", r.URL.Path,
+				"path", redactSensitive(r.URL.Path, sharePrefix, mcpPrefix),
 				"status", ww.Status(),
 				"bytes", ww.BytesWritten(),
 				"duration_ms", time.Since(start).Milliseconds(),
@@ -26,6 +38,32 @@ func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+func redactSensitive(p, sharePrefix, mcpPrefix string) string {
+	// Only redact under prefixes that can carry secrets. Keeps legitimate
+	// long filenames in admin routes intact.
+	if !strings.HasPrefix(p, sharePrefix) && !strings.HasPrefix(p, mcpPrefix) {
+		return p
+	}
+	return tokenRedactRe.ReplaceAllString(p, "<token>")
+}
+
+// CSP — keep as one constant so it's easy to tighten/relax in one place.
+// `'wasm-unsafe-eval'` lets the highlighter and any future WASM-backed lib
+// run without `'unsafe-eval'`. `style-src 'unsafe-inline'` is required by
+// Tailwind / Mermaid / many React libs that inject inline styles. If we
+// ever drop those, tighten this further.
+const contentSecurityPolicy = "default-src 'self'; " +
+	"script-src 'self' 'wasm-unsafe-eval'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data: blob:; " +
+	"font-src 'self' data:; " +
+	"connect-src 'self'; " +
+	"worker-src 'self' blob:; " +
+	"frame-ancestors 'none'; " +
+	"base-uri 'self'; " +
+	"form-action 'self'; " +
+	"object-src 'none'"
+
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -33,6 +71,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
 		next.ServeHTTP(w, r)
 	})
 }

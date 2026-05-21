@@ -5,6 +5,7 @@ import remarkMath from 'remark-math'
 import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import { MessageSquare } from 'lucide-react'
@@ -13,6 +14,32 @@ import { remarkWikiLink } from '../lib/remarkWikiLink'
 import { Mermaid } from './Mermaid'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github-dark.css'
+
+// Schema for rehype-sanitize. We start from the spec defaults (which strip
+// <script>, on* handlers, javascript: hrefs, etc.) and add a small allowlist
+// of inline HTML elements we actually want to render: <mark> for highlights,
+// <details>/<summary> for collapsibles, <kbd>/<sub>/<sup> for typography.
+// Without sanitize, rehype-raw passes raw HTML through unchanged → XSS.
+const SAFE_TAGS = ['mark', 'details', 'summary', 'kbd', 'sub', 'sup'] as const
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), ...SAFE_TAGS],
+  attributes: {
+    ...defaultSchema.attributes,
+    '*': [...(defaultSchema.attributes?.['*'] ?? []), 'className', 'id'],
+    a: [...(defaultSchema.attributes?.a ?? []), 'className', 'rel', 'target'],
+    span: [...(defaultSchema.attributes?.span ?? []), 'className', 'style'],
+    code: [...(defaultSchema.attributes?.code ?? []), 'className'],
+    div: [...(defaultSchema.attributes?.div ?? []), 'className'],
+    mark: [...(defaultSchema.attributes?.mark ?? []), 'className', 'data-comment-id'],
+    details: [...(defaultSchema.attributes?.details ?? []), 'open'],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    href: ['http', 'https', 'mailto'],
+    src: ['http', 'https', 'data'],
+  },
+}
 
 export type AnchorPayload = { quote: string; prefix: string; suffix: string }
 
@@ -188,7 +215,10 @@ export function MarkdownView({
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]}
           rehypePlugins={[
+            // Order matters: raw parses HTML into the AST, then sanitize
+            // strips unsafe elements before downstream plugins see them.
             rehypeRaw,
+            [rehypeSanitize, sanitizeSchema],
             rehypeSlug,
             [rehypeAutolinkHeadings, { behavior: 'wrap' }],
             rehypeKatex,
