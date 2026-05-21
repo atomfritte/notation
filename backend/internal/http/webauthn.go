@@ -191,7 +191,9 @@ func (h *webauthnHandlers) registerBegin(w http.ResponseWriter, r *http.Request)
 		SameSite: http.SameSiteStrictMode,
 		Expires:  time.Now().Add(webauthnTTL),
 	})
-	writeJSON(w, http.StatusOK, opts)
+	// go-webauthn wraps the publicKey options in `{publicKey: {...}}`, but
+	// @simplewebauthn/browser wants the inner object — send just that.
+	writeJSON(w, http.StatusOK, opts.Response)
 }
 
 type registerFinishReq struct {
@@ -293,7 +295,8 @@ func (h *webauthnHandlers) loginBegin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 		Expires:  time.Now().Add(webauthnTTL),
 	})
-	writeJSON(w, http.StatusOK, opts)
+	// Send the inner publicKey block, not the {publicKey: {...}} wrapper.
+	writeJSON(w, http.StatusOK, opts.Response)
 }
 
 func (h *webauthnHandlers) loginFinish(w http.ResponseWriter, r *http.Request) {

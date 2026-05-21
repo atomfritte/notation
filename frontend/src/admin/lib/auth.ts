@@ -88,9 +88,10 @@ export async function registerPasskey(label: string): Promise<void> {
     method: 'POST',
     headers: csrf ? { 'X-CSRF-Token': csrf } : {},
   })
-  const options = (await jsonOrThrow(beginRes)) as Parameters<typeof startRegistration>[0]
-  // Triggers the system passkey UI (Touch ID, security key, etc.)
-  const credential = await startRegistration(options)
+  // @simplewebauthn/browser v11 expects `{ optionsJSON: ... }`; the server
+  // sends the inner PublicKey object directly so we wrap here.
+  const optionsJSON = await jsonOrThrow(beginRes)
+  const credential = await startRegistration({ optionsJSON })
   await jsonOrThrow(
     await fetch('/api/auth/passkey/register/finish', {
       method: 'POST',
@@ -105,8 +106,8 @@ export async function registerPasskey(label: string): Promise<void> {
 
 export async function loginWithPasskey(): Promise<void> {
   const beginRes = await fetch('/api/auth/passkey/login/begin', { method: 'POST' })
-  const options = (await jsonOrThrow(beginRes)) as Parameters<typeof startAuthentication>[0]
-  const credential = await startAuthentication(options)
+  const optionsJSON = await jsonOrThrow(beginRes)
+  const credential = await startAuthentication({ optionsJSON })
   await jsonOrThrow(
     await fetch('/api/auth/passkey/login/finish', {
       method: 'POST',
