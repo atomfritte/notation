@@ -32,8 +32,14 @@ func SafeJoin(root, userPath string) (string, error) {
 	if strings.Contains(userPath, "\\") {
 		return "", ErrPathEscape
 	}
-	p := strings.TrimPrefix(userPath, "/")
-	p = path.Clean(p)
+	// Reject absolute paths outright. The docstring promises a relative input,
+	// and silently stripping a leading "/" maps "/etc/passwd" to "<root>/etc/passwd"
+	// — harmless on disk but a defense-in-depth violation that lets callers
+	// pretend they typed an absolute path and get a result back.
+	if strings.HasPrefix(userPath, "/") {
+		return "", ErrPathEscape
+	}
+	p := path.Clean(userPath)
 	if p == "" || p == "." {
 		return "", ErrPathEmpty
 	}

@@ -3,13 +3,13 @@
 # --- Stage 1: build the React frontend --------------------------------------
 FROM node:20-alpine AS frontend
 WORKDIR /work/frontend
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm install --no-audit --no-fund
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
 # --- Stage 2: build the Go binary with embedded frontend --------------------
-FROM golang:1.24-alpine AS backend
+FROM golang:1.26-alpine AS backend
 RUN apk add --no-cache git
 WORKDIR /work
 COPY backend/go.mod backend/go.sum* ./backend/
