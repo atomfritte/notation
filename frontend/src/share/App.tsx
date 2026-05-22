@@ -547,7 +547,12 @@ function ShareUI() {
         <SearchPanel
           open={searchOpen}
           onClose={() => setSearchOpen(false)}
-          onSelect={(p) => select(p)}
+          onSelect={(p, opts) => {
+            const next: Record<string, string> = { file: p }
+            if (opts?.query) next.q = opts.query
+            setSearchParams(next)
+            if (isMobile) setSidebarOpen(false)
+          }}
           onSearch={(q) => api.searchSpace(q)}
         />
       )}

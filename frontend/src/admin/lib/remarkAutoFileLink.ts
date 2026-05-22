@@ -1,5 +1,5 @@
 import type { Plugin } from 'unified'
-import type { Root, Text, PhrasingContent, Parent } from 'mdast'
+import type { Root, Text, InlineCode, PhrasingContent, Parent } from 'mdast'
 import { visit, SKIP } from 'unist-util-visit'
 
 export type AutoFileLinkOptions = {
@@ -33,8 +33,11 @@ export function buildAutoFileLink(opts: AutoFileLinkOptions): Plugin<[], Root> {
   const index = new Map<string, string[]>()
   for (const path of opts.files) {
     if (!path) continue
+    // Full path — covers code-fenced references like
+    // `02_ELEKTRONIK/00_Systemueberblick.md` and prose mentions of the same.
+    addToIndex(index, path, path)
     const name = basename(path)
-    addToIndex(index, name, path)
+    if (name !== path) addToIndex(index, name, path)
     const dot = name.lastIndexOf('.')
     if (dot > 0) addToIndex(index, name.slice(0, dot), path)
   }
@@ -63,11 +66,28 @@ export function buildAutoFileLink(opts: AutoFileLinkOptions): Plugin<[], Root> {
   const currentDir = opts.currentFile ? dirname(opts.currentFile) : ''
   const currentPath = opts.currentFile ?? ''
 
+  function makeBadge(resolved: string): PhrasingContent {
+    return {
+      type: 'link',
+      url: `?file=${encodeURIComponent(resolved)}`,
+      title: resolved,
+      children: [{ type: 'text', value: 'File' } as Text],
+      data: {
+        hProperties: {
+          className: 'auto-file-link',
+          title: resolved,
+        },
+      },
+    } as PhrasingContent
+  }
+
   return () => (tree) => {
+    // Pass 1 — regular prose. Walk text nodes, locate mentions, splice in a
+    // sibling `[File]` link after each match without touching the original
+    // wording.
     visit(tree, 'text', (node: Text, idx, parent) => {
       if (!parent || idx == null) return
       const ptype = (parent as { type: string }).type
-      // Don't decorate text that's already part of a link or inside code.
       if (
         ptype === 'link' ||
         ptype === 'linkReference' ||
@@ -94,23 +114,10 @@ export function buildAutoFileLink(opts: AutoFileLinkOptions): Plugin<[], Root> {
         const candidates = index.get(token.toLowerCase()) ?? []
         const resolved = resolve(candidates, currentDir, currentPath)
         if (!resolved) continue
-        // Original text up to the end of the mention is preserved as-is.
         if (end > cursor) {
           out.push({ type: 'text', value: value.slice(cursor, end) } as Text)
         }
-        const href = `?file=${encodeURIComponent(resolved)}`
-        out.push({
-          type: 'link',
-          url: href,
-          title: resolved,
-          children: [{ type: 'text', value: 'File' } as Text],
-          data: {
-            hProperties: {
-              className: 'auto-file-link',
-              title: resolved,
-            },
-          },
-        } as PhrasingContent)
+        out.push(makeBadge(resolved))
         cursor = end
         produced = true
       }
@@ -120,6 +127,24 @@ export function buildAutoFileLink(opts: AutoFileLinkOptions): Plugin<[], Root> {
       }
       ;(parent as Parent).children.splice(idx, 1, ...out)
       return [SKIP, idx + out.length]
+    })
+
+    // Pass 2 — inline-code references. People commonly write file paths in
+    // backticks (e.g. `02_ELEKTRONIK/00_Systemueberblick.md`); the basic text
+    // pass skips them because the text is wrapped in an `inlineCode` node.
+    // Here we treat the whole code value as a single key — only an exact
+    // match against the index produces a sibling badge.
+    visit(tree, 'inlineCode', (node: InlineCode, idx, parent) => {
+      if (!parent || idx == null) return
+      const ptype = (parent as { type: string }).type
+      if (ptype === 'link' || ptype === 'linkReference') return
+      const value = node.value.trim()
+      if (!value) return
+      const candidates = index.get(value.toLowerCase()) ?? []
+      const resolved = resolve(candidates, currentDir, currentPath)
+      if (!resolved) return
+      ;(parent as Parent).children.splice(idx + 1, 0, makeBadge(resolved))
+      return [SKIP, idx + 2]
     })
   }
 }

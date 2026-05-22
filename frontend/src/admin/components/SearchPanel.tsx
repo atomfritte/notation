@@ -13,7 +13,11 @@ export type SearchPanelMatch = {
 type Props = {
   open: boolean
   onClose: () => void
-  onSelect: (path: string, line?: number) => void
+  /** Receives the chosen file plus the query that produced the hit so the
+   *  viewer can scroll to / highlight matches. `line` is the source-line
+   *  number; the viewer maps query → DOM occurrences and uses line only
+   *  as a tiebreaker when the query matches multiple places. */
+  onSelect: (path: string, opts?: { line?: number; query?: string }) => void
   /** Called with the user's query; returns matches. The component handles
    *  debouncing, loading state and error surfacing. Wraps the admin or
    *  share-side search endpoint depending on the caller. */
@@ -106,7 +110,7 @@ export function SearchPanel({ open, onClose, onSelect, onSearch }: Props) {
             <div key={path} className="border-b border-[var(--notation-border)]/50 last:border-0">
               <button
                 onClick={() => {
-                  onSelect(path)
+                  onSelect(path, { query: q })
                   onClose()
                 }}
                 className="w-full text-left px-4 py-2 text-xs font-mono text-[var(--notation-fg)] bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/30 hover:bg-[var(--notation-border)]"
@@ -118,7 +122,7 @@ export function SearchPanel({ open, onClose, onSelect, onSearch }: Props) {
                   <li
                     key={i}
                     onClick={() => {
-                      onSelect(path, m.line)
+                      onSelect(path, { line: m.line, query: q })
                       onClose()
                     }}
                     className="px-4 py-2 text-xs hover:bg-[var(--notation-bg-alt)] hover:bg-[var(--notation-bg-alt)]/30 cursor-pointer flex gap-3"
