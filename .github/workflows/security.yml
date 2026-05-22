@@ -18,7 +18,7 @@ jobs:
     name: secrets (trufflehog)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: trufflesecurity/trufflehog@main
@@ -34,7 +34,7 @@ jobs:
     name: trivy (filesystem)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
@@ -50,12 +50,12 @@ jobs:
     name: trivy (image)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Build image (load locally, do not push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile

@@ -248,7 +248,7 @@ export default function Editor({
     // ---- wiki-link auto-completion (files + headings) ----
     const completionDisposable = monaco.languages.registerCompletionItemProvider('markdown', {
       triggerCharacters: ['[', '#'],
-      provideCompletionItems(model, position) {
+      provideCompletionItems(model: MonacoNS.editor.ITextModel, position: MonacoNS.Position) {
         const lineText = model.getLineContent(position.lineNumber)
         const before = lineText.slice(0, position.column - 1)
         const m = before.match(/\[\[([^\]\n]*)$/)
