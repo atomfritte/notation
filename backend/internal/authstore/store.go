@@ -55,6 +55,15 @@ type Passkey struct {
 	Transports   []string   `json:"transports,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	LastUsed     *time.Time `json:"last_used,omitempty"`
+	// BE/BS are the WebAuthn "Backup Eligible" / "Backup State" flags. go-webauthn
+	// 0.17+ enforces consistency between the stored flags and what the
+	// authenticator reports on each assertion. FlagsRecorded distinguishes a
+	// genuine `false` from "not yet observed" — pre-0.11 we never persisted
+	// these, so older Passkey records load with FlagsRecorded=false and the
+	// login path treats the first incoming assertion's flags as authoritative.
+	BackupEligible bool `json:"backup_eligible,omitempty"`
+	BackupState    bool `json:"backup_state,omitempty"`
+	FlagsRecorded  bool `json:"flags_recorded,omitempty"`
 }
 
 // HasPasskeys reports whether at least one passkey is registered. Used by

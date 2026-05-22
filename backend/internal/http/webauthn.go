@@ -151,15 +151,23 @@ func (h *webauthnHandlers) cleanupLocked() {
 
 type adminWebAuthnUser struct {
 	admin *authstore.Admin
+	// flagsOverride lets the login flow inject the assertion's current
+	// BE/BS flags into any stored credential whose FlagsRecorded == false.
+	// This is the one-time migration for passkeys registered under
+	// go-webauthn < 0.11 (when we didn't persist the flags). nil during
+	// registration and for the normal path. See loginFinish.
+	flagsOverride *webauthn.CredentialFlags
 }
 
-func (u *adminWebAuthnUser) WebAuthnID() []byte                         { return []byte("admin") }
-func (u *adminWebAuthnUser) WebAuthnName() string                       { return "admin" }
-func (u *adminWebAuthnUser) WebAuthnDisplayName() string                { return "notation admin" }
-func (u *adminWebAuthnUser) WebAuthnIcon() string                       { return "" }
-func (u *adminWebAuthnUser) WebAuthnCredentials() []webauthn.Credential { return adminCredentials(u.admin) }
+func (u *adminWebAuthnUser) WebAuthnID() []byte          { return []byte("admin") }
+func (u *adminWebAuthnUser) WebAuthnName() string        { return "admin" }
+func (u *adminWebAuthnUser) WebAuthnDisplayName() string { return "notation admin" }
+func (u *adminWebAuthnUser) WebAuthnIcon() string        { return "" }
+func (u *adminWebAuthnUser) WebAuthnCredentials() []webauthn.Credential {
+	return adminCredentials(u.admin, u.flagsOverride)
+}
 
-func adminCredentials(a *authstore.Admin) []webauthn.Credential {
+func adminCredentials(a *authstore.Admin, flagsOverride *webauthn.CredentialFlags) []webauthn.Credential {
 	out := make([]webauthn.Credential, 0, len(a.Passkeys))
 	for _, p := range a.Passkeys {
 		cid, err1 := base64.RawURLEncoding.DecodeString(p.CredentialID)
@@ -172,9 +180,20 @@ func adminCredentials(a *authstore.Admin) []webauthn.Credential {
 		for _, t := range p.Transports {
 			transports = append(transports, protocol.AuthenticatorTransport(t))
 		}
+		var flags webauthn.CredentialFlags
+		switch {
+		case p.FlagsRecorded:
+			flags = webauthn.CredentialFlags{
+				BackupEligible: p.BackupEligible,
+				BackupState:    p.BackupState,
+			}
+		case flagsOverride != nil:
+			flags = *flagsOverride
+		}
 		out = append(out, webauthn.Credential{
 			ID:        cid,
 			PublicKey: pk,
+			Flags:     flags,
 			Authenticator: webauthn.Authenticator{
 				AAGUID:    aaguid,
 				SignCount: p.SignCount,
@@ -271,13 +290,16 @@ func (h *webauthnHandlers) registerFinish(w http.ResponseWriter, r *http.Request
 		idLen = len(cred.ID)
 	}
 	pk := authstore.Passkey{
-		ID:           "pk_" + base64.RawURLEncoding.EncodeToString(cred.ID[:idLen]),
-		Label:        label,
-		CredentialID: base64.RawURLEncoding.EncodeToString(cred.ID),
-		PublicKey:    base64.RawURLEncoding.EncodeToString(cred.PublicKey),
-		SignCount:    cred.Authenticator.SignCount,
-		AAGUID:       base64.RawURLEncoding.EncodeToString(cred.Authenticator.AAGUID),
-		CreatedAt:    time.Now().UTC(),
+		ID:             "pk_" + base64.RawURLEncoding.EncodeToString(cred.ID[:idLen]),
+		Label:          label,
+		CredentialID:   base64.RawURLEncoding.EncodeToString(cred.ID),
+		PublicKey:      base64.RawURLEncoding.EncodeToString(cred.PublicKey),
+		SignCount:      cred.Authenticator.SignCount,
+		AAGUID:         base64.RawURLEncoding.EncodeToString(cred.Authenticator.AAGUID),
+		CreatedAt:      time.Now().UTC(),
+		BackupEligible: cred.Flags.BackupEligible,
+		BackupState:    cred.Flags.BackupState,
+		FlagsRecorded:  true,
 	}
 	for _, t := range cred.Transport {
 		pk.Transports = append(pk.Transports, string(t))
@@ -354,7 +376,13 @@ func (h *webauthnHandlers) loginFinish(w http.ResponseWriter, r *http.Request) {
 		writeInternal(w, r, "passkey.login.finish.store", err)
 		return
 	}
-	user := &adminWebAuthnUser{admin: admin}
+	// One-time migration for passkeys registered before we persisted BE/BS
+	// flags (go-webauthn < 0.11). For any stored credential with
+	// FlagsRecorded == false, the user adapter substitutes the assertion's
+	// flags so go-webauthn 0.17's strict consistency check doesn't reject
+	// the login. We persist the observed flags after success below.
+	assertionFlags := webauthn.NewCredentialFlags(parsed.Response.AuthenticatorData.Flags)
+	user := &adminWebAuthnUser{admin: admin, flagsOverride: &assertionFlags}
 	// Discoverable-login handler: WebAuthn hands us the rawID/userHandle and
 	// we look up the matching admin (there's only one).
 	cred, err := h.wa.ValidateDiscoverableLogin(
@@ -380,6 +408,11 @@ func (h *webauthnHandlers) loginFinish(w http.ResponseWriter, r *http.Request) {
 			if a.Passkeys[i].CredentialID == credIDb64 {
 				a.Passkeys[i].SignCount = cred.Authenticator.SignCount
 				a.Passkeys[i].LastUsed = &now
+				if !a.Passkeys[i].FlagsRecorded {
+					a.Passkeys[i].BackupEligible = cred.Flags.BackupEligible
+					a.Passkeys[i].BackupState = cred.Flags.BackupState
+					a.Passkeys[i].FlagsRecorded = true
+				}
 				break
 			}
 		}
