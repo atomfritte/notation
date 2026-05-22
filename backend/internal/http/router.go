@@ -152,6 +152,11 @@ func NewRouter(d Deps) (http.Handler, error) {
 			sr.Get("/mcp-tokens", ahdmin.listMCPTokens)
 			sr.Post("/mcp-tokens", ahdmin.createMCPToken)
 			sr.Delete("/mcp-tokens/{tokenID}", ahdmin.deleteMCPToken)
+			// Space-wide comment listing for the "All comments" sidebar tab.
+			// Placed before the path-suffix routes so it matches the bare
+			// /comments without the wildcard catching it.
+			sr.Get("/all-comments", ahdmin.listAllComments)
+			sr.Delete("/comments/by-id/{commentID}", ahdmin.deleteComment)
 			sr.Get("/comments/*", ahdmin.listComments)
 			sr.Post("/comments/*", ahdmin.postComment)
 			sr.Get("/search", ahdmin.search)

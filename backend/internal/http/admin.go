@@ -696,6 +696,45 @@ func (h *adminHandlers) listComments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
+// listAllComments returns every comment in the Space — used by the
+// admin's "All comments" sidebar tab so the user can browse across pages.
+func (h *adminHandlers) listAllComments(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	list, err := h.comments.ListAll(id)
+	if err != nil {
+		writeInternal(w, r, "comments.list_all", err)
+		return
+	}
+	if list == nil {
+		list = []share.Comment{}
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// deleteComment removes a comment by ID. The store's Delete cascades to
+// replies, so deleting a top-level entry takes the whole thread with it.
+func (h *adminHandlers) deleteComment(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	commentID := chi.URLParam(r, "commentID")
+	if commentID == "" {
+		writeError(w, http.StatusBadRequest, "comment id required")
+		return
+	}
+	if err := h.comments.Delete(id, commentID); err != nil {
+		writeCommentError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *adminHandlers) postComment(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "spaceID")
 	if _, err := h.store.Get(id); err != nil {

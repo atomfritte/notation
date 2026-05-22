@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { MessageSquare, Quote } from 'lucide-react'
+import { MessageSquare, Quote, Trash2 } from 'lucide-react'
 
 export type CommentItem = {
   id: string
@@ -15,6 +15,9 @@ type Props = {
   canAdd: boolean
   initialText?: string
   onAdd?: (text: string, opts?: { parentID?: string }) => Promise<void>
+  /** Deleting a comment also removes any replies (server cascades). When
+   *  omitted, no delete button is rendered (e.g. read-only share view). */
+  onDelete?: (id: string) => Promise<void>
   /** Comment ID currently hovered/highlighted somewhere else (e.g. matching
    *  anchor mark in the viewer). The matching sidebar entry pulses to match. */
   activeID?: string | null
@@ -30,7 +33,7 @@ type Props = {
  * snippet so the author of the comment has context even when the original
  * paragraph scrolls out of view.
  */
-export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, onHoverComment }: Props) {
+export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, activeID, onHoverComment }: Props) {
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -100,6 +103,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
               canReply={canAdd}
               onHoverComment={onHoverComment}
               onReply={canAdd && onAdd ? (text) => submitReply(c.id, text) : undefined}
+              onDelete={onDelete}
             />
             {repliesByParent[c.id]?.length ? (
               <ul className="pl-5 mt-2 border-l-2 border-[var(--notation-border)] space-y-2">
@@ -109,6 +113,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
                       comment={r}
                       active={activeID === r.id}
                       onHoverComment={onHoverComment}
+                      onDelete={onDelete}
                       compact
                     />
                   </li>
@@ -149,6 +154,7 @@ function CommentRow({
   canReply,
   compact,
   onReply,
+  onDelete,
   onHoverComment,
 }: {
   comment: CommentItem
@@ -156,11 +162,13 @@ function CommentRow({
   canReply?: boolean
   compact?: boolean
   onReply?: (text: string) => Promise<void>
+  onDelete?: (id: string) => Promise<void>
   onHoverComment?: (id: string | null) => void
 }) {
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyText, setReplyText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   async function send(e: FormEvent) {
     e.preventDefault()
@@ -200,14 +208,35 @@ function CommentRow({
       )}
       <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-300">{comment.text}</p>
 
-      {canReply && onReply && !replyOpen && (
-        <button
-          onClick={() => setReplyOpen(true)}
-          className="mt-2 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 flex items-center gap-1"
-        >
-          <MessageSquare size={11} /> Reply
-        </button>
-      )}
+      <div className="mt-2 flex items-center gap-3">
+        {canReply && onReply && !replyOpen && (
+          <button
+            onClick={() => setReplyOpen(true)}
+            className="text-xs text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] flex items-center gap-1"
+          >
+            <MessageSquare size={11} /> Reply
+          </button>
+        )}
+        {onDelete && (
+          <button
+            onClick={async () => {
+              if (deleting) return
+              const msg = comment.parent_id
+                ? 'Delete this reply?'
+                : 'Delete this comment and all replies?'
+              if (!window.confirm(msg)) return
+              setDeleting(true)
+              try { await onDelete(comment.id) }
+              finally { setDeleting(false) }
+            }}
+            disabled={deleting}
+            className="text-xs text-[var(--notation-fg-muted)] hover:text-red-500 flex items-center gap-1 ml-auto disabled:opacity-40"
+            title="Delete"
+          >
+            <Trash2 size={11} /> {deleting ? '…' : 'Delete'}
+          </button>
+        )}
+      </div>
       {replyOpen && onReply && (
         <form onSubmit={send} className="mt-2 flex flex-col gap-1.5">
           <textarea

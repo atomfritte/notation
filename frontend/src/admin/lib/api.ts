@@ -178,6 +178,19 @@ export type CommentItem = {
 export const getComments = (id: string, path: string) =>
   fetchJSON<CommentItem[]>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/${encodePath(path)}`)
 
+// AllCommentItem extends CommentItem with the path field that the
+// space-wide listing carries — needed so the "All comments" tab can group
+// and link back to the file each comment lives on.
+export type AllCommentItem = CommentItem & { path: string }
+
+export const getAllComments = (id: string) =>
+  fetchJSON<AllCommentItem[]>(`/api/admin/spaces/${encodeURIComponent(id)}/all-comments`)
+
+export const deleteComment = (id: string, commentID: string) =>
+  fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/by-id/${encodeURIComponent(commentID)}`, {
+    method: 'DELETE',
+  })
+
 export const postComment = (
   id: string,
   path: string,

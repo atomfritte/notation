@@ -21,6 +21,7 @@ import { BacklinksPanel } from '../components/BacklinksPanel'
 import { HistoryView } from '../components/HistoryView'
 import { ThemePalette } from '../components/ThemePalette'
 import { SidebarTabs, type SidebarTabKey } from '../components/SidebarTabs'
+import { AllCommentsPanel } from '../components/AllCommentsPanel'
 
 export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
@@ -73,6 +74,9 @@ export function SpaceView() {
   const [themeOpen, setThemeOpen] = useState(false)
   
   const [comments, setComments] = useState<api.CommentItem[]>([])
+  const [allComments, setAllComments] = useState<api.AllCommentItem[]>([])
+  // Bumping this triggers re-fetch in AllCommentsPanel (after add/delete).
+  const [allCommentsRefresh, setAllCommentsRefresh] = useState(0)
   const [showComments, setShowComments] = useState(false)
   const [pendingComment, setPendingComment] = useState<string>('')
   const [pendingAnchor, setPendingAnchor] = useState<api.CommentAnchor | null>(null)
@@ -352,6 +356,26 @@ export function SpaceView() {
     api.getComments(spaceID, file).then(setComments).catch(console.error)
   }, [spaceID, file])
 
+  // Space-wide listing — drives the badge count on the Comments tab + the
+  // grouped view in AllCommentsPanel. Re-fetched whenever a comment is
+  // added/deleted via allCommentsRefresh.
+  const refreshAllComments = useCallback(() => {
+    if (!spaceID) return
+    api.getAllComments(spaceID).then(setAllComments).catch(console.error)
+  }, [spaceID])
+  useEffect(() => { refreshAllComments() }, [refreshAllComments, allCommentsRefresh])
+
+  const handleDeleteComment = useCallback(async (commentID: string) => {
+    if (!spaceID) return
+    try {
+      await api.deleteComment(spaceID, commentID)
+      refreshComments()
+      setAllCommentsRefresh(v => v + 1)
+    } catch (e) {
+      setErr(String(e))
+    }
+  }, [spaceID, refreshComments])
+
   const selectFile = useCallback(
     (p: string) => {
       setSearchParams({ file: p })
@@ -386,6 +410,7 @@ export function SpaceView() {
     await api.postComment(spaceID, file, text, { parentID: opts?.parentID, anchor })
     setPendingAnchor(null)
     refreshComments()
+    setAllCommentsRefresh(v => v + 1)
   }
 
   function onNewAnchorComment(anchor: api.CommentAnchor) {
@@ -574,12 +599,17 @@ export function SpaceView() {
             <SidebarTabs
               active={sidebarTab}
               onPick={setSidebarTab}
+              badges={{
+                comments: allComments.length,
+                bookmarks: bookmarks.length,
+              }}
             />
           </div>
 
           <div className="px-5 mt-6 mb-2 text-xs font-semibold text-[var(--notation-fg-muted)] uppercase tracking-wider">
             {sidebarTab === 'files' && 'Workspace'}
             {sidebarTab === 'bookmarks' && 'Favorites'}
+            {sidebarTab === 'comments' && 'All Comments'}
             {sidebarTab === 'shares' && 'Active Shares'}
             {sidebarTab === 'mcp' && 'Settings'}
             {sidebarTab === 'history' && 'Recent Commits'}
@@ -618,6 +648,18 @@ export function SpaceView() {
                   ))
                 )}
               </div>
+            )}
+            {sidebarTab === 'comments' && (
+              <AllCommentsPanel
+                spaceID={spaceID}
+                currentFile={file}
+                onSelectFile={(p, commentID) => {
+                  selectFile(p)
+                  setShowComments(true)
+                  if (commentID) setActiveCommentId(commentID)
+                }}
+                refreshKey={allCommentsRefresh}
+              />
             )}
             {sidebarTab === 'shares' && <SharePanel spaceID={spaceID} />}
             {sidebarTab === 'mcp' && <MCPPanel spaceID={spaceID} />}
@@ -936,6 +978,7 @@ export function SpaceView() {
                      await handleAddComment(text, opts)
                      setPendingComment('')
                    }}
+                   onDelete={handleDeleteComment}
                  />
               </div>
             </div>
