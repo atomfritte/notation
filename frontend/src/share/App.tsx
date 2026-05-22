@@ -14,7 +14,7 @@ import { CommandPalette } from '../admin/components/CommandPalette'
 import { SearchPanel } from '../admin/components/SearchPanel'
 import { ThemePalette } from '../admin/components/ThemePalette'
 import { initTheme } from '../admin/lib/theme'
-import { isTextFile, isMarkdownFile } from '../admin/lib/fileTypes'
+import { isTextFile, isMarkdownFile, findDefaultFile } from '../admin/lib/fileTypes'
 
 function ShareUI() {
   const [info, setInfo] = useState<api.SpaceInfo | null>(null)
@@ -99,6 +99,16 @@ function ShareUI() {
     api.getSpace().then(setInfo).catch(e => setErr(String(e)))
     api.getTree().then(setTree).catch(e => setErr(String(e)))
   }, [])
+
+  // Auto-pick a default file (readme/index/home/first-md) when the share
+  // URL doesn't specify one. Same algorithm as the admin SpaceView so
+  // guests land on something instead of an empty viewer.
+  useEffect(() => {
+    if (file) return
+    if (!tree || tree.length === 0) return
+    const landing = findDefaultFile(tree)
+    if (landing) setSearchParams({ file: landing.path }, { replace: true })
+  }, [file, tree, setSearchParams])
 
   const refreshComments = useCallback(() => {
     if (!file) { setComments([]); return }

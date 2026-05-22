@@ -40,6 +40,62 @@ function ext(path: string): string {
 }
 
 export function isMarkdownFile(path: string): boolean { return MARKDOWN_EXTS.has(ext(path)) }
+
+/**
+ * Hunt for the file that should open by default when the user lands on a
+ * Space with no explicit `?file=` param. Tries a layered match:
+ *
+ *   1. Readme-style names at root, in priority order
+ *   2. Same names anywhere in the subtree (depth ≤ 3)
+ *   3. Any markdown file we can find
+ *
+ * Returns null only if the Space is completely empty of markdown.
+ */
+type EntryLike = { name: string; path: string; is_dir: boolean; children?: EntryLike[] }
+const README_PATTERNS = [
+  /^readme(\.(md|markdown|txt))?$/i,
+  /^index\.(md|markdown)$/i,
+  /^_index\.(md|markdown)$/i,
+  /^home\.(md|markdown)$/i,
+  /^start(\.(md|markdown))?$/i,
+]
+export function findDefaultFile(tree: EntryLike[]): EntryLike | null {
+  for (const pattern of README_PATTERNS) {
+    const hit = tree.find(e => !e.is_dir && pattern.test(e.name))
+    if (hit) return hit
+  }
+  function scan(entries: EntryLike[], depth: number): EntryLike | null {
+    if (depth > 3) return null
+    for (const pattern of README_PATTERNS) {
+      for (const e of entries) {
+        if (!e.is_dir && pattern.test(e.name)) return e
+      }
+    }
+    for (const e of entries) {
+      if (e.is_dir && e.children) {
+        const hit = scan(e.children, depth + 1)
+        if (hit) return hit
+      }
+    }
+    return null
+  }
+  const nested = scan(tree, 1)
+  if (nested) return nested
+  function firstMd(entries: EntryLike[]): EntryLike | null {
+    for (const e of entries) {
+      if (!e.is_dir && isMarkdownFile(e.name)) return e
+    }
+    for (const e of entries) {
+      if (e.is_dir && e.children) {
+        const m = firstMd(e.children)
+        if (m) return m
+      }
+    }
+    return null
+  }
+  return firstMd(tree)
+}
+
 export function isImageFile(path: string): boolean    { return IMAGE_EXTS.has(ext(path)) }
 export function isPDFFile(path: string): boolean      { return PDF_EXTS.has(ext(path)) }
 export function isVideoFile(path: string): boolean    { return VIDEO_EXTS.has(ext(path)) }

@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette } from 'lucide-react'
 import * as api from '../lib/api'
-import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
+import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
 import { MarkdownView } from '../components/MarkdownView'
 // Monaco is heavy (~3MB). Load it only when the user actually starts editing.
@@ -95,16 +95,16 @@ export function SpaceView() {
   }, [theme])
 
   // ---------- Default landing file ----------
-  // When the user opens a Space without a ?file= query param we want to land
-  // on README.md (case-insensitive, top-level) if it exists. This runs once
-  // the tree has loaded; subsequent navigations are user-driven via
-  // setSearchParams, so the condition `!file` stops this from clobbering
-  // anything the user picks.
+  // When the user opens a Space without a ?file= query param we try to land
+  // on a sensible default: readme.md / index.md / home.md / start.md at the
+  // root, then the same names anywhere in the tree, then any markdown file.
+  // The condition `!file` stops this from clobbering whatever the user
+  // navigates to next.
   useEffect(() => {
     if (file) return
     if (!tree || tree.length === 0) return
-    const readme = tree.find(e => !e.is_dir && /^readme\.(md|markdown|txt)$/i.test(e.name))
-    if (readme) setSearchParams({ file: readme.path }, { replace: true })
+    const landing = findDefaultFile(tree)
+    if (landing) setSearchParams({ file: landing.path }, { replace: true })
   }, [file, tree, setSearchParams])
 
   // ---------- Per-file scroll-position memory ----------
