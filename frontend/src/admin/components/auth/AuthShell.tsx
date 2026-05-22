@@ -13,7 +13,7 @@ type Props = {
  */
 export function AuthShell({ title, subtitle, children }: Props) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-[var(--notation-bg)] text-zinc-900 dark:text-zinc-200 p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--notation-bg)] text-zinc-900 dark:text-zinc-200 p-6">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-9 h-9 rounded-md bg-zinc-900 text-white dark:bg-[color:var(--notation-accent-15)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-lg">

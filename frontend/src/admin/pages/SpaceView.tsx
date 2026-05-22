@@ -48,7 +48,7 @@ export function SpaceView() {
   }, [])
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
-    // Default closed on phones â€” give the user the content first. On desktop
+    // Default closed on phones Ã¢â‚¬â€ give the user the content first. On desktop
     // the sidebar is the workspace navigator, default-open is the right call.
     if (typeof window === 'undefined') return true
     return !window.matchMedia('(max-width: 767px)').matches
@@ -146,7 +146,7 @@ export function SpaceView() {
   }, [spaceID, file, content, location.hash])
 
   // ---------- Sidebar drag-resize ----------
-  // Manual implementation rather than a library ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the handle is a vertical
+  // Manual implementation rather than a library ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the handle is a vertical
   // strip on the aside's right edge; mousedown registers global mousemove +
   // mouseup so the cursor keeps dragging even if it briefly leaves the
   // handle. The body cursor + select-none make the gesture feel native.
@@ -274,7 +274,7 @@ export function SpaceView() {
   const uploadInto = useCallback(async (fileList: FileList, parentDir: string) => {
     const files = Array.from(fileList)
     if (files.length === 0) return
-    setUploadStatus(`Uploading ${files.length}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦`)
+    setUploadStatus(`Uploading ${files.length}ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦`)
     let ok = 0
     for (const f of files) {
       const target = parentDir ? `${parentDir}/${f.name}` : f.name
@@ -356,7 +356,7 @@ export function SpaceView() {
     (p: string) => {
       setSearchParams({ file: p })
       // On mobile, after picking a file we want the content full-screen
-      // immediately â€” keep the drawer behaviour explorer-like.
+      // immediately Ã¢â‚¬â€ keep the drawer behaviour explorer-like.
       if (isMobile) setSidebarOpen(false)
     },
     [setSearchParams, isMobile],
@@ -391,7 +391,7 @@ export function SpaceView() {
   function onNewAnchorComment(anchor: api.CommentAnchor) {
     setPendingAnchor(anchor)
     setShowComments(true)
-    // Don't pre-fill the textarea with the quote ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the anchor metadata renders
+    // Don't pre-fill the textarea with the quote ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the anchor metadata renders
     // the quote in the CommentRow already, double-display looked wrong.
   }
 
@@ -435,7 +435,7 @@ export function SpaceView() {
         })
         .catch(e => setErr(String(e)))
     } else {
-      // Binary file ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â viewer streams via direct URL, no content fetch needed.
+      // Binary file ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â viewer streams via direct URL, no content fetch needed.
       setContent('')
       setEtag(null)
     }
@@ -444,11 +444,11 @@ export function SpaceView() {
     refreshComments()
   }, [spaceID, file, refreshComments])
 
-  // uploadFiles is the single ingress point for the upload UX ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â both the
+  // uploadFiles is the single ingress point for the upload UX ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â both the
   // drag-drop overlay AND the explicit "Upload" button call into it.
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return
-    setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦`)
+    setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦`)
     let ok = 0
     let lastPath = ''
     for (const f of files) {
@@ -489,12 +489,12 @@ export function SpaceView() {
         e.preventDefault()
         onNewFile()
       }
-      // Cmd/Ctrl+K ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â file palette
+      // Cmd/Ctrl+K ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â file palette
       if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setPaletteOpen(true)
       }
-      // Cmd/Ctrl+Shift+F ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â full-text search
+      // Cmd/Ctrl+Shift+F ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â full-text search
       if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setSearchOpen(true)
@@ -524,7 +524,7 @@ export function SpaceView() {
   const allFiles = flattenTree(tree)
 
   return (
-    <div className="flex h-screen bg-white dark:bg-[var(--notation-bg)] text-zinc-900 dark:text-zinc-300 font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
+    <div className="flex h-screen bg-[var(--notation-bg)] text-zinc-900 dark:text-zinc-300 font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
       {themeOpen && <ThemePalette onClose={() => setThemeOpen(false)} />}
       
@@ -539,14 +539,14 @@ export function SpaceView() {
       )}
 
       <aside
-        className={`flex flex-col bg-zinc-50 dark:bg-[var(--notation-bg-elevated)] border-r border-zinc-200 dark:border-zinc-800/50
+        className={`flex flex-col bg-[var(--notation-bg-elevated)] border-r border-zinc-200 dark:border-zinc-800/50
           fixed inset-y-0 left-0 z-40 w-72
           md:static md:z-auto md:w-auto md:flex-shrink-0
           ${resizing ? '' : 'transition-transform md:transition-[width] duration-200 ease-in-out'}
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           ${!sidebarOpen ? 'md:border-r-0' : ''}`}
         style={{
-          // Inline width is desktop-only â€” mobile uses the static w-72 class.
+          // Inline width is desktop-only Ã¢â‚¬â€ mobile uses the static w-72 class.
           width: isMobile ? undefined : (sidebarOpen ? sidebarWidth : 0),
         }}
       >
@@ -668,7 +668,7 @@ export function SpaceView() {
       </aside>
 
       <main
-        className="flex-1 flex flex-col min-w-0 bg-white dark:bg-[var(--notation-bg)] relative"
+        className="flex-1 flex flex-col min-w-0 bg-[var(--notation-bg)] relative"
         onDragEnter={e => {
           if (e.dataTransfer.types.includes('Files')) setDragOver(true)
         }}
@@ -700,7 +700,7 @@ export function SpaceView() {
             {uploadStatus}
           </div>
         )}
-        <header className="h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 bg-white/80 dark:bg-[var(--notation-bg)]/80 backdrop-blur-sm">
+        <header className="h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 bg-[color:var(--notation-bg-elevated)]/90 backdrop-blur-sm">
           <div className="flex items-center gap-2 overflow-hidden">
             {/* Single always-visible toggle for the left sidebar. The previous
                 "hover to reveal" close button was undiscoverable; one explicit
@@ -820,7 +820,7 @@ export function SpaceView() {
               />
             ) : file ? (
               // In edit mode the editor manages its own scroll, so the wrapper
-              // must give it a definite height ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â otherwise Monaco's `height: 100%`
+              // must give it a definite height ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â otherwise Monaco's `height: 100%`
               // collapses to zero and the text is invisible. In read mode we
               // want the natural-flow content with bottom padding instead.
               <div
@@ -840,7 +840,7 @@ export function SpaceView() {
                   <Suspense
                     fallback={
                       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-                        Loading editorÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦
+                        Loading editorÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦
                       </div>
                     }
                   >
@@ -855,7 +855,7 @@ export function SpaceView() {
                         setContent(c)
                         setEtag(newEtag)
                         refreshTree()
-                        // Drop back to read mode after a successful save ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the
+                        // Drop back to read mode after a successful save ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the
                         // user can re-enter edit via the Eye/Edit toggle in
                         // the header.
                         setEditing(false)
@@ -899,15 +899,15 @@ export function SpaceView() {
           </div>
 
           {showOutline && file && !editing && isMarkdownFile(file) && (
-            <div className="w-[240px] border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-[var(--notation-bg)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-4 duration-200 overflow-y-auto">
+            <div className="w-[240px] border-l border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-4 duration-200 overflow-y-auto">
               <Outline content={content} />
               <BacklinksPanel spaceID={spaceID} path={file} onSelect={selectFile} />
             </div>
           )}
 
           {showComments && file && (
-            <div id="comments-panel" className="w-[320px] border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[var(--notation-bg)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
-              <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-950">
+            <div id="comments-panel" className="w-[320px] border-l border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
+              <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-[var(--notation-bg-elevated)]">
                  <h3 className="font-semibold text-sm text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
                     <MessageSquare size={16} /> Comments
                  </h3>
@@ -916,7 +916,7 @@ export function SpaceView() {
               {pendingAnchor && (
                 <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/50 text-xs">
                   <div className="text-amber-900 dark:text-amber-300 font-semibold mb-1">Anchoring to selection</div>
-                  <div className="text-amber-800 dark:text-amber-400/80 italic line-clamp-2">ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ{pendingAnchor.quote}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â</div>
+                  <div className="text-amber-800 dark:text-amber-400/80 italic line-clamp-2">ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“{pendingAnchor.quote}ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â</div>
                   <button
                     onClick={() => { setPendingAnchor(null); setPendingComment('') }}
                     className="mt-1 text-amber-700 dark:text-amber-300 hover:underline"

@@ -103,7 +103,7 @@ export default function Editor({
     const model = editor.getModel()
     if (!model) return
     const text = model.getValueInRange(sel)
-    // If the surrounding chars already match, strip Ã¢â‚¬â€ toggle semantics.
+    // If the surrounding chars already match, strip ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â toggle semantics.
     const startLine = sel.startLineNumber
     const startCol = sel.startColumn
     const endLine = sel.endLineNumber
@@ -212,7 +212,7 @@ export default function Editor({
     editorRef.current = editor
     monacoRef.current = monaco
 
-    // Disable auto-pairing Ã¢â‚¬â€ we own [[]] / ()/etc via toolbar + commands.
+    // Disable auto-pairing ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â we own [[]] / ()/etc via toolbar + commands.
     editor.updateOptions({ autoClosingBrackets: 'never', autoClosingQuotes: 'never' })
 
     // ---- commands (keyboard shortcuts) ----
@@ -239,7 +239,7 @@ export default function Editor({
     })
     editor.addAction({
       id: 'notation.wikilink',
-      label: 'Insert wiki-linkÃ¢â‚¬Â¦',
+      label: 'Insert wiki-linkÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦',
       contextMenuGroupId: 'notation',
       contextMenuOrder: 3,
       run: () => startWikiLink(),
@@ -279,7 +279,7 @@ export default function Editor({
             }),
           }
         }
-        // Heading suggestions Ã¢â‚¬â€ pull from the current buffer or fetch.
+        // Heading suggestions ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pull from the current buffer or fetch.
         const filePart = query.slice(0, hash)
         const headingQuery = query.slice(hash + 1).toLowerCase()
         const targetPath = filePart === '' || `${filePart}.md` === pathRef.current
@@ -331,7 +331,7 @@ export default function Editor({
     const selDisp = editor.onDidChangeCursorSelection(updateSelTool)
     const scrollDisp = editor.onDidScrollChange(updateSelTool)
     const blurDisp = editor.onDidBlurEditorWidget(() => {
-      // Don't tear down the toolbar on blur Ã¢â‚¬â€ the user is likely about to
+      // Don't tear down the toolbar on blur ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the user is likely about to
       // click one of the floating buttons, which steals focus from Monaco.
     })
 
@@ -402,7 +402,7 @@ export default function Editor({
   // ---- render -------------------------------------------------------------
 
   return (
-    <div className="relative flex flex-col h-full min-h-0 bg-white dark:bg-[var(--notation-bg)]">
+    <div className="relative flex flex-col h-full min-h-0 bg-[var(--notation-bg)]">
       <Toolbar
         dirty={dirty}
         saving={saving}
@@ -528,10 +528,10 @@ function Toolbar({ dirty, saving, err, onSave, onAction }: ToolbarProps) {
       </ToolGroup>
       <Divider />
       <ToolGroup>
-        <ToolBtn icon={Bold} title="Bold (Ã¢Å’ËœB)" onClick={() => onAction('bold')} />
-        <ToolBtn icon={Italic} title="Italic (Ã¢Å’ËœI)" onClick={() => onAction('italic')} />
+        <ToolBtn icon={Bold} title="Bold (ÃƒÂ¢Ã…â€™Ã‹Å“B)" onClick={() => onAction('bold')} />
+        <ToolBtn icon={Italic} title="Italic (ÃƒÂ¢Ã…â€™Ã‹Å“I)" onClick={() => onAction('italic')} />
         <ToolBtn icon={Strikethrough} title="Strikethrough" onClick={() => onAction('strike')} />
-        <ToolBtn icon={Highlighter} title="Highlight (Ã¢Å’ËœE)" onClick={() => onAction('highlight')} />
+        <ToolBtn icon={Highlighter} title="Highlight (ÃƒÂ¢Ã…â€™Ã‹Å“E)" onClick={() => onAction('highlight')} />
         <ToolBtn icon={Code} title="Inline code" onClick={() => onAction('code')} />
       </ToolGroup>
       <Divider />
@@ -560,9 +560,9 @@ function Toolbar({ dirty, saving, err, onSave, onAction }: ToolbarProps) {
           onClick={onSave}
           disabled={!dirty || saving}
           className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40"
-          title="Save (Ã¢Å’ËœS)"
+          title="Save (ÃƒÂ¢Ã…â€™Ã‹Å“S)"
         >
-          <Save size={13} /> {saving ? 'SavingÃ¢â‚¬Â¦' : 'Save'}
+          <Save size={13} /> {saving ? 'SavingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' : 'Save'}
         </button>
       </div>
     </div>

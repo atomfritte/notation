@@ -15,7 +15,24 @@
  * ThemePalette overrides every variable when the user switches / creates a
  * theme, so all consumers re-render in the new accent automatically.
  */
+/* Defaults — the ThemePalette overwrites both blocks below with a dynamic
+   <style id="notation-theme-style"> tag, but we ship sane fallbacks so the
+   app paints correctly on the very first render (before initTheme runs).
+   The variables apply to BOTH light and dark mode now; we no longer require
+   a `dark:` prefix in the Tailwind classes — toggling the `.dark` class on
+   <html> picks the right palette via the cascade. */
 :root {
+  --notation-accent: #65A30D;
+  --notation-accent-10: #65A30D1A;
+  --notation-accent-15: #65A30D26;
+  --notation-accent-20: #65A30D33;
+  --notation-accent-30: #65A30D4D;
+  --notation-accent-40: #65A30D66;
+  --notation-accent-50: #65A30D80;
+  --notation-bg: #FFFFFF;
+  --notation-bg-elevated: #FAFAFA;
+}
+.dark {
   --notation-accent: #BFF355;
   --notation-accent-10: #BFF3551A;
   --notation-accent-15: #BFF35526;
@@ -23,10 +40,7 @@
   --notation-accent-30: #BFF3554D;
   --notation-accent-40: #BFF35566;
   --notation-accent-50: #BFF35580;
-  /* Page-level surfaces. These only kick in for dark mode classes that
-     read them via Tailwind's arbitrary-value syntax â€”
-     `dark:bg-[var(--notation-bg)]` â€” so light mode is unaffected. */
-  --notation-bg: #0a0a0a;
+  --notation-bg: #0A0A0A;
   --notation-bg-elevated: #111111;
 }
 
@@ -97,8 +111,10 @@
 }
 
 @layer base {
-  html, body, #root { 
-    @apply h-full bg-white text-zinc-800 dark:bg-[var(--notation-bg)] dark:text-zinc-300 transition-colors duration-200; 
+  html, body, #root {
+    /* Background reads the variable, which resolves differently in :root vs
+       .dark scope — so the same class paints both modes correctly. */
+    @apply h-full bg-[var(--notation-bg)] text-zinc-800 dark:text-zinc-300 transition-colors duration-200;
   }
   body { 
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; 
@@ -112,7 +128,7 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-zinc-300 rounded-full border-2 border-solid border-white dark:bg-zinc-800 dark:border-[#0a0a0a];
+    @apply bg-zinc-300 rounded-full border-2 border-solid border-white dark:bg-zinc-800 dark:border-[var(--notation-bg)];
   }
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-zinc-400 dark:bg-zinc-700;

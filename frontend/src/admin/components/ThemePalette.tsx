@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Palette, Check, Trash2, X, Sparkles, Pencil, Download, RotateCcw, Save } from 'lucide-react'
+import { Palette, Check, Trash2, X, Sparkles, Pencil, Download, RotateCcw, Save, Sun, Moon } from 'lucide-react'
 import {
   type Theme,
+  type ModePalette,
   BUILTIN_THEMES,
   applyTheme,
   loadCustomThemes,
@@ -16,27 +17,27 @@ import {
 type Props = { onClose: () => void }
 
 type TabKey = 'presets' | 'edit' | 'import'
+type Mode = 'dark' | 'light'
 
 /**
- * ThemePalette v2 — tabbed editor.
+ * ThemePalette v3 — tabbed editor that handles light + dark palettes.
  *
- *   Presets  — built-ins + saved customs, click a card to apply.
- *   Edit     — sliders/pickers for accent, bg, bg-elevated, plus name + Save.
- *              Live preview applies the moment the user changes a swatch.
- *   Import   — paste a VS Code colour-theme JSON; we extract the three
- *              colours we model and load them into the Edit tab.
+ * Each theme defines THREE colours (accent / bg / surface) for EACH of two
+ * modes (dark / light). The Edit tab has a Dark/Light mode toggle at the top
+ * so the user only sees three pickers at a time, and a dual preview card
+ * shows both modes side-by-side so the user can eyeball the pairing.
  *
- * The currently-previewed theme lives in component state; persistence happens
- * on Save (writes to custom themes + sets as active) or on picking a preset
- * (sets as active). Picking a preset jumps the Edit tab's working copy to
- * that theme too, so "preset → tweak → save" feels seamless.
+ * Imports follow the same rule: a VS-Code theme that declares `"type":"dark"`
+ * fills only the dark mode of the working theme, leaving light alone.
  */
 export function ThemePalette({ onClose }: Props) {
   const [tab, setTab] = useState<TabKey>('presets')
+  const [editMode, setEditMode] = useState<Mode>(() =>
+    document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+  )
   const [activeName, setActiveName] = useState<string>(getActiveThemeName())
   const [customs, setCustoms] = useState<Theme[]>(loadCustomThemes())
-  // Working copy for the Edit tab.
-  const [working, setWorking] = useState<Theme>(() => ({ ...findTheme(getActiveThemeName()), builtIn: false }))
+  const [working, setWorking] = useState<Theme>(() => deepClone(findTheme(getActiveThemeName())))
   const [importText, setImportText] = useState('')
   const [importWarnings, setImportWarnings] = useState<string[]>([])
   const [importError, setImportError] = useState<string | null>(null)
@@ -51,19 +52,28 @@ export function ThemePalette({ onClose }: Props) {
     applyTheme(t)
     setActiveThemeName(t.name)
     setActiveName(t.name)
-    setWorking({ ...t, builtIn: false })
+    setWorking(deepClone(t))
   }
 
-  function updateWorking(patch: Partial<Theme>) {
-    const next = { ...working, ...patch }
+  function updatePalette(mode: Mode, patch: Partial<ModePalette>) {
+    const next: Theme = {
+      ...working,
+      [mode]: { ...working[mode], ...patch },
+      builtIn: false,
+    }
     setWorking(next)
-    applyTheme(next) // live preview
+    applyTheme(next) // live preview, both modes
+  }
+
+  function updateName(name: string) {
+    setWorking({ ...working, name, builtIn: false })
   }
 
   function onSaveCustom() {
     const name = working.name.trim()
     if (!name) return
-    saveCustomTheme({ ...working, name })
+    const t = { ...working, name, builtIn: false }
+    saveCustomTheme(t)
     setCustoms(loadCustomThemes())
     setActiveThemeName(name)
     setActiveName(name)
@@ -93,7 +103,7 @@ export function ThemePalette({ onClose }: Props) {
 
   function revertToActive() {
     const t = findTheme(activeName)
-    setWorking({ ...t, builtIn: false })
+    setWorking(deepClone(t))
     applyTheme(t)
   }
 
@@ -103,9 +113,9 @@ export function ThemePalette({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-[var(--notation-bg-elevated)] border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl max-w-2xl w-full animate-in zoom-in-95 duration-150 overflow-hidden flex flex-col"
+        className="bg-[var(--notation-bg-elevated)] border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl max-w-2xl w-full animate-in zoom-in-95 duration-150 overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
-        style={{ maxHeight: '85vh' }}
+        style={{ maxHeight: '88vh' }}
       >
         <div className="flex items-start justify-between px-6 pt-6 pb-4">
           <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
@@ -138,7 +148,10 @@ export function ThemePalette({ onClose }: Props) {
           {tab === 'edit' && (
             <EditTab
               working={working}
-              onChange={updateWorking}
+              editMode={editMode}
+              onChangeMode={setEditMode}
+              onChangePalette={updatePalette}
+              onChangeName={updateName}
               onSave={onSaveCustom}
               onRevert={revertToActive}
             />
@@ -156,6 +169,15 @@ export function ThemePalette({ onClose }: Props) {
       </div>
     </div>
   )
+}
+
+function deepClone(t: Theme): Theme {
+  return {
+    name: t.name,
+    dark: { ...t.dark },
+    light: { ...t.light },
+    builtIn: false,
+  }
 }
 
 // ---- Tabs --------------------------------------------------------------
@@ -222,44 +244,55 @@ function PresetsTab({
 }
 
 function EditTab({
-  working, onChange, onSave, onRevert,
+  working, editMode, onChangeMode, onChangePalette, onChangeName, onSave, onRevert,
 }: {
   working: Theme
-  onChange: (patch: Partial<Theme>) => void
+  editMode: Mode
+  onChangeMode: (m: Mode) => void
+  onChangePalette: (mode: Mode, patch: Partial<ModePalette>) => void
+  onChangeName: (name: string) => void
   onSave: () => void
   onRevert: () => void
 }) {
+  const palette = working[editMode]
   return (
     <div className="space-y-5">
-      <PreviewCard theme={working} />
+      <DualPreview theme={working} />
+
+      <div className="flex items-center gap-2">
+        <ModeToggle active={editMode} onChange={onChangeMode} />
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          Editing the <strong className="text-zinc-700 dark:text-zinc-200">{editMode}</strong> palette
+        </span>
+      </div>
 
       <div className="space-y-3">
         <ColorRow
           label="Accent"
           help="Links, cursor, primary buttons, active states."
-          value={working.accent}
-          onChange={v => onChange({ accent: v })}
+          value={palette.accent}
+          onChange={v => onChangePalette(editMode, { accent: v })}
         />
         <ColorRow
           label="Background"
-          help="Page body (main content area in dark mode)."
-          value={working.bg}
-          onChange={v => onChange({ bg: v })}
+          help="Page body — the main content area."
+          value={palette.bg}
+          onChange={v => onChangePalette(editMode, { bg: v })}
         />
         <ColorRow
           label="Surface"
-          help="Sidebar, modals, and other elevated surfaces."
-          value={working.bgElevated}
-          onChange={v => onChange({ bgElevated: v })}
+          help="Sidebar, header, outline + comments panels, modals."
+          value={palette.bgElevated}
+          onChange={v => onChangePalette(editMode, { bgElevated: v })}
         />
       </div>
 
       <div className="flex items-center gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
         <input
           value={working.name}
-          onChange={e => onChange({ name: e.target.value })}
+          onChange={e => onChangeName(e.target.value)}
           placeholder="Theme name…"
-          className="flex-1 px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[var(--notation-bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)]"
+          className="flex-1 px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)]"
         />
         <button
           onClick={onRevert}
@@ -293,16 +326,19 @@ function ImportTab({
     <div className="space-y-3">
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
         Paste a VS&nbsp;Code colour-theme JSON. We extract the accent, the
-        editor background, and the sidebar background — everything else is
-        ignored. Comments inside the JSON are tolerated.
+        editor background, and the sidebar background. The theme's
+        <code className="px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] mx-1">"type"</code>
+        field (dark/light) decides which mode of your theme is filled —
+        the other mode keeps its current palette. Comments inside the
+        JSON are tolerated.
       </p>
       <textarea
         value={value}
         onChange={e => onChange(e.target.value)}
-        placeholder='{ "name": "Dracula Pro", "colors": { ... } }'
+        placeholder='{ "type": "dark", "name": "Tokyo Night", "colors": { ... } }'
         rows={10}
         spellCheck={false}
-        className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[var(--notation-bg)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)]"
+        className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)]"
       />
       <div className="flex items-center gap-2">
         <button
@@ -333,6 +369,30 @@ function SectionHeading({ label }: { label: string }) {
   )
 }
 
+function ModeToggle({ active, onChange }: { active: Mode; onChange: (m: Mode) => void }) {
+  return (
+    <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-[var(--notation-bg)]">
+      {([
+        { k: 'dark',  icon: <Moon size={12} />, label: 'Dark' },
+        { k: 'light', icon: <Sun size={12} />,  label: 'Light' },
+      ] as const).map(opt => (
+        <button
+          key={opt.k}
+          onClick={() => onChange(opt.k)}
+          className={
+            'px-2.5 py-1 text-xs font-medium rounded flex items-center gap-1 transition-colors ' +
+            (active === opt.k
+              ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
+              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200')
+          }
+        >
+          {opt.icon} {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function ThemeCard({
   theme, active, onClick, onDelete,
 }: {
@@ -352,8 +412,11 @@ function ThemeCard({
             : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700')
         }
       >
-        <ThemeSwatchHeader theme={theme} />
-        <div className="px-2.5 py-2 flex items-center justify-between bg-white dark:bg-[var(--notation-bg-elevated)]">
+        <div className="flex h-14">
+          <ThemeMiniSwatch palette={theme.dark} />
+          <ThemeMiniSwatch palette={theme.light} />
+        </div>
+        <div className="px-2.5 py-2 flex items-center justify-between bg-[var(--notation-bg-elevated)]">
           <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200 truncate">{theme.name}</span>
           {active && <Check size={12} className="text-[color:var(--notation-accent)] flex-shrink-0" />}
         </div>
@@ -372,42 +435,62 @@ function ThemeCard({
   )
 }
 
-function ThemeSwatchHeader({ theme }: { theme: Theme }) {
+function ThemeMiniSwatch({ palette }: { palette: ModePalette }) {
+  // Half of a theme card: a tiny representation of one mode (sidebar +
+  // body + accent dot).
   return (
-    <div className="h-14 flex" style={{ background: theme.bg }}>
-      <div className="w-1/3 h-full" style={{ background: theme.bgElevated }} />
+    <div className="flex-1 flex" style={{ background: palette.bg }}>
+      <div className="w-1/3" style={{ background: palette.bgElevated }} />
       <div className="flex-1 flex items-center justify-center">
-        <div className="w-6 h-6 rounded-full shadow-sm" style={{ background: theme.accent }} />
+        <div className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ background: palette.accent }} />
       </div>
     </div>
   )
 }
 
-function PreviewCard({ theme }: { theme: Theme }) {
-  // A miniature reproduction of the app chrome using the working colours,
-  // so the user can eyeball how the three values play together.
+function DualPreview({ theme }: { theme: Theme }) {
   return (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-      <div className="flex h-24" style={{ background: theme.bg }}>
-        <div className="w-24 p-2 flex flex-col gap-1.5" style={{ background: theme.bgElevated }}>
-          <div className="h-2 rounded" style={{ background: theme.accent, width: '70%' }} />
-          <div className="h-1.5 rounded bg-white/10" />
-          <div className="h-1.5 rounded bg-white/10" />
-          <div className="h-1.5 rounded bg-white/10" style={{ width: '60%' }} />
+    <div className="grid grid-cols-2 gap-2">
+      <PreviewCard label="Dark"  palette={theme.dark}  isDark />
+      <PreviewCard label="Light" palette={theme.light} />
+    </div>
+  )
+}
+
+function PreviewCard({ label, palette, isDark }: { label: string; palette: ModePalette; isDark?: boolean }) {
+  const textColor = isDark ? '#FFFFFFCC' : '#000000CC'
+  const lineColor = isDark ? '#FFFFFF26' : '#00000026'
+  return (
+    <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800">
+      <div className="flex h-24" style={{ background: palette.bg }}>
+        <div className="w-1/3 p-2 flex flex-col gap-1.5" style={{ background: palette.bgElevated }}>
+          <div className="h-1.5 rounded" style={{ background: palette.accent, width: '80%' }} />
+          <div className="h-1 rounded" style={{ background: lineColor }} />
+          <div className="h-1 rounded" style={{ background: lineColor, width: '70%' }} />
+          <div className="h-1 rounded" style={{ background: lineColor }} />
         </div>
-        <div className="flex-1 p-3 flex flex-col gap-1.5">
-          <div className="h-2.5 rounded bg-white/30" style={{ width: '60%' }} />
-          <div className="h-1.5 rounded bg-white/15" style={{ width: '90%' }} />
-          <div className="h-1.5 rounded bg-white/15" style={{ width: '80%' }} />
-          <div className="flex gap-1 mt-1">
-            <div className="px-2 py-0.5 text-[10px] rounded font-semibold" style={{ background: theme.accent, color: '#0a0a0a' }}>
-              Button
+        <div className="flex-1 p-2 flex flex-col gap-1.5">
+          <div className="h-2 rounded" style={{ background: textColor, width: '60%' }} />
+          <div className="h-1 rounded" style={{ background: lineColor, width: '90%' }} />
+          <div className="h-1 rounded" style={{ background: lineColor, width: '80%' }} />
+          <div className="flex gap-1 mt-auto">
+            <div
+              className="px-1.5 py-0.5 text-[9px] rounded font-semibold"
+              style={{ background: palette.accent, color: isDark ? '#0a0a0a' : '#ffffff' }}
+            >
+              Aa
             </div>
-            <div className="px-2 py-0.5 text-[10px] rounded font-mono" style={{ background: 'rgba(255,255,255,0.1)', color: theme.accent }}>
+            <div
+              className="px-1.5 py-0.5 text-[9px] rounded font-mono"
+              style={{ color: palette.accent, border: `1px solid ${palette.accent}` }}
+            >
               link
             </div>
           </div>
         </div>
+      </div>
+      <div className="px-2 py-1 text-[10px] uppercase tracking-wider font-semibold bg-[var(--notation-bg-elevated)] text-zinc-500 dark:text-zinc-400">
+        {label}
       </div>
     </div>
   )
@@ -441,7 +524,7 @@ function ColorRow({
               const v = e.target.value.toUpperCase()
               if (/^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v)
             }}
-            className="px-1.5 py-0.5 text-[11px] font-mono rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[var(--notation-bg)] w-20 focus:outline-none focus:ring-1 focus:ring-[color:var(--notation-accent-40)]"
+            className="px-1.5 py-0.5 text-[11px] font-mono rounded border border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg)] w-20 focus:outline-none focus:ring-1 focus:ring-[color:var(--notation-accent-40)]"
           />
         </div>
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">{help}</p>
