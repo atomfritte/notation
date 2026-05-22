@@ -440,6 +440,59 @@ mark.comment-anchor.comment-anchor-blink {
   font-weight: 400;
   font-family: var(--notation-code-font);
 }
+/* github.css ships a `.hljs { background: #fff }` that would otherwise
+   paint over our themed `--notation-code-bg` on the surrounding `<pre>`.
+   Force the highlighted code block transparent so the pre's bg shows. */
+.prose .hljs,
+.prose pre code.hljs {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Dark-mode hljs palette — github-dark's colours, scoped to `.dark` so the
+   bundled github.css (light) acts as the base + the overrides only kick
+   in when the documentElement has the `.dark` class. */
+.dark .prose .hljs            { color: #c9d1d9; }
+.dark .prose .hljs-doctag,
+.dark .prose .hljs-keyword,
+.dark .prose .hljs-meta .hljs-keyword,
+.dark .prose .hljs-template-tag,
+.dark .prose .hljs-template-variable,
+.dark .prose .hljs-type,
+.dark .prose .hljs-variable.language_   { color: #ff7b72; }
+.dark .prose .hljs-title,
+.dark .prose .hljs-title.class_,
+.dark .prose .hljs-title.class_.inherited__,
+.dark .prose .hljs-title.function_      { color: #d2a8ff; }
+.dark .prose .hljs-attr,
+.dark .prose .hljs-attribute,
+.dark .prose .hljs-literal,
+.dark .prose .hljs-meta,
+.dark .prose .hljs-number,
+.dark .prose .hljs-operator,
+.dark .prose .hljs-selector-attr,
+.dark .prose .hljs-selector-class,
+.dark .prose .hljs-selector-id,
+.dark .prose .hljs-variable             { color: #79c0ff; }
+.dark .prose .hljs-meta .hljs-string,
+.dark .prose .hljs-regexp,
+.dark .prose .hljs-string               { color: #a5d6ff; }
+.dark .prose .hljs-built_in,
+.dark .prose .hljs-symbol               { color: #ffa657; }
+.dark .prose .hljs-code,
+.dark .prose .hljs-comment,
+.dark .prose .hljs-formula              { color: #8b949e; }
+.dark .prose .hljs-name,
+.dark .prose .hljs-quote,
+.dark .prose .hljs-selector-tag,
+.dark .prose .hljs-selector-pseudo,
+.dark .prose .hljs-subst                { color: #7ee787; }
+.dark .prose .hljs-section              { color: #1f6feb; font-weight: 700; }
+.dark .prose .hljs-bullet               { color: #f2cc60; }
+.dark .prose .hljs-emphasis             { color: #c9d1d9; font-style: italic; }
+.dark .prose .hljs-strong               { color: #c9d1d9; font-weight: 700; }
+.dark .prose .hljs-addition             { color: #aff5b4; background-color: #033a16; }
+.dark .prose .hljs-deletion             { color: #ffdcd7; background-color: #67060c; }
 
 /* Prose colours come from theme variables in BOTH modes — the variables
    themselves swap via :root vs .dark scope, so we don't need a separate

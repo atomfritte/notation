@@ -13,36 +13,11 @@ import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
 import { Mermaid } from './Mermaid'
 import 'katex/dist/katex.min.css'
-// Load both highlight.js palettes as raw strings via Vite's `?inline`
-// query so we can apply them scoped per mode: github.css runs globally
-// for light mode; every rule in github-dark.css is rewritten so its
-// selectors are prefixed with `.dark` before injection. That way the
-// dark palette's pastel hues only kick in when the documentElement has
-// the `.dark` class.
-//
-// The selector-rewrite has to cover ALL hljs selectors github-dark
-// emits — not just `.hljs-foo` but also `pre code.hljs`, `code.hljs`,
-// and any contextual variants — otherwise the unscoped rules paint the
-// dark bg + light text in light mode (the bug the user saw).
-import githubLight from 'highlight.js/styles/github.css?inline'
-import githubDark  from 'highlight.js/styles/github-dark.css?inline'
-if (typeof document !== 'undefined' && !document.getElementById('notation-hljs-styles')) {
-  const tag = document.createElement('style')
-  tag.id = 'notation-hljs-styles'
-  // Walk every rule (selector block followed by `{ … }`). For each
-  // comma-separated selector, prepend `.dark ` so the whole sheet
-  // applies only under `.dark`. @-rules and existing scoped rules pass
-  // through untouched.
-  const darkScoped = githubDark.replace(/(^|\})\s*([^{}@]+?)\s*\{/g, (_, brace, selectors) => {
-    const scoped = selectors
-      .split(',')
-      .map((s: string) => `.dark ${s.trim()}`)
-      .join(', ')
-    return `${brace}\n${scoped} {`
-  })
-  tag.textContent = githubLight + '\n' + darkScoped
-  document.head.appendChild(tag)
-}
+// Load the light-mode hljs palette globally; dark-mode overrides live in
+// shared/index.css as hand-rolled `.dark .hljs-*` rules. This avoids the
+// fragile selector-rewrite hack we tried first (which missed base rules
+// like `pre code.hljs` and let the dark palette bleed into light mode).
+import 'highlight.js/styles/github.css'
 
 // Schema for rehype-sanitize. We start from the spec defaults (which strip
 // <script>, on* handlers, javascript: hrefs, etc.) and add a small allowlist
