@@ -30,13 +30,18 @@ export default function SpreadsheetView({ url }: Props) {
     setWorkbook(null)
     ;(async () => {
       try {
-        const [{ default: XLSX }, res] = await Promise.all([
+        // The xlsx package ships ESM with NAMED exports — there's no
+        // `default`, so destructuring `{ default: XLSX }` makes XLSX
+        // undefined at runtime (TS doesn't catch it because we cast through
+        // `any`). Use a namespace import instead.
+        const [xlsxMod, res] = await Promise.all([
           import('xlsx'),
           fetch(url),
         ])
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const buf = await res.arrayBuffer()
-        const wb = (XLSX as any).read(buf, { type: 'array' })
+        const XLSX: any = (xlsxMod as any).default ?? xlsxMod
+        const wb = XLSX.read(buf, { type: 'array' })
         if (cancelled) return
         setWorkbook(wb)
         setActiveSheet(wb.SheetNames[0] ?? '')
@@ -103,17 +108,19 @@ function SheetTable({ workbook, sheetName }: { workbook: any; sheetName: string 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [{ default: XLSX }, { default: DOMPurify }] = await Promise.all([
+      const [xlsxMod, purifyMod] = await Promise.all([
         import('xlsx'),
         import('dompurify'),
       ])
       if (cancelled) return
+      const XLSX: any = (xlsxMod as any).default ?? xlsxMod
+      const DOMPurify: any = (purifyMod as any).default ?? purifyMod
       const ws = workbook.Sheets[sheetName]
       if (!ws) {
         setHtml('')
         return
       }
-      const raw = (XLSX as any).utils.sheet_to_html(ws)
+      const raw = XLSX.utils.sheet_to_html(ws)
       // Tight allowlist: only table-structure tags + the cell-content tags
       // SheetJS emits. No href, no src, no style — the inline styles SheetJS
       // adds for borders are nice-to-have, not security-relevant.

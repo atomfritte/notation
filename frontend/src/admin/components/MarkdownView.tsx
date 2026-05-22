@@ -261,6 +261,16 @@ export function MarkdownView({
             [rehypeHighlight, { detect: true, ignoreMissing: true }],
           ]}
           components={{
+            // Wrap every table in a div so wide tables can scroll horizontally
+            // without breaking the page width, while short tables can stretch
+            // their last column to fill the wrap (zebra striping extends all
+            // the way to the right edge). Styling lives in shared/index.css
+            // under `.prose-table-wrap`.
+            table: ({ node, ...props }) => (
+              <div className="prose-table-wrap">
+                <table {...props} />
+              </div>
+            ),
             a: ({ href, children, className, ...rest }) => {
               if (!href) {
                 return (

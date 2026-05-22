@@ -325,20 +325,27 @@ mark.comment-anchor.comment-anchor-blink {
 
 /* --- Tables -------------------------------------------------------------
    Tables get a panel-card treatment so they read as structured data inside
-   the prose flow: rounded outer border, uppercase muted header band,
-   subtle zebra striping that follows the theme's surfaces, and an accent-
-   tinted hover row. Wrapped in display:block + overflow-x:auto so wide
-   tables scroll horizontally on phones instead of pushing the page. */
-.prose table {
-  display: block;
-  overflow-x: auto;
-  width: 100%;
-  font-size: 0.9em;
+   the prose flow. The outer border + radius + horizontal-scroll behaviour
+   live on a wrapper div (`.prose-table-wrap`) that MarkdownView injects
+   around every `<table>`, so the table itself can use real `display:table`
+   layout — that means short tables stretch their columns to fill the wrap
+   (zebra striping reaches the right edge), and wide tables overflow the
+   wrap horizontally so it can scroll. */
+.prose .prose-table-wrap {
+  margin: 1.6em 0;
   border: 1px solid var(--notation-border);
   border-radius: 8px;
+  overflow-x: auto;
+}
+.prose .prose-table-wrap table {
+  width: 100%;
+  min-width: max-content;
+  margin: 0;
+  font-size: 0.9em;
+  border: 0;
+  border-radius: 0;
   border-collapse: separate;
   border-spacing: 0;
-  margin: 1.6em 0;
 }
 .prose table thead {
   background-color: color-mix(in srgb, var(--notation-bg-elevated), var(--notation-border) 40%);
