@@ -63,7 +63,10 @@ async function asError(r: Response): Promise<Error> {
 }
 
 function encodePath(p: string): string {
+  // NFC-normalise before encoding so filenames typed on different OSes
+  // round-trip cleanly through the URL → backend → filesystem lookup.
   return p
+    .normalize('NFC')
     .split('/')
     .filter(Boolean)
     .map(encodeURIComponent)

@@ -34,7 +34,13 @@ export const remarkWikiLink: Plugin<[], Root> = () => (tree) => {
       if (start > cursor) {
         out.push({ type: 'text', value: value.slice(cursor, start) } as Text)
       }
-      let target = m[1].trim()
+      // Aggressively normalise the captured payload before we touch it:
+      //   - NFC unifies combining-mark variants (NFD `U + ̈` → NFC `Ü`)
+      //     so a file named "Übersicht.md" matches `[[Übersicht]]` even if
+      //     the typist's editor or filesystem produced a different form.
+      //   - We then split off the pipe / hash AFTER normalisation so the
+      //     display label and the anchor inherit the same canonical chars.
+      let target = m[1].trim().normalize('NFC')
       let display = target
       const pipe = target.indexOf('|')
       if (pipe >= 0) {
@@ -74,8 +80,13 @@ export const remarkWikiLink: Plugin<[], Root> = () => (tree) => {
  * Doesn't handle the +1 numeric suffix that rehype-slug appends to duplicate
  * headings on the same page (rare in practice, can be addressed if it bites).
  */
+// github-slugger-equivalent algorithm: normalise to NFC, lower-case, drop
+// punctuation but keep Unicode letters / digits / spaces / hyphens, collapse
+// runs of whitespace to "-". Mirrors the slug rehype-slug stamps into the
+// rendered <h2 id> so anchor links resolve.
 function slugifyHeading(s: string): string {
   return s
+    .normalize('NFC')
     .trim()
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s-]/gu, '')
