@@ -1,6 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@plugin "@tailwindcss/typography";
+
+/* Tailwind 4 moves dark-mode strategy into CSS. We use the `dark` class on
+   <html> (and any ancestor), so `dark:foo` utilities apply to descendants. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* ---- Theme variables -----------------------------------------------------
  *
@@ -16,7 +20,7 @@
  * theme, so all consumers re-render in the new accent automatically.
  */
 /* Defaults — the ThemePalette overwrites both blocks below with a dynamic
-   <style id="notation-theme-style"> tag, but we ship sane fallbacks so the
+   \3c style id="notation-theme-style"> tag, but we ship sane fallbacks so the
    app paints correctly on the very first render (before initTheme runs).
    The variables apply to BOTH light and dark mode now; we no longer require
    a `dark:` prefix in the Tailwind classes — toggling the `.dark` class on
@@ -243,20 +247,20 @@ mark.comment-anchor.comment-anchor-blink {
    matches the rest of the app. Borders + zebra striping + readable padding. */
 .sheetjs-table table {
   @apply border-collapse text-sm w-auto;
-  border: 1px solid theme('colors.zinc.300');
+  border: 1px solid var(--color-zinc-300);
 }
 .dark .sheetjs-table table {
-  border-color: theme('colors.zinc.700');
+  border-color: var(--color-zinc-700);
 }
 .sheetjs-table th,
 .sheetjs-table td {
   @apply px-3 py-1.5 align-top;
-  border: 1px solid theme('colors.zinc.200');
+  border: 1px solid var(--color-zinc-200);
   white-space: pre-wrap;
 }
 .dark .sheetjs-table th,
 .dark .sheetjs-table td {
-  border-color: theme('colors.zinc.800');
+  border-color: var(--color-zinc-800);
 }
 .sheetjs-table tr:nth-child(odd) td {
   @apply bg-zinc-50/60;
