@@ -9,7 +9,7 @@ type Props = { url: string; path: string }
  * Security model: the file is fetched as an ArrayBuffer and parsed
  * entirely on the client (SheetJS is a pure-JS parser). The HTML SheetJS
  * emits via `sheet_to_html` is then run through DOMPurify with a tight
- * allowlist before we drop it into the DOM via dangerouslySetInnerHTML â€”
+ * allowlist before we drop it into the DOM via dangerouslySetInnerHTML Ã¢â‚¬â€
  * so even if a hostile workbook smuggles markup through the parser, it
  * can't execute scripts, load remote resources, or set on* handlers.
  *
@@ -54,7 +54,7 @@ export default function SpreadsheetView({ url }: Props) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm gap-2">
-        <Sheet size={16} /> Parsing spreadsheetâ€¦
+        <Sheet size={16} /> Parsing spreadsheetÃ¢â‚¬Â¦
       </div>
     )
   }
@@ -115,7 +115,7 @@ function SheetTable({ workbook, sheetName }: { workbook: any; sheetName: string 
       }
       const raw = (XLSX as any).utils.sheet_to_html(ws)
       // Tight allowlist: only table-structure tags + the cell-content tags
-      // SheetJS emits. No href, no src, no style â€” the inline styles SheetJS
+      // SheetJS emits. No href, no src, no style Ã¢â‚¬â€ the inline styles SheetJS
       // adds for borders are nice-to-have, not security-relevant.
       const clean = DOMPurify.sanitize(raw, {
         ALLOWED_TAGS: [
@@ -135,10 +135,10 @@ function SheetTable({ workbook, sheetName }: { workbook: any; sheetName: string 
   }, [workbook, sheetName])
 
   if (!purifyReady) {
-    return <div className="flex-1 flex items-center justify-center text-zinc-500 text-xs">Renderingâ€¦</div>
+    return <div className="flex-1 flex items-center justify-center text-zinc-500 text-xs">RenderingÃ¢â‚¬Â¦</div>
   }
   return (
-    <div className="flex-1 overflow-auto p-4 bg-white dark:bg-[#0a0a0a]">
+    <div className="flex-1 overflow-auto p-4 bg-white dark:bg-[var(--notation-bg)]">
       <div className="sheetjs-table" dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   )

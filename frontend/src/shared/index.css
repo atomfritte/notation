@@ -23,6 +23,11 @@
   --notation-accent-30: #BFF3554D;
   --notation-accent-40: #BFF35566;
   --notation-accent-50: #BFF35580;
+  /* Page-level surfaces. These only kick in for dark mode classes that
+     read them via Tailwind's arbitrary-value syntax â€”
+     `dark:bg-[var(--notation-bg)]` â€” so light mode is unaffected. */
+  --notation-bg: #0a0a0a;
+  --notation-bg-elevated: #111111;
 }
 
 /* ---- Print stylesheet ----------------------------------------------------
@@ -34,7 +39,7 @@
  * only visible in read mode, but be defensive).
  *
  * Colours are forced back to black-on-white because most printer drivers
- * already strip the page background Ã¢â‚¬â€ leaving dark mode in place would just
+ * already strip the page background ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â leaving dark mode in place would just
  * inflate the page count from blank backgrounds.
  */
 @media print {
@@ -93,7 +98,7 @@
 
 @layer base {
   html, body, #root { 
-    @apply h-full bg-white text-zinc-800 dark:bg-[#0a0a0a] dark:text-zinc-300 transition-colors duration-200; 
+    @apply h-full bg-white text-zinc-800 dark:bg-[var(--notation-bg)] dark:text-zinc-300 transition-colors duration-200; 
   }
   body { 
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; 
@@ -175,7 +180,7 @@ mark.comment-anchor.comment-anchor-blink {
   50%      { background-color: rgba(245, 158, 11, 0.9);  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.6); }
 }
 
-/* SheetJS sheet_to_html output Ã¢â‚¬â€ give the raw <table> a readable look that
+/* SheetJS sheet_to_html output ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â give the raw <table> a readable look that
    matches the rest of the app. Borders + zebra striping + readable padding. */
 .sheetjs-table table {
   @apply border-collapse text-sm w-auto;
