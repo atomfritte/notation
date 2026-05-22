@@ -38,6 +38,33 @@ func (p Permission) AllowsRead() bool    { return p == PermissionRead || p == Pe
 func (p Permission) AllowsComment() bool { return p == PermissionComment || p == PermissionEdit }
 func (p Permission) AllowsEdit() bool    { return p == PermissionEdit }
 
+// Features turns specific reader-side UI affordances on or off per share
+// link. Comments are NOT here — they remain gated by Permission so we
+// don't have two different ways to say "no comments".
+//
+// All-zero is the "minimal viewer" default for new shares created by
+// older clients that don't send a `features` block; for legacy shares
+// already on disk we backfill all-on at load time (see migrateLegacyShare)
+// so existing links don't suddenly lose features after upgrade.
+type Features struct {
+	Outline   bool `json:"outline"`
+	Search    bool `json:"search"`
+	Palette   bool `json:"palette"`
+	Bookmarks bool `json:"bookmarks"`
+	Theme     bool `json:"theme"`
+	Print     bool `json:"print"`
+}
+
+// DefaultFeatures: what a brand-new share gets when the admin clicks
+// "Create" without unticking any boxes. Tuned for the typical "team
+// review" use case where the guest needs the whole reader.
+func DefaultFeatures() Features {
+	return Features{
+		Outline: true, Search: true, Palette: true,
+		Bookmarks: true, Theme: true, Print: true,
+	}
+}
+
 type Share struct {
 	ID         string     `json:"id"`
 	Hash       string     `json:"hash"` // hex-encoded SHA-256 of the token
@@ -47,6 +74,7 @@ type Share struct {
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	CreatedBy  string     `json:"created_by"`
 	LastUsed   *time.Time `json:"last_used,omitempty"`
+	Features   Features   `json:"features"`
 }
 
 // View is the admin-facing shape: identical to Share except Hash is omitted.
@@ -58,13 +86,14 @@ type View struct {
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	CreatedBy  string     `json:"created_by"`
 	LastUsed   *time.Time `json:"last_used,omitempty"`
+	Features   Features   `json:"features"`
 }
 
 func (s Share) View() View {
 	return View{
 		ID: s.ID, Permission: s.Permission, Label: s.Label,
 		CreatedAt: s.CreatedAt, ExpiresAt: s.ExpiresAt, CreatedBy: s.CreatedBy,
-		LastUsed: s.LastUsed,
+		LastUsed: s.LastUsed, Features: s.Features,
 	}
 }
 
@@ -105,6 +134,14 @@ func (s *Store) load(spaceID string) ([]Share, error) {
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, fmt.Errorf("shares.json: %w", err)
 	}
+	// Backfill features for shares written by older versions — they were
+	// "full reader" in the previous UI, so default to all-on instead of the
+	// zero-value all-off (which would silently strip features post-upgrade).
+	for i := range out {
+		if (out[i].Features == Features{}) {
+			out[i].Features = DefaultFeatures()
+		}
+	}
 	return out, nil
 }
 
@@ -131,7 +168,7 @@ func (s *Store) List(spaceID string) ([]View, error) {
 	return out, nil
 }
 
-func (s *Store) Create(spaceID string, perm Permission, label string, expiresAt *time.Time, createdBy string) (CreateResult, error) {
+func (s *Store) Create(spaceID string, perm Permission, label string, expiresAt *time.Time, createdBy string, features Features) (CreateResult, error) {
 	if !ValidPermission(perm) {
 		return CreateResult{}, ErrInvalidPerm
 	}
@@ -151,6 +188,7 @@ func (s *Store) Create(spaceID string, perm Permission, label string, expiresAt 
 		CreatedAt:  time.Now().UTC(),
 		ExpiresAt:  expiresAt,
 		CreatedBy:  createdBy,
+		Features:   features,
 	}
 	shares = append(shares, sh)
 	if err := s.save(spaceID, shares); err != nil {

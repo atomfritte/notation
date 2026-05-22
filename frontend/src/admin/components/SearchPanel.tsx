@@ -1,23 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
-import * as api from '../lib/api'
+
+// Minimal shape we render. Both admin & share API hits return at least
+// these fields, so the component itself doesn't care which backend it
+// talked to — the caller passes in an onSearch closure.
+export type SearchPanelMatch = {
+  path: string
+  line: number
+  content: string
+}
 
 type Props = {
   open: boolean
-  spaceID: string
   onClose: () => void
   onSelect: (path: string, line?: number) => void
+  /** Called with the user's query; returns matches. The component handles
+   *  debouncing, loading state and error surfacing. Wraps the admin or
+   *  share-side search endpoint depending on the caller. */
+  onSearch: (q: string) => Promise<SearchPanelMatch[]>
 }
 
 /**
  * SearchPanel — full-text search modal across all files in the Space.
- * Triggered by Cmd+Shift+F. Hits the backend's /search endpoint which uses
- * the in-memory grep helper (case-insensitive substring across all .* files
- * matching the optional glob).
+ * Triggered by Cmd+Shift+F. The actual API call is the caller's
+ * responsibility (admin uses api.searchSpace, share uses its own
+ * share-side search). Component is otherwise self-contained.
  */
-export function SearchPanel({ open, spaceID, onClose, onSelect }: Props) {
+export function SearchPanel({ open, onClose, onSelect, onSearch }: Props) {
   const [q, setQ] = useState('')
-  const [results, setResults] = useState<api.SearchMatch[]>([])
+  const [results, setResults] = useState<SearchPanelMatch[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -39,26 +50,19 @@ export function SearchPanel({ open, spaceID, onClose, onSelect }: Props) {
     }
     setLoading(true)
     setErr(null)
-    const controller = new AbortController()
     const t = setTimeout(() => {
-      api
-        .searchSpace(spaceID, q)
+      onSearch(q)
         .then(r => setResults(Array.isArray(r) ? r : []))
-        .catch(e => {
-          if ((e as Error).name !== 'AbortError') setErr(String(e))
-        })
+        .catch(e => setErr(String(e)))
         .finally(() => setLoading(false))
     }, 200) // simple debounce
-    return () => {
-      controller.abort()
-      clearTimeout(t)
-    }
-  }, [q, open, spaceID])
+    return () => clearTimeout(t)
+  }, [q, open, onSearch])
 
   if (!open) return null
 
   // Group matches by file
-  const grouped: Record<string, api.SearchMatch[]> = {}
+  const grouped: Record<string, SearchPanelMatch[]> = {}
   for (const m of results) {
     ;(grouped[m.path] ??= []).push(m)
   }

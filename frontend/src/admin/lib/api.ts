@@ -163,6 +163,18 @@ export const snapshot = (id: string, message: string) =>
 // ---- Magic-link shares ---------------------------------------------------
 
 export type SharePermission = 'read' | 'comment' | 'edit'
+export type ShareFeatures = {
+  outline: boolean
+  search: boolean
+  palette: boolean
+  bookmarks: boolean
+  theme: boolean
+  print: boolean
+}
+export const DEFAULT_SHARE_FEATURES: ShareFeatures = {
+  outline: true, search: true, palette: true,
+  bookmarks: true, theme: true, print: true,
+}
 export type Share = {
   id: string
   permission: SharePermission
@@ -171,6 +183,7 @@ export type Share = {
   expires_at?: string
   created_by: string
   last_used?: string
+  features: ShareFeatures
 }
 export type ShareCreated = { share: Share; token: string; url: string }
 
@@ -179,7 +192,12 @@ export const listShares = (id: string) =>
 
 export const createShare = (
   id: string,
-  body: { permission: SharePermission; label?: string; expires_in?: string },
+  body: {
+    permission: SharePermission
+    label?: string
+    expires_in?: string
+    features?: ShareFeatures
+  },
 ) =>
   fetchJSON<ShareCreated>(`/api/admin/spaces/${encodeURIComponent(id)}/shares`, {
     method: 'POST',

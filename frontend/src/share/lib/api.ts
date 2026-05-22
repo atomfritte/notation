@@ -1,9 +1,30 @@
 export type Permission = 'read' | 'comment' | 'edit'
 
+// Per-share-link reader features. The admin ticks these at creation time;
+// the share UI gates affordances accordingly. Backend backfills all-on for
+// legacy shares so we never accidentally strip features post-upgrade.
+export type Features = {
+  outline: boolean
+  search: boolean
+  palette: boolean
+  bookmarks: boolean
+  theme: boolean
+  print: boolean
+}
+
 export type SpaceInfo = {
   space: { id: string; name: string }
   permission: Permission
   label: string
+  features: Features
+}
+
+export type GrepMatch = {
+  path: string
+  line: number
+  content: string
+  before?: string[]
+  after?: string[]
 }
 
 export type Entry = {
@@ -108,4 +129,12 @@ export async function postComment(
  * share side. Encodes path components individually so slashes survive. */
 export function fileURLForShare(path: string): string {
   return `${API}/file/${encodePath(path)}`
+}
+
+export async function searchSpace(q: string, glob?: string): Promise<GrepMatch[]> {
+  const params = new URLSearchParams({ q })
+  if (glob) params.set('glob', glob)
+  const r = await fetch(`${API}/search?${params.toString()}`)
+  if (!r.ok) throw await asError(r)
+  return r.json()
 }

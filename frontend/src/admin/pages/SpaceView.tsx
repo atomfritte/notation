@@ -994,9 +994,9 @@ export function SpaceView() {
       />
       <SearchPanel
         open={searchOpen}
-        spaceID={spaceID}
         onClose={() => setSearchOpen(false)}
         onSelect={(p) => selectFile(p)}
+        onSearch={(q) => api.searchSpace(spaceID, q)}
       />
     </div>
   )

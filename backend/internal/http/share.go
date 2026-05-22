@@ -68,7 +68,49 @@ func (h *shareHandlers) getSpace(w http.ResponseWriter, r *http.Request) {
 		"space":      map[string]string{"id": meta.ID, "name": meta.Name},
 		"permission": sh.Permission,
 		"label":      sh.Label,
+		"features":   sh.Features,
 	})
+}
+
+// searchSpace mirrors the admin search endpoint but is gated by the
+// share's Features.Search flag so a creator who doesn't want their guest
+// poking around with full-text search can disable it at create time.
+func (h *shareHandlers) searchSpace(w http.ResponseWriter, r *http.Request) {
+	spaceID, sh, err := h.resolve(r)
+	if err != nil {
+		writeShareError(w, err)
+		return
+	}
+	if !sh.Permission.AllowsRead() {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if !sh.Features.Search {
+		writeError(w, http.StatusForbidden, "search disabled for this share")
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	opts := space.GrepOpts{
+		Pattern:       q,
+		Glob:          r.URL.Query().Get("glob"),
+		CaseSensitive: false,
+		ContextBefore: 0,
+		ContextAfter:  0,
+		MaxResults:    200,
+	}
+	hits, err := h.store.Grep(spaceID, opts)
+	if err != nil {
+		writeInternal(w, r, "share.search", err)
+		return
+	}
+	if hits == nil {
+		hits = []space.GrepMatch{}
+	}
+	writeJSON(w, http.StatusOK, hits)
 }
 
 func (h *shareHandlers) getTree(w http.ResponseWriter, r *http.Request) {

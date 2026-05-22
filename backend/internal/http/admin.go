@@ -310,6 +310,7 @@ type createShareReq struct {
 	Permission share.Permission `json:"permission"`
 	Label      string           `json:"label"`
 	ExpiresIn  string           `json:"expires_in,omitempty"` // duration string e.g. "168h" (7d)
+	Features   *share.Features  `json:"features,omitempty"`   // nil → admin didn't toggle, use full defaults
 }
 
 func (h *adminHandlers) createShare(w http.ResponseWriter, r *http.Request) {
@@ -338,7 +339,11 @@ func (h *adminHandlers) createShare(w http.ResponseWriter, r *http.Request) {
 		t := time.Now().UTC().Add(d)
 		expiresAt = &t
 	}
-	res, err := h.shares.Create(id, req.Permission, req.Label, expiresAt, user.Name)
+	features := share.DefaultFeatures()
+	if req.Features != nil {
+		features = *req.Features
+	}
+	res, err := h.shares.Create(id, req.Permission, req.Label, expiresAt, user.Name, features)
 	if err != nil {
 		writeInternal(w, r, "shares.create", err)
 		return

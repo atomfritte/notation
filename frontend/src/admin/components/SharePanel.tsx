@@ -18,6 +18,7 @@ export function SharePanel({ spaceID }: Props) {
   const [perm, setPerm] = useState<Permission>('read')
   const [label, setLabel] = useState('')
   const [expiresIn, setExpiresIn] = useState('')
+  const [features, setFeatures] = useState<api.ShareFeatures>(api.DEFAULT_SHARE_FEATURES)
   const [created, setCreated] = useState<api.ShareCreated | null>(null)
 
   const refresh = useCallback(() => {
@@ -35,10 +36,12 @@ export function SharePanel({ spaceID }: Props) {
         permission: perm,
         label,
         expires_in: expiresIn || undefined,
+        features,
       })
       setCreated(data)
       setLabel('')
       setExpiresIn('')
+      setFeatures(api.DEFAULT_SHARE_FEATURES)
       refresh()
     } catch (e) {
       setErr(String(e))
@@ -94,9 +97,32 @@ export function SharePanel({ spaceID }: Props) {
             placeholder="e.g. 168h"
           />
         </div>
+        <fieldset className="border border-[var(--notation-border)] rounded p-2 space-y-1">
+          <legend className="text-[11px] text-[var(--notation-fg-muted)] px-1">
+            Reader features
+          </legend>
+          {([
+            ['outline',   'Outline panel'],
+            ['search',    'Full-text search'],
+            ['palette',   'Jump-to-page palette (⌘K)'],
+            ['bookmarks', 'Personal bookmarks'],
+            ['theme',     'Theme picker'],
+            ['print',     'Print'],
+          ] as const).map(([key, label]) => (
+            <label key={key} className="flex items-center gap-2 text-xs text-[var(--notation-fg)] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={features[key]}
+                onChange={e => setFeatures({ ...features, [key]: e.target.checked })}
+                className="accent-[color:var(--notation-accent)]"
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
         <button
           type="submit"
-          className="px-3 py-1 bg-blue-600 text-white text-sm rounded w-full"
+          className="px-3 py-1 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 text-sm rounded w-full font-medium hover:opacity-90"
         >
           Create link
         </button>
