@@ -265,14 +265,14 @@ export function MarkdownView({
             [rehypeHighlight, { detect: true, ignoreMissing: true }],
           ]}
           components={{
-            // Wrap every table in a div so wide tables can scroll horizontally
-            // without breaking the page width, while short tables can stretch
-            // their last column to fill the wrap (zebra striping extends all
-            // the way to the right edge). Styling lives in shared/index.css
+            // Wrap every table in a div + thin sortable shim. The wrap div
+            // handles horizontal scroll on overflow + outer border / radius;
+            // SortableTable below attaches click-to-sort handlers to each
+            // <th> after mount. Styling for both lives in shared/index.css
             // under `.prose-table-wrap`.
             table: ({ node, ...props }) => (
               <div className="prose-table-wrap">
-                <table {...props} />
+                <SortableTable {...props} />
               </div>
             ),
             a: ({ href, children, className, ...rest }) => {
@@ -408,6 +408,102 @@ function formatRelative(iso: string): string {
   if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`
   if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`
   return new Date(t).toLocaleDateString()
+}
+
+/**
+ * SortableTable — drops sort-by-column behaviour onto any `<table>` rendered
+ * from markdown. After mount, every `thead th` gets a click handler that
+ * reorders the `tbody` rows by that column's text content. Repeated clicks
+ * toggle ascending / descending; clicking a different column resets to
+ * ascending. The sort algorithm tries numeric, then ISO-date, then
+ * locale-aware string compare so number columns and date columns just work.
+ *
+ * Implemented at the DOM level via a ref + useEffect because react-markdown
+ * hands us opaque children — there's no clean way to extract row data from
+ * the children prop, and walking the DOM after render is the same
+ * complexity but works for any cell content.
+ */
+function SortableTable(props: React.HTMLAttributes<HTMLTableElement>) {
+  const ref = useRef<HTMLTableElement>(null)
+
+  useEffect(() => {
+    const table = ref.current
+    if (!table) return
+    const ths = table.querySelectorAll<HTMLTableCellElement>('thead th')
+    const tbody = table.querySelector('tbody')
+    if (!tbody || ths.length === 0) return
+
+    let activeCol: number | null = null
+    let asc = true
+    const disposers: Array<() => void> = []
+
+    ths.forEach((th, idx) => {
+      th.classList.add('sortable-th')
+      const onClick = () => {
+        if (activeCol === idx) asc = !asc
+        else { activeCol = idx; asc = true }
+        sortByColumn(tbody, idx, asc)
+        ths.forEach((other, i) => {
+          if (i === activeCol) other.dataset.sort = asc ? 'asc' : 'desc'
+          else delete other.dataset.sort
+        })
+      }
+      th.addEventListener('click', onClick)
+      disposers.push(() => {
+        th.removeEventListener('click', onClick)
+        th.classList.remove('sortable-th')
+        delete th.dataset.sort
+      })
+    })
+
+    return () => { disposers.forEach(d => d()) }
+    // Children include the data — re-run when content changes (file switch,
+    // editor save) so handlers point at the fresh DOM.
+  }, [props.children])
+
+  return <table ref={ref} {...props} />
+}
+
+function sortByColumn(tbody: HTMLTableSectionElement, col: number, asc: boolean) {
+  const rows = Array.from(tbody.querySelectorAll(':scope > tr'))
+  rows.sort((a, b) => {
+    const aText = (a.children[col]?.textContent ?? '').trim()
+    const bText = (b.children[col]?.textContent ?? '').trim()
+    const cmp = compareCells(aText, bText)
+    return asc ? cmp : -cmp
+  })
+  // Re-append in new order. Browsers move existing nodes rather than
+  // re-create, so event listeners on cells survive.
+  for (const row of rows) tbody.appendChild(row)
+}
+
+function compareCells(a: string, b: string): number {
+  // Empty values sort to the end regardless of direction.
+  if (!a && !b) return 0
+  if (!a) return 1
+  if (!b) return -1
+  // Numbers first — allow common separators like "1,234.5" or "€ 605".
+  const aNum = parseNumericish(a)
+  const bNum = parseNumericish(b)
+  if (aNum !== null && bNum !== null) return aNum - bNum
+  // ISO-ish dates.
+  const aDate = Date.parse(a)
+  const bDate = Date.parse(b)
+  if (!Number.isNaN(aDate) && !Number.isNaN(bDate)) return aDate - bDate
+  // Locale-aware string fallback handles umlauts / accents naturally.
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+function parseNumericish(s: string): number | null {
+  // Strip currency symbols and trailing units, keep digits + decimal sep.
+  const cleaned = s
+    .replace(/[€$£¥%]/g, '')
+    .replace(/[a-zA-Z\s]/g, '')
+    .replace(/(\d),(\d{3})/g, '$1$2')   // 1,234 → 1234
+    .replace(/,(?=\d)/g, '.')            // 1,5 → 1.5 (German decimals)
+    .replace(/[~+]/g, '')                // ~605, +40 → 605, 40
+  const n = parseFloat(cleaned)
+  return Number.isFinite(n) ? n : null
 }
 
 /* ---- Anchor resolution & marking ----------------------------------------- */

@@ -382,6 +382,56 @@ mark.comment-anchor.comment-anchor-blink {
   padding: 0.6rem 0.9rem;
   border-bottom: 1px solid var(--notation-border);
   white-space: nowrap;
+  position: relative;
+}
+/* SortableTable adds .sortable-th to every header cell after mount and
+   toggles a data-sort="asc"|"desc" attribute on the actively-sorted column.
+   The chevron is rendered as a CSS ::after so it sits inline with the
+   header text without affecting layout. */
+.prose table thead th.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  padding-right: 1.4rem;
+}
+.prose table thead th.sortable-th:hover {
+  color: var(--notation-fg);
+  background-color: color-mix(in srgb, var(--notation-bg-elevated), var(--notation-border) 50%);
+}
+.prose table thead th.sortable-th::after {
+  content: '';
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  width: 0.6rem;
+  height: 0.6rem;
+  transform: translateY(-50%);
+  opacity: 0.25;
+  background-image: linear-gradient(
+    180deg,
+    currentColor 45%,
+    transparent 45%,
+    transparent 55%,
+    currentColor 55%
+  );
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 12'><path d='M4 0 L8 4 H0 Z M4 12 L0 8 H8 Z' fill='black'/></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 12'><path d='M4 0 L8 4 H0 Z M4 12 L0 8 H8 Z' fill='black'/></svg>");
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+}
+.prose table thead th.sortable-th[data-sort="asc"]::after,
+.prose table thead th.sortable-th[data-sort="desc"]::after {
+  opacity: 1;
+  color: var(--notation-accent);
+}
+.prose table thead th.sortable-th[data-sort="asc"]::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><path d='M4 0 L8 6 H0 Z' fill='black'/></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><path d='M4 0 L8 6 H0 Z' fill='black'/></svg>");
+}
+.prose table thead th.sortable-th[data-sort="desc"]::after {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><path d='M4 8 L0 2 H8 Z' fill='black'/></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><path d='M4 8 L0 2 H8 Z' fill='black'/></svg>");
 }
 .prose table thead th:not(:last-child) {
   border-right: 1px solid var(--notation-border);
