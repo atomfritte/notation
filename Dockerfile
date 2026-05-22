@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- Stage 1: build the React frontend --------------------------------------
-FROM node:20-alpine AS frontend
+FROM node:26-alpine AS frontend
 WORKDIR /work/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -25,7 +25,7 @@ RUN cd backend \
       ./cmd/notation
 
 # --- Stage 3: minimal runtime -----------------------------------------------
-FROM alpine:3.20
+FROM alpine:3.23
 RUN apk add --no-cache ca-certificates git tini \
  && addgroup -S notation && adduser -S -G notation -u 10001 notation \
  && mkdir -p /data && chown notation:notation /data
