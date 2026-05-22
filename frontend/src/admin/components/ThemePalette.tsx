@@ -109,7 +109,7 @@ export function ThemePalette({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150 no-print"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--notation-backdrop)] backdrop-blur-sm animate-in fade-in duration-150 no-print"
       onClick={onClose}
     >
       <div
@@ -123,7 +123,7 @@ export function ThemePalette({ onClose }: Props) {
           </h2>
           <button
             onClick={onClose}
-            className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded -mr-1"
+            className="p-1 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] rounded -mr-1"
             aria-label="Close"
           >
             <X size={18} />
@@ -192,7 +192,7 @@ function TabBtn({
         'px-3 py-2 text-sm font-medium flex items-center gap-1.5 border-b-2 transition-colors ' +
         (active
           ? 'border-[color:var(--notation-accent)] text-[var(--notation-fg)]'
-          : 'border-transparent text-[var(--notation-fg-muted)] hover:text-zinc-700 dark:hover:text-zinc-200')
+          : 'border-transparent text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]')
       }
     >
       {icon} {label}
@@ -266,44 +266,51 @@ function EditTab({
         </span>
       </div>
 
-      <div className="space-y-3">
-        <ColorRow
-          label="Accent"
-          help="Links, cursor, primary buttons, active states."
-          value={palette.accent}
-          onChange={v => onChangePalette(editMode, { accent: v })}
+      <PaletteSection title="Content surface">
+        <ColorRow label="Accent" help="Links, cursor, primary buttons, active states."
+          value={palette.accent} onChange={v => onChangePalette(editMode, { accent: v })} />
+        <ColorRow label="Background" help="Page body — the main content area."
+          value={palette.bg} onChange={v => onChangePalette(editMode, { bg: v })} />
+        <ColorRow label="Subtle background" help="Hover surfaces, alternating rows, inline code highlights."
+          value={palette.bgAlt} onChange={v => onChangePalette(editMode, { bgAlt: v })} />
+        <ColorRow label="Text" help="Body text, headings, code — primary foreground on content."
+          value={palette.fg} onChange={v => onChangePalette(editMode, { fg: v })} />
+        <ColorRow label="Muted text" help="Secondary copy — breadcrumbs, captions, hints."
+          value={palette.fgMuted} onChange={v => onChangePalette(editMode, { fgMuted: v })} />
+        <ColorRow label="Border" help="Dividers + hover background tint on content."
+          value={palette.border} onChange={v => onChangePalette(editMode, { border: v })} />
+      </PaletteSection>
+
+      <PaletteSection title="Chrome (sidebars, header, modals)">
+        <ColorRow label="Chrome background" help="Sidebars, header, outline + comments panels, modals."
+          value={palette.bgElevated} onChange={v => onChangePalette(editMode, { bgElevated: v })} />
+        <ColorRow label="Chrome text" help="Primary text painted on the chrome surface."
+          value={palette.chromeFg} onChange={v => onChangePalette(editMode, { chromeFg: v })} />
+        <ColorRow label="Chrome muted text" help="Captions and hints on the chrome surface."
+          value={palette.chromeFgMuted} onChange={v => onChangePalette(editMode, { chromeFgMuted: v })} />
+        <ColorRow label="Chrome border" help="Dividers inside sidebars / header / modals."
+          value={palette.chromeBorder} onChange={v => onChangePalette(editMode, { chromeBorder: v })} />
+      </PaletteSection>
+
+      <PaletteSection title="Status">
+        <ColorRow label="Danger" help="Errors, destructive actions (delete buttons, validation messages)."
+          value={palette.danger} onChange={v => onChangePalette(editMode, { danger: v })} />
+        <ColorRow label="Warning" help="Cautions, expiring tokens, dirty-state hints."
+          value={palette.warning} onChange={v => onChangePalette(editMode, { warning: v })} />
+        <ColorRow label="Success" help="Confirmations, saved indicators."
+          value={palette.success} onChange={v => onChangePalette(editMode, { success: v })} />
+        <ColorRow label="Info" help="Neutral informational hints and links."
+          value={palette.info} onChange={v => onChangePalette(editMode, { info: v })} />
+      </PaletteSection>
+
+      <PaletteSection title="Misc">
+        <ColorRow label="Text on accent" help="Text painted on top of accent (primary buttons, badges)."
+          value={palette.fgOnAccent} onChange={v => onChangePalette(editMode, { fgOnAccent: v })} />
+        <BackdropRow
+          value={palette.backdrop}
+          onChange={v => onChangePalette(editMode, { backdrop: v })}
         />
-        <ColorRow
-          label="Background"
-          help="Page body — the main content area."
-          value={palette.bg}
-          onChange={v => onChangePalette(editMode, { bg: v })}
-        />
-        <ColorRow
-          label="Surface"
-          help="Sidebar, header, outline + comments panels, modals."
-          value={palette.bgElevated}
-          onChange={v => onChangePalette(editMode, { bgElevated: v })}
-        />
-        <ColorRow
-          label="Text"
-          help="Body text, headings, code — primary foreground."
-          value={palette.fg}
-          onChange={v => onChangePalette(editMode, { fg: v })}
-        />
-        <ColorRow
-          label="Muted text"
-          help="Secondary copy — breadcrumbs, captions, hints."
-          value={palette.fgMuted}
-          onChange={v => onChangePalette(editMode, { fgMuted: v })}
-        />
-        <ColorRow
-          label="Border / hover"
-          help="Dividers + hover background tint for buttons."
-          value={palette.border}
-          onChange={v => onChangePalette(editMode, { border: v })}
-        />
-      </div>
+      </PaletteSection>
 
       <div className="flex items-center gap-2 pt-2 border-t border-[var(--notation-border)]">
         <input
@@ -314,7 +321,7 @@ function EditTab({
         />
         <button
           onClick={onRevert}
-          className="p-2 rounded-md text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-[var(--notation-border)] transition-colors"
+          className="p-2 rounded-md text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-border)] transition-colors"
           title="Discard preview, go back to active theme"
         >
           <RotateCcw size={14} />
@@ -322,7 +329,7 @@ function EditTab({
         <button
           onClick={onSave}
           disabled={!working.name.trim()}
-          className="px-3 py-2 rounded-md text-sm font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:opacity-90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          className="px-3 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:opacity-90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
         >
           <Save size={14} /> Save
         </button>
@@ -345,7 +352,7 @@ function ImportTab({
       <p className="text-sm text-[var(--notation-fg-muted)]">
         Paste a VS&nbsp;Code colour-theme JSON. We extract the accent, the
         editor background, and the sidebar background. The theme's
-        <code className="px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] mx-1">"type"</code>
+        <code className="px-1 py-0.5 rounded bg-[var(--notation-bg-alt)] text-[11px] mx-1">"type"</code>
         field (dark/light) decides which mode of your theme is filled —
         the other mode keeps its current palette. Comments inside the
         JSON are tolerated.
@@ -362,14 +369,14 @@ function ImportTab({
         <button
           onClick={onImport}
           disabled={!value.trim()}
-          className="px-3 py-2 rounded-md text-sm font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:opacity-90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          className="px-3 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:opacity-90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
         >
           <Download size={14} /> Parse &amp; preview
         </button>
-        {error && <span className="text-red-500 text-xs">{error}</span>}
+        {error && <span className="text-[var(--notation-danger)] text-xs">{error}</span>}
       </div>
       {warnings.length > 0 && (
-        <ul className="text-xs text-amber-600 dark:text-amber-400 space-y-1">
+        <ul className="text-xs text-[var(--notation-warning)] dark:text-[var(--notation-warning)] space-y-1">
           {warnings.map((w, i) => <li key={i}>· {w}</li>)}
         </ul>
       )}
@@ -400,8 +407,8 @@ function ModeToggle({ active, onChange }: { active: Mode; onChange: (m: Mode) =>
           className={
             'px-2.5 py-1 text-xs font-medium rounded flex items-center gap-1 transition-colors ' +
             (active === opt.k
-              ? 'bg-zinc-200 dark:bg-zinc-800 text-[var(--notation-fg)]'
-              : 'text-[var(--notation-fg-muted)] hover:text-zinc-700 dark:hover:text-zinc-200')
+              ? 'bg-[var(--notation-bg-alt)] bg-[var(--notation-bg-alt)] text-[var(--notation-fg)]'
+              : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]')
           }
         >
           {opt.icon} {opt.label}
@@ -427,7 +434,7 @@ function ThemeCard({
           'w-full rounded-lg border overflow-hidden transition-all text-left ' +
           (active
             ? 'border-[color:var(--notation-accent)] ring-2 ring-[color:var(--notation-accent-30)]'
-            : 'border-[var(--notation-border)] hover:border-zinc-300 dark:hover:border-zinc-700')
+            : 'border-[var(--notation-border)] hover:border-[var(--notation-border)] dark:hover:border-[var(--notation-border)]')
         }
       >
         <div className="flex h-14">
@@ -442,7 +449,7 @@ function ThemeCard({
       {onDelete && (
         <button
           onClick={e => { e.stopPropagation(); onDelete() }}
-          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/40 backdrop-blur text-white/80 opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center"
+          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-[var(--notation-backdrop)] backdrop-blur text-white/80 opacity-0 group-hover:opacity-100 hover:bg-[var(--notation-danger)] hover:text-white transition-all flex items-center justify-center"
           aria-label={`Delete ${theme.name}`}
           title="Delete theme"
         >
@@ -512,6 +519,74 @@ function PreviewCard({ label, palette, isDark }: { label: string; palette: ModeP
       </div>
     </div>
   )
+}
+
+function PaletteSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-3">
+      <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--notation-fg-muted)] border-b border-[var(--notation-border)] pb-1.5">
+        {title}
+      </h4>
+      <div className="space-y-3">{children}</div>
+    </div>
+  )
+}
+
+// Backdrop is the only token that isn't a plain hex — it's an rgba(...) so a
+// scrim can be partially transparent. The row exposes a hex picker for the
+// colour and a 0-100 slider for the alpha, then composes them back into an
+// rgba string for storage.
+function BackdropRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parsed = parseRGBA(value)
+  const hex = parsed?.hex ?? '#000000'
+  const alpha = parsed?.alpha ?? 0.4
+  return (
+    <div className="flex items-start gap-3">
+      <input
+        type="color"
+        value={hex}
+        onChange={e => onChange(toRGBA(e.target.value, alpha))}
+        className="w-10 h-10 rounded-md cursor-pointer bg-transparent border border-[var(--notation-border)] p-0.5 flex-shrink-0"
+        aria-label="Backdrop colour"
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2">
+          <label className="text-sm font-medium text-[var(--notation-fg)]">Modal backdrop</label>
+          <span className="px-1.5 py-0.5 text-[11px] font-mono rounded border border-[var(--notation-border)] bg-[var(--notation-bg)] text-[var(--notation-fg-muted)]">
+            {Math.round(alpha * 100)}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={Math.round(alpha * 100)}
+          onChange={e => onChange(toRGBA(hex, Number(e.target.value) / 100))}
+          className="w-full mt-1 accent-[color:var(--notation-accent)]"
+          aria-label="Backdrop opacity"
+        />
+        <p className="text-[11px] text-[var(--notation-fg-muted)] mt-0.5">Scrim painted behind modals (Themes, Command Palette, …).</p>
+      </div>
+    </div>
+  )
+}
+
+function parseRGBA(s: string): { hex: string; alpha: number } | null {
+  const m = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/)
+  if (!m) return null
+  const r = Math.min(255, parseInt(m[1], 10))
+  const g = Math.min(255, parseInt(m[2], 10))
+  const b = Math.min(255, parseInt(m[3], 10))
+  const a = m[4] !== undefined ? Math.min(1, Math.max(0, parseFloat(m[4]))) : 1
+  const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0').toUpperCase()).join('')
+  return { hex, alpha: a }
+}
+
+function toRGBA(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`
 }
 
 function ColorRow({

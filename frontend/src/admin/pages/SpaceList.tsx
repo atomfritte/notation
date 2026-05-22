@@ -66,11 +66,11 @@ export function SpaceList() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-white dark:from-[#0a0a0a] dark:to-[#0d0d0d] text-[var(--notation-fg)] selection:bg-[color:var(--notation-accent-30)]">
-      <header className="sticky top-0 z-30 border-b border-[var(--notation-border)] bg-white/70 dark:bg-zinc-950/70 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-[var(--notation-border)] bg-white/70 bg-[var(--notation-bg-elevated)]/70 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link to="/admin" className="flex items-center gap-2 group">
-            <div className="w-7 h-7 rounded-md bg-zinc-900 dark:bg-[color:var(--notation-accent)] flex items-center justify-center transition-transform group-hover:scale-105">
-              <FolderOpen size={14} className="text-white dark:text-zinc-900" strokeWidth={2.5} />
+            <div className="w-7 h-7 rounded-md bg-[var(--notation-bg-alt)] dark:bg-[color:var(--notation-accent)] flex items-center justify-center transition-transform group-hover:scale-105">
+              <FolderOpen size={14} className="text-white dark:text-[var(--notation-fg)]" strokeWidth={2.5} />
             </div>
             <span className="font-bold text-base tracking-tight">notation</span>
           </Link>
@@ -78,14 +78,14 @@ export function SpaceList() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setThemeOpen(true)}
-              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+              className="p-1.5 rounded-md text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] transition-colors"
               title="Accent colour"
             >
               <Palette size={16} />
             </button>
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+              className="p-1.5 rounded-md text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] transition-colors"
               title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
             >
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
@@ -100,7 +100,7 @@ export function SpaceList() {
                     try { await logout() } catch {/* best-effort */}
                     window.location.href = '/'
                   }}
-                  className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-1.5 rounded-md text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] transition-colors"
                   title="Sign out"
                 >
                   <LogOut size={15} />
@@ -123,26 +123,26 @@ export function SpaceList() {
 
         <div className="flex items-center gap-3 mb-6">
           <div className="relative flex-1 max-w-md">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--notation-fg-muted)]" />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search spaces…"
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-[var(--notation-border)] bg-white dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-[var(--notation-border)] bg-white bg-[var(--notation-bg-alt)]/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
             />
           </div>
           <button
             onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] transition-colors whitespace-nowrap"
           >
             <Plus size={15} /> New Space
           </button>
         </div>
 
         {err && (
-          <div className="mb-6 p-3 rounded-md bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 text-sm border border-red-100 dark:border-red-900/30 flex items-start justify-between gap-3">
+          <div className="mb-6 p-3 rounded-md bg-[var(--notation-danger)] dark:bg-[var(--notation-danger)]/30 text-[var(--notation-danger)] dark:text-[var(--notation-danger)] text-sm border border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/30 flex items-start justify-between gap-3">
             <span>{err}</span>
-            <button onClick={() => setErr(null)} className="text-red-400 hover:text-red-600">
+            <button onClick={() => setErr(null)} className="text-[var(--notation-danger)] hover:text-[var(--notation-danger)]">
               <X size={14} />
             </button>
           </div>
@@ -204,7 +204,7 @@ function SpaceCard({ space, onDelete }: { space: api.Meta; onDelete: () => void 
     <div className="group relative">
       <Link
         to={`/admin/spaces/${encodeURIComponent(space.id)}`}
-        className="block rounded-xl border border-[var(--notation-border)]/60 bg-white dark:bg-zinc-900/40 overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg dark:hover:shadow-black/20 hover:-translate-y-0.5 transition-all duration-200"
+        className="block rounded-xl border border-[var(--notation-border)]/60 bg-white bg-[var(--notation-bg-alt)]/40 overflow-hidden hover:border-[var(--notation-border)] dark:hover:border-[var(--notation-border)] hover:shadow-lg dark:hover:shadow-black/20 hover:-translate-y-0.5 transition-all duration-200"
       >
         <div
           className="h-20 flex items-center justify-center relative"
@@ -236,7 +236,7 @@ function SpaceCard({ space, onDelete }: { space: api.Meta; onDelete: () => void 
           e.stopPropagation()
           onDelete()
         }}
-        className="absolute top-2 right-2 p-1.5 rounded-md bg-black/30 backdrop-blur-sm text-white/80 hover:bg-red-500/90 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute top-2 right-2 p-1.5 rounded-md bg-black/30 backdrop-blur-sm text-white/80 hover:bg-[var(--notation-danger)]/90 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
         title="Delete space"
         aria-label={`Delete ${space.id}`}
       >
@@ -250,7 +250,7 @@ function CreateCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-xl border-2 border-dashed border-[var(--notation-border)]/60 hover:border-zinc-900/40 dark:hover:border-[color:var(--notation-accent-40)] hover:bg-zinc-50 dark:hover:bg-[color:var(--notation-accent)]/5 transition-colors flex flex-col items-center justify-center min-h-[12rem] text-[var(--notation-fg-muted)] hover:text-zinc-700 dark:hover:text-[color:var(--notation-accent)] group"
+      className="rounded-xl border-2 border-dashed border-[var(--notation-border)]/60 hover:border-[var(--notation-border)]/40 dark:hover:border-[color:var(--notation-accent-40)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[color:var(--notation-accent)]/5 transition-colors flex flex-col items-center justify-center min-h-[12rem] text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] dark:hover:text-[color:var(--notation-accent)] group"
     >
       <div className="w-10 h-10 rounded-full border-2 border-current flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
         <Plus size={20} strokeWidth={2} />
@@ -266,7 +266,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="text-center py-20 px-4">
       <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800/40 dark:to-zinc-900 flex items-center justify-center">
-        <FolderOpen size={28} className="text-zinc-400 dark:text-zinc-600" strokeWidth={1.5} />
+        <FolderOpen size={28} className="text-[var(--notation-fg-muted)] text-[var(--notation-fg-muted)]" strokeWidth={1.5} />
       </div>
       <h3 className="text-lg font-semibold text-[var(--notation-fg)] mb-2">
         No spaces yet
@@ -276,7 +276,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       </p>
       <button
         onClick={onCreate}
-        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
+        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] transition-colors"
       >
         <Sparkles size={14} /> Create your first Space
       </button>
@@ -322,18 +322,18 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--notation-backdrop)] backdrop-blur-sm animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-150"
+        className="bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">
           <h2 className="text-xl font-bold text-[var(--notation-fg)]">Create a new Space</h2>
           <button
             onClick={onClose}
-            className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded -mr-1"
+            className="p-1 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] rounded -mr-1"
             aria-label="Close"
           >
             <X size={18} />
@@ -353,7 +353,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               required
               pattern="[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]"
               autoFocus
-              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-white dark:bg-zinc-950 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
+              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-white bg-[var(--notation-bg-elevated)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
               placeholder="my-project"
             />
             <p className="text-[11px] text-[var(--notation-fg-muted)] mt-1">
@@ -362,17 +362,17 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           </div>
           <div>
             <label className="block text-xs font-medium text-[var(--notation-fg)] mb-1">
-              Name <span className="text-zinc-400 font-normal">(optional)</span>
+              Name <span className="text-[var(--notation-fg-muted)] font-normal">(optional)</span>
             </label>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-white dark:bg-zinc-950 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
+              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-white bg-[var(--notation-bg-elevated)] text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
               placeholder="My Project"
             />
           </div>
           {err && (
-            <p className="text-red-500 text-sm">{err}</p>
+            <p className="text-[var(--notation-danger)] text-sm">{err}</p>
           )}
           <div className="flex gap-2 pt-1">
             <button
@@ -385,7 +385,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <button
               type="submit"
               disabled={submitting || !id}
-              className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40 transition-colors"
+              className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] disabled:opacity-40 transition-colors"
             >
               {submitting ? 'Creating…' : 'Create'}
             </button>

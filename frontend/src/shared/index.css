@@ -35,14 +35,23 @@
   --notation-accent-50: #65A30D80;
   --notation-bg: #FFFFFF;
   --notation-bg-elevated: #FAFAFA;
+  --notation-bg-alt: #F4F4F5;
   --notation-fg: #18181B;
   --notation-fg-muted: #71717A;
   --notation-border: #E4E4E7;
-  /* Auto-derived "text on elevated surface" defaults — overwritten by
-     applyTheme. See `.surface-elevated` below for how these reach the DOM. */
+  /* Chrome fg/border — applyTheme overrides these. Defaults match content fg
+     so chrome stays legible before the theme loads. See `.surface-elevated`
+     below for how these reach the DOM. */
   --notation-fg-on-elevated: #18181B;
   --notation-fg-on-elevated-muted: #71717A;
   --notation-border-on-elevated: #E4E4E7;
+  /* Status colours — Tailwind 600 (darker for light bg). */
+  --notation-danger: #DC2626;
+  --notation-warning: #D97706;
+  --notation-success: #059669;
+  --notation-info: #2563EB;
+  --notation-fg-on-accent: #FFFFFF;
+  --notation-backdrop: rgba(0, 0, 0, 0.35);
   /* Code-block bg follows the MODE, not the elevated surface — a user can
      pick a dark sidebar in an otherwise light theme without their code
      blocks turning dark. Light mode: bg gently darkened so the block stands
@@ -64,12 +73,20 @@
   --notation-accent-50: #BFF35580;
   --notation-bg: #0A0A0A;
   --notation-bg-elevated: #111111;
+  --notation-bg-alt: #1F1F23;
   --notation-fg: #E4E4E7;
   --notation-fg-muted: #A1A1AA;
   --notation-border: #27272A;
   --notation-fg-on-elevated: #FAFAFA;
   --notation-fg-on-elevated-muted: #A1A1AA;
-  --notation-border-on-elevated: #27272A;
+  --notation-border-on-elevated: #2A2A2E;
+  /* Status colours — Tailwind 400 (lighter for dark bg). */
+  --notation-danger: #F87171;
+  --notation-warning: #FBBF24;
+  --notation-success: #34D399;
+  --notation-info: #60A5FA;
+  --notation-fg-on-accent: #0A0A0A;
+  --notation-backdrop: rgba(0, 0, 0, 0.55);
   /* Dark mode: pull the page bg a third blacker so the code block reads
      as a distinct surface even on already-dark backgrounds. */
   --notation-code-bg: color-mix(in srgb, var(--notation-bg), black 35%);

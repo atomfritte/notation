@@ -51,8 +51,8 @@ export function AuthGate({ children }: Props) {
   if (loading && !state) {
     return (
       <AuthShell title="Loading…">
-        <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-          <div className="h-full w-1/3 bg-zinc-400 dark:bg-[color:var(--notation-accent)] animate-pulse rounded" />
+        <div className="h-2 w-full bg-[var(--notation-bg-alt)] rounded overflow-hidden">
+          <div className="h-full w-1/3 bg-[var(--notation-bg-alt)] dark:bg-[color:var(--notation-accent)] animate-pulse rounded" />
         </div>
       </AuthShell>
     )
@@ -60,13 +60,13 @@ export function AuthGate({ children }: Props) {
   if (!state) {
     return (
       <AuthShell title="Server unreachable" subtitle="Could not fetch /api/auth/state.">
-        <div className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400">
+        <div className="flex items-start gap-2 text-xs text-[var(--notation-danger)] dark:text-[var(--notation-danger)]">
           <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
           <span>{err ?? 'unknown error'}</span>
         </div>
         <button
           onClick={() => void refresh()}
-          className="mt-4 w-full px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md text-sm font-semibold"
+          className="mt-4 w-full px-4 py-2 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] rounded-md text-sm font-semibold"
         >
           Retry
         </button>
@@ -95,12 +95,12 @@ export function AuthGate({ children }: Props) {
           Reset on the server to issue a new bootstrap token. Your spaces and
           shares are untouched.
         </p>
-        <pre className="mt-3 bg-zinc-100 dark:bg-zinc-950 text-xs p-3 rounded-md overflow-auto select-all">
+        <pre className="mt-3 bg-[var(--notation-bg-alt)] bg-[var(--notation-bg-elevated)] text-xs p-3 rounded-md overflow-auto select-all">
           rm /data/.notation/admin.json{'\n'}docker restart notation
         </pre>
         <button
           onClick={() => void refresh()}
-          className="mt-4 w-full px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md text-sm font-semibold"
+          className="mt-4 w-full px-4 py-2 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] rounded-md text-sm font-semibold"
         >
           I did it — retry
         </button>

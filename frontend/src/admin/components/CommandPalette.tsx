@@ -68,16 +68,16 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[10vh] bg-black/40 backdrop-blur-sm animate-in fade-in duration-100"
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[10vh] bg-[var(--notation-backdrop)] backdrop-blur-sm animate-in fade-in duration-100"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150"
+        className="w-full max-w-xl bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150"
         onClick={e => e.stopPropagation()}
         onKeyDown={onKey}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--notation-border)]">
-          <Search size={18} className="text-zinc-400" />
+          <Search size={18} className="text-[var(--notation-fg-muted)]" />
           <input
             ref={inputRef}
             value={q}
@@ -85,11 +85,11 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
             placeholder="Jump to page…"
             className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
           />
-          <kbd className="text-[10px] px-1.5 py-0.5 border border-[var(--notation-border)] rounded text-zinc-500">esc</kbd>
+          <kbd className="text-[10px] px-1.5 py-0.5 border border-[var(--notation-border)] rounded text-[var(--notation-fg-muted)]">esc</kbd>
         </div>
         <ul ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
           {results.length === 0 && (
-            <li className="px-4 py-6 text-center text-sm text-zinc-500 italic">No matches</li>
+            <li className="px-4 py-6 text-center text-sm text-[var(--notation-fg-muted)] italic">No matches</li>
           )}
           {results.map((r, i) => (
             <li
@@ -103,21 +103,21 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
               className={
                 'flex items-center gap-3 px-4 py-2 text-sm cursor-pointer transition-colors ' +
                 (i === idx
-                  ? 'bg-zinc-100 dark:bg-zinc-800 text-[var(--notation-fg)]'
-                  : 'text-[var(--notation-fg)] hover:bg-zinc-50 dark:hover:bg-zinc-800/50')
+                  ? 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)]'
+                  : 'text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] hover:bg-[var(--notation-bg-alt)]/50')
               }
             >
               <FileText size={14} className={i === idx ? 'text-[color:var(--notation-accent)]' : 'opacity-50'} />
               <Highlighted text={r.path.replace(/\.md$/i, '')} positions={r.positions} />
               {i === idx && (
-                <span className="ml-auto flex items-center gap-1 text-xs text-zinc-400">
+                <span className="ml-auto flex items-center gap-1 text-xs text-[var(--notation-fg-muted)]">
                   <CornerDownLeft size={12} />
                 </span>
               )}
             </li>
           ))}
         </ul>
-        <div className="px-4 py-2 border-t border-[var(--notation-border)] flex items-center gap-3 text-[11px] text-zinc-500 bg-zinc-50 dark:bg-zinc-950/30">
+        <div className="px-4 py-2 border-t border-[var(--notation-border)] flex items-center gap-3 text-[11px] text-[var(--notation-fg-muted)] bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/30">
           <span className="flex items-center gap-1"><ArrowRight size={11} /> select</span>
           <span className="flex items-center gap-1"><kbd className="px-1 border border-[var(--notation-border)] rounded">↑↓</kbd> navigate</span>
           <span className="flex items-center gap-1"><kbd className="px-1 border border-[var(--notation-border)] rounded">↵</kbd> open</span>

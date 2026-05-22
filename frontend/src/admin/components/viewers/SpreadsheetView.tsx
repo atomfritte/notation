@@ -58,7 +58,7 @@ export default function SpreadsheetView({ url }: Props) {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm gap-2">
+      <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm gap-2">
         <Sheet size={16} /> Parsing spreadsheet…
       </div>
     )
@@ -66,7 +66,7 @@ export default function SpreadsheetView({ url }: Props) {
   if (err) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-[var(--notation-fg)] p-8 gap-3">
-        <AlertTriangle size={32} className="text-red-500" />
+        <AlertTriangle size={32} className="text-[var(--notation-danger)]" />
         <div className="text-sm">Could not open spreadsheet</div>
         <div className="text-xs text-[var(--notation-fg-muted)] font-mono">{err}</div>
       </div>
@@ -77,7 +77,7 @@ export default function SpreadsheetView({ url }: Props) {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {workbook.SheetNames.length > 1 && (
-        <div className="flex gap-1 px-2 py-1 border-b border-[var(--notation-border)] overflow-x-auto bg-zinc-50 dark:bg-zinc-950/30 flex-shrink-0">
+        <div className="flex gap-1 px-2 py-1 border-b border-[var(--notation-border)] overflow-x-auto bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/30 flex-shrink-0">
           {workbook.SheetNames.map((name: string) => (
             <button
               key={name}
@@ -85,8 +85,8 @@ export default function SpreadsheetView({ url }: Props) {
               className={
                 'px-3 py-1 text-xs rounded transition-colors whitespace-nowrap ' +
                 (name === activeSheet
-                  ? 'bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 font-medium'
-                  : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800')
+                  ? 'bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] font-medium'
+                  : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:bg-[var(--notation-bg-alt)]')
               }
             >
               {name}
@@ -142,7 +142,7 @@ function SheetTable({ workbook, sheetName }: { workbook: any; sheetName: string 
   }, [workbook, sheetName])
 
   if (!purifyReady) {
-    return <div className="flex-1 flex items-center justify-center text-zinc-500 text-xs">Rendering…</div>
+    return <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-xs">Rendering…</div>
   }
   return (
     <div className="flex-1 overflow-auto p-4 bg-[var(--notation-bg)]">

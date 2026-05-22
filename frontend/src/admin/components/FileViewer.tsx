@@ -88,7 +88,7 @@ export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
 
 function LazyLoading() {
   return (
-    <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
+    <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">
       Loading viewer…
     </div>
   )
@@ -96,7 +96,7 @@ function LazyLoading() {
 
 function ImageView({ url, path }: { url: string; path: string }) {
   return (
-    <div className="flex-1 flex items-center justify-center bg-zinc-50/50 dark:bg-zinc-950/30 p-8 overflow-auto">
+    <div className="flex-1 flex items-center justify-center bg-[var(--notation-bg-elevated)]/50 bg-[var(--notation-bg-elevated)]/30 p-8 overflow-auto">
       <img
         src={url}
         alt={path}
@@ -111,7 +111,7 @@ function PDFView({ url, path }: { url: string; path: string }) {
     <iframe
       src={url}
       title={path}
-      className="flex-1 w-full border-0 bg-zinc-100 dark:bg-zinc-950"
+      className="flex-1 w-full border-0 bg-[var(--notation-bg-alt)] bg-[var(--notation-bg-elevated)]"
     />
   )
 }
@@ -138,7 +138,7 @@ function CodeView({ content, path }: { content: string; path: string }) {
   }, [content, path])
 
   return (
-    <div className="flex-1 overflow-auto bg-zinc-50/50 dark:bg-zinc-950/30">
+    <div className="flex-1 overflow-auto bg-[var(--notation-bg-elevated)]/50 bg-[var(--notation-bg-elevated)]/30">
       <pre className="hljs p-6 text-sm leading-relaxed max-w-5xl mx-auto rounded-md my-4">
         <code dangerouslySetInnerHTML={{ __html: html || escapeHtml(content) }} />
       </pre>
@@ -150,13 +150,13 @@ function DownloadView({ url, path }: { url: string; path: string }) {
   const filename = path.split('/').pop() ?? path
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-      <FileQuestion size={48} className="text-zinc-300 dark:text-zinc-700 mb-4" />
+      <FileQuestion size={48} className="text-[var(--notation-fg)] mb-4" />
       <p className="text-[var(--notation-fg)] font-medium mb-1">{filename}</p>
-      <p className="text-sm text-zinc-500 mb-6">No inline preview available for this file type.</p>
+      <p className="text-sm text-[var(--notation-fg-muted)] mb-6">No inline preview available for this file type.</p>
       <a
         href={url}
         download={filename}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] font-medium text-sm rounded-md transition-colors"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] font-medium text-sm rounded-md transition-colors"
       >
         <Download size={14} /> Download
       </a>

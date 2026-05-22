@@ -42,23 +42,23 @@ export function HistoryPanel({ spaceID }: Props) {
       <h3 className="font-semibold text-xs text-[var(--notation-fg-muted)] uppercase tracking-wider px-2 mb-2 flex items-center gap-1">
         <GitCommit size={12} /> History
       </h3>
-      {err && <p className="text-xs text-red-600 mb-2">{err}</p>}
+      {err && <p className="text-xs text-[var(--notation-danger)] mb-2">{err}</p>}
       {commits.length === 0 ? (
-        <p className="text-xs text-zinc-500 italic px-2">No commits yet.</p>
+        <p className="text-xs text-[var(--notation-fg-muted)] italic px-2">No commits yet.</p>
       ) : (
         <ul className="space-y-1">
           {commits.map(c => (
             <li key={c.hash} className="rounded-md border border-[var(--notation-border)] overflow-hidden">
               <button
                 onClick={() => toggle(c.hash)}
-                className="w-full flex items-start gap-2 px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-left transition-colors"
+                className="w-full flex items-start gap-2 px-2 py-1.5 hover:bg-[var(--notation-bg-alt)] hover:bg-[var(--notation-bg-alt)]/50 text-left transition-colors"
               >
-                <div className="mt-0.5 text-zinc-400">
+                <div className="mt-0.5 text-[var(--notation-fg-muted)]">
                   {openHash === c.hash ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm text-[var(--notation-fg)] truncate">{c.subject}</div>
-                  <div className="text-[11px] text-zinc-500 mt-0.5 flex items-center gap-1.5">
+                  <div className="text-[11px] text-[var(--notation-fg-muted)] mt-0.5 flex items-center gap-1.5">
                     <span className="font-mono">{c.hash.slice(0, 7)}</span>
                     <span>·</span>
                     <span className="truncate">{c.author}</span>
@@ -68,7 +68,7 @@ export function HistoryPanel({ spaceID }: Props) {
                 </div>
               </button>
               {openHash === c.hash && (
-                <pre className="text-[11px] font-mono px-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border-t border-[var(--notation-border)] overflow-x-auto max-h-72 overflow-y-auto whitespace-pre-wrap">
+                <pre className="text-[11px] font-mono px-3 py-2 bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/50 border-t border-[var(--notation-border)] overflow-x-auto max-h-72 overflow-y-auto whitespace-pre-wrap">
                   {diffs[c.hash] ?? 'loading…'}
                 </pre>
               )}

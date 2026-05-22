@@ -122,22 +122,22 @@ export function SharePanel({ spaceID }: Props) {
         </fieldset>
         <button
           type="submit"
-          className="px-3 py-1 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 text-sm rounded w-full font-medium hover:opacity-90"
+          className="px-3 py-1 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] text-sm rounded w-full font-medium hover:opacity-90"
         >
           Create link
         </button>
       </form>
 
       {created && (
-        <div className="mb-3 p-2 bg-yellow-50 border border-yellow-300 rounded text-xs">
-          <p className="font-semibold text-yellow-900 mb-1">
+        <div className="mb-3 p-2 bg-[var(--notation-warning)] border border-[var(--notation-warning)] rounded text-xs">
+          <p className="font-semibold text-[var(--notation-warning)] mb-1">
             Save this URL now — token cannot be recovered:
           </p>
           <code className="block break-all bg-white p-2 rounded mb-2 select-all">
             {created.url}
           </code>
           <div className="flex gap-2">
-            <button onClick={() => copy(created.url)} className="text-blue-600 hover:underline">
+            <button onClick={() => copy(created.url)} className="text-[var(--notation-info)] hover:underline">
               copy
             </button>
             <button onClick={() => setCreated(null)} className="text-gray-600 hover:underline">
@@ -173,7 +173,7 @@ export function SharePanel({ spaceID }: Props) {
                 </div>
                 <button
                   onClick={() => onDelete(s.id)}
-                  className="text-red-600 hover:underline flex-shrink-0"
+                  className="text-[var(--notation-danger)] hover:underline flex-shrink-0"
                 >
                   revoke
                 </button>
@@ -183,7 +183,7 @@ export function SharePanel({ spaceID }: Props) {
         </ul>
       )}
 
-      {err && <p className="text-red-600 mt-2 text-xs">{err}</p>}
+      {err && <p className="text-[var(--notation-danger)] mt-2 text-xs">{err}</p>}
     </div>
   )
 }

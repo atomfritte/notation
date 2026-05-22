@@ -77,7 +77,7 @@ export default function WordView({ url, path }: Props) {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm gap-2">
+      <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm gap-2">
         <FileText size={16} /> Converting document…
       </div>
     )
@@ -85,7 +85,7 @@ export default function WordView({ url, path }: Props) {
   if (err) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-[var(--notation-fg)] p-8 gap-3">
-        <AlertTriangle size={32} className="text-red-500" />
+        <AlertTriangle size={32} className="text-[var(--notation-danger)]" />
         <div className="text-sm">Could not open document</div>
         <div className="text-xs text-[var(--notation-fg-muted)] font-mono">{err}</div>
       </div>

@@ -525,7 +525,7 @@ type ToolbarProps = {
 
 function Toolbar({ dirty, saving, err, onSave, onAction }: ToolbarProps) {
   return (
-    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-[var(--notation-border)]/60 bg-zinc-50/80 dark:bg-zinc-900/40 backdrop-blur-sm flex-shrink-0 sticky top-0 z-20">
+    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-[var(--notation-border)]/60 bg-[var(--notation-bg-elevated)]/80 bg-[var(--notation-bg-alt)]/40 backdrop-blur-sm flex-shrink-0 sticky top-0 z-20">
       <ToolGroup>
         <ToolBtn icon={Heading1} title="Heading 1" onClick={() => onAction('h1')} />
         <ToolBtn icon={Heading2} title="Heading 2" onClick={() => onAction('h2')} />
@@ -554,17 +554,17 @@ function Toolbar({ dirty, saving, err, onSave, onAction }: ToolbarProps) {
 
       <div className="ml-auto flex items-center gap-2 pl-2">
         {err && (
-          <span className="text-xs text-red-600 dark:text-red-400 truncate max-w-xs" title={err}>
+          <span className="text-xs text-[var(--notation-danger)] dark:text-[var(--notation-danger)] truncate max-w-xs" title={err}>
             {err}
           </span>
         )}
         {dirty && !saving && (
-          <span className="text-[11px] text-amber-600 dark:text-amber-400">unsaved</span>
+          <span className="text-[11px] text-[var(--notation-warning)] dark:text-[var(--notation-warning)]">unsaved</span>
         )}
         <button
           onClick={onSave}
           disabled={!dirty || saving}
-          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40"
+          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40"
           title="Save (⌘S)"
         >
           <Save size={13} /> {saving ? 'Saving…' : 'Save'}
@@ -579,7 +579,7 @@ function ToolGroup({ children }: { children: React.ReactNode }) {
 }
 
 function Divider() {
-  return <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700/60 mx-1" />
+  return <div className="w-px h-5 bg-[var(--notation-bg-alt)] dark:bg-[var(--notation-bg-alt)]/60 mx-1" />
 }
 
 function ToolBtn({
@@ -594,7 +594,7 @@ function ToolBtn({
       type="button"
       title={title}
       onClick={onClick}
-      className="p-1.5 rounded text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60 transition-colors"
+      className="p-1.5 rounded text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/60 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/60 transition-colors"
     >
       <Icon size={14} />
     </button>

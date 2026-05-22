@@ -199,7 +199,7 @@ function FileRow({
         className={`flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-md transition-colors ${
           isActive
             ? 'bg-[var(--notation-border)] text-[var(--notation-fg)] font-medium'
-            : 'text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200'
+            : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-bg-alt)]/50 hover:text-[var(--notation-fg)] dark:text-[var(--notation-fg-muted)] hover:bg-[var(--notation-bg-alt)]/50 hover:text-[var(--notation-fg)]'
         }`}
         style={{ paddingLeft: depth * 12 + 28 }}
         title={entry.path}
@@ -283,8 +283,8 @@ function DirRow({
       <div
         className={`flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer transition-colors ${
           isDropTarget
-            ? 'bg-[color:var(--notation-accent-15)] ring-1 ring-[color:var(--notation-accent-40)] text-zinc-900 dark:text-[color:var(--notation-accent)]'
-            : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)] hover:text-zinc-900 dark:hover:text-zinc-300'
+            ? 'bg-[color:var(--notation-accent-15)] ring-1 ring-[color:var(--notation-accent-40)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]'
+            : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)] hover:text-[var(--notation-fg)]'
         }`}
         style={{ paddingLeft: depth * 12 + 8 }}
         onClick={onToggle}
@@ -304,7 +304,7 @@ function DirRow({
         onDrop={handleDrop}
         title={entry.path}
       >
-        <div className="w-4 h-4 flex items-center justify-center rounded hover:bg-zinc-300/40 dark:hover:bg-zinc-700/50">
+        <div className="w-4 h-4 flex items-center justify-center rounded hover:bg-[var(--notation-bg-alt)]/40 hover:bg-[var(--notation-bg-alt)]/50">
           {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
         </div>
         {collapsed

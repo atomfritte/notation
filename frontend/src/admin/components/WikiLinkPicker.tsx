@@ -182,13 +182,13 @@ export function WikiLinkPicker({
   return (
     <div
       ref={containerRef}
-      className="fixed z-[100] w-80 bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-md shadow-2xl overflow-hidden flex flex-col max-h-80"
+      className="fixed z-[100] w-80 bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-md shadow-2xl overflow-hidden flex flex-col max-h-80"
       style={{ left, top }}
       onMouseDown={e => e.stopPropagation()}
       onKeyDown={onKey}
     >
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--notation-border)]">
-        <Search size={14} className="text-zinc-400" />
+        <Search size={14} className="text-[var(--notation-fg-muted)]" />
         <input
           ref={inputRef}
           value={expanded ? headingQ : q}
@@ -199,7 +199,7 @@ export function WikiLinkPicker({
         {expanded && (
           <button
             onClick={() => setExpanded(null)}
-            className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            className="text-[10px] uppercase tracking-wider text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]"
           >
             ← pages
           </button>
@@ -209,7 +209,7 @@ export function WikiLinkPicker({
       <ul className="overflow-y-auto flex-1 py-1 text-sm">
         {!expanded &&
           (files.length === 0 ? (
-            <li className="px-3 py-3 text-xs text-zinc-500 italic">No pages match.</li>
+            <li className="px-3 py-3 text-xs text-[var(--notation-fg-muted)] italic">No pages match.</li>
           ) : (
             files.map((f, i) => {
               const clean = f.replace(/\.md$/i, '')
@@ -220,7 +220,7 @@ export function WikiLinkPicker({
                   onMouseEnter={() => setIdx(i)}
                   className={
                     'flex items-center transition-colors ' +
-                    (active ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50')
+                    (active ? 'bg-[var(--notation-bg-alt)]' : 'hover:bg-[var(--notation-bg-alt)] hover:bg-[var(--notation-bg-alt)]/50')
                   }
                 >
                   <button
@@ -233,7 +233,7 @@ export function WikiLinkPicker({
                   <button
                     onClick={() => setExpanded(f)}
                     title="Pick a heading"
-                    className="px-2 py-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                    className="px-2 py-1.5 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]"
                   >
                     <ChevronRight size={12} />
                   </button>
@@ -246,18 +246,18 @@ export function WikiLinkPicker({
           <>
             <li
               onMouseEnter={() => setIdx(0)}
-              className={idx === 0 ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}
+              className={idx === 0 ? 'bg-[var(--notation-bg-alt)]' : 'hover:bg-[var(--notation-bg-alt)] hover:bg-[var(--notation-bg-alt)]/50'}
             >
               <button
                 onClick={() => insertFile(expanded)}
                 className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-[var(--notation-fg)] border-b border-[var(--notation-border)]/50"
               >
                 <FileText size={12} className={idx === 0 ? 'text-[color:var(--notation-accent)]' : 'opacity-60'} />
-                Insert <code className="text-xs bg-zinc-100 dark:bg-zinc-800 px-1 rounded">[[{expanded.replace(/\.md$/i, '')}]]</code>
+                Insert <code className="text-xs bg-[var(--notation-bg-alt)] px-1 rounded">[[{expanded.replace(/\.md$/i, '')}]]</code>
               </button>
             </li>
             {filteredHeadings.length === 0 ? (
-              <li className="px-3 py-3 text-xs text-zinc-500 italic">No headings in this page.</li>
+              <li className="px-3 py-3 text-xs text-[var(--notation-fg-muted)] italic">No headings in this page.</li>
             ) : (
               filteredHeadings.map((h, i) => {
                 const rowIdx = i + 1
@@ -266,7 +266,7 @@ export function WikiLinkPicker({
                   <li
                     key={i}
                     onMouseEnter={() => setIdx(rowIdx)}
-                    className={active ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}
+                    className={active ? 'bg-[var(--notation-bg-alt)]' : 'hover:bg-[var(--notation-bg-alt)] hover:bg-[var(--notation-bg-alt)]/50'}
                   >
                     <button
                       onClick={() => insertHeading(expanded, h.text)}
@@ -284,7 +284,7 @@ export function WikiLinkPicker({
         )}
       </ul>
 
-      <div className="px-3 py-1.5 border-t border-[var(--notation-border)] flex items-center gap-3 text-[10px] text-zinc-500 bg-zinc-50 dark:bg-zinc-950/30">
+      <div className="px-3 py-1.5 border-t border-[var(--notation-border)] flex items-center gap-3 text-[10px] text-[var(--notation-fg-muted)] bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/30">
         <span><kbd className="px-1 border border-[var(--notation-border)] rounded">↑↓</kbd> nav</span>
         <span><kbd className="px-1 border border-[var(--notation-border)] rounded">→</kbd> headings</span>
         <span><kbd className="px-1 border border-[var(--notation-border)] rounded">↵</kbd> insert</span>
