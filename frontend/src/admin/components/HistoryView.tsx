@@ -11,12 +11,12 @@ type Props = {
   path: string
   theme: 'light' | 'dark'
   onClose: () => void
-  /** Fired after a successful restore ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â parent should refresh tree + content. */
+  /** Fired after a successful restore ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â parent should refresh tree + content. */
   onRestored: () => void
 }
 
 /**
- * HistoryView ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â full-pane per-file history. Left rail lists commits that
+ * HistoryView ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â full-pane per-file history. Left rail lists commits that
  * touched this file (newest first). Click rows to select up to two: with one
  * selected, the right pane previews that version (Restore enabled); with two
  * selected, the right pane shows a colored unified diff between them.
@@ -65,7 +65,7 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
       }
       return
     }
-    // 2 selected ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ side-by-side diff. Commits list is newest-first so the
+    // 2 selected ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ side-by-side diff. Commits list is newest-first so the
     // entry with the higher index is the older commit; that's our "from".
     const [a, b] = selected
     const ia = commits.findIndex(c => c.hash === a)
@@ -112,9 +112,9 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[var(--notation-bg)]">
-      <header className="h-12 flex items-center px-4 border-b border-zinc-200 dark:border-zinc-800 flex-shrink-0 gap-3">
+      <header className="h-12 flex items-center px-4 border-b border-[var(--notation-border)] flex-shrink-0 gap-3">
         <GitCommit size={16} className="text-zinc-500" />
-        <div className="text-sm font-medium text-zinc-800 dark:text-zinc-200">History</div>
+        <div className="text-sm font-medium text-[var(--notation-fg)]">History</div>
         <div className="text-sm text-zinc-500 truncate">{path.replace(/\.md$/i, '')}</div>
         <div className="ml-auto flex items-center gap-2">
           {selected.length === 1 && (
@@ -123,7 +123,7 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
               disabled={restoring}
               className="px-3 py-1.5 text-sm font-medium bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40 flex items-center gap-1.5"
             >
-              <RotateCcw size={14} /> {restoring ? 'RestoringÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦' : 'Restore this version'}
+              <RotateCcw size={14} /> {restoring ? 'RestoringÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦' : 'Restore this version'}
             </button>
           )}
           {selected.length > 0 && (
@@ -145,9 +145,9 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 overflow-y-auto bg-zinc-50/30 dark:bg-zinc-950/30">
-          <div className="px-3 py-2 text-xs text-zinc-500 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 bg-zinc-50 dark:bg-zinc-950">
-            {commits.length} version{commits.length === 1 ? '' : 's'} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· select 1 to preview, 2 to compare
+        <aside className="w-72 flex-shrink-0 border-r border-[var(--notation-border)] overflow-y-auto bg-zinc-50/30 dark:bg-zinc-950/30">
+          <div className="px-3 py-2 text-xs text-zinc-500 border-b border-[var(--notation-border)] sticky top-0 bg-zinc-50 dark:bg-zinc-950">
+            {commits.length} version{commits.length === 1 ? '' : 's'} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· select 1 to preview, 2 to compare
           </div>
           {commits.length === 0 ? (
             <p className="p-4 text-sm text-zinc-500 italic">No history for this file yet.</p>
@@ -170,21 +170,21 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
                           'mt-1 flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center text-zinc-50 ' +
                           (sel
                             ? 'border-zinc-900 dark:border-[color:var(--notation-accent)] bg-zinc-900 dark:bg-[color:var(--notation-accent)]'
-                            : 'border-zinc-300 dark:border-zinc-700')
+                            : 'border-[var(--notation-border)]')
                         }
                       >
                         {sel && <Check size={10} className="text-white dark:text-zinc-950" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm text-zinc-800 dark:text-zinc-200 truncate">{c.subject || '(no message)'}</div>
+                        <div className="text-sm text-[var(--notation-fg)] truncate">{c.subject || '(no message)'}</div>
                         <div className="text-[11px] text-zinc-500 mt-0.5 flex items-center gap-1.5">
                           <span className="font-mono">{c.hash.slice(0, 7)}</span>
-                          <span>ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·</span>
+                          <span>ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·</span>
                           <span className="truncate">{c.author}</span>
                         </div>
                         <div className="text-[10px] text-zinc-400 mt-0.5">{new Date(c.date).toLocaleString()}</div>
                         {i === 0 && (
-                          <span className="inline-block mt-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded">
+                          <span className="inline-block mt-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 text-[var(--notation-fg)] rounded">
                             current
                           </span>
                         )}
@@ -204,12 +204,12 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
             </div>
           )}
           {selected.length === 0 && (
-            <div className="flex-1 flex items-center justify-center text-zinc-400 dark:text-zinc-500 text-sm">
+            <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">
               Select a version from the left to preview.
             </div>
           )}
           {selected.length === 1 && previewLoading && (
-            <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">LoadingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦</div>
+            <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">LoadingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦</div>
           )}
           {selected.length === 1 && !previewLoading && (
             <FileViewer
@@ -222,7 +222,7 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
           )}
           {selected.length === 2 && (
             previewLoading ? (
-              <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">LoadingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦</div>
+              <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">LoadingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦</div>
             ) : compareFrom === compareTo ? (
               <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm flex-col gap-2">
                 <GitCompareArrows size={20} className="opacity-50" />
@@ -232,7 +232,7 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
               <Suspense
                 fallback={
                   <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-                    Loading diff editorÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦
+                    Loading diff editorÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦
                   </div>
                 }
               >

@@ -65,7 +65,7 @@ export function Outline({ content }: Props) {
 
   return (
     <div className="p-3 sticky top-0">
-      <h3 className="font-semibold text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wider px-2 mb-2 flex items-center gap-1">
+      <h3 className="font-semibold text-xs text-[var(--notation-fg-muted)] uppercase tracking-wider px-2 mb-2 flex items-center gap-1">
         <List size={12} /> Outline
       </h3>
       <ul className="space-y-0.5 text-sm">
@@ -91,12 +91,12 @@ export function Outline({ content }: Props) {
   )
 }
 
-// Use github-slugger directly â€” the same library rehype-slug uses to assign
+// Use github-slugger directly Ã¢â‚¬â€ the same library rehype-slug uses to assign
 // ids in the rendered DOM. Our previous home-grown algorithm stripped any
 // non-ASCII character (Unicode letters like umlauts vanished entirely) and
 // could disagree with rehype-slug on duplicates, which is why H2 entries
 // with German / non-latin titles silently failed to scroll: the Outline
-// computed `bersicht`, but the DOM had `Ã¼bersicht`. Pin both sides to the
+// computed `bersicht`, but the DOM had `ÃƒÂ¼bersicht`. Pin both sides to the
 // exact same algorithm.
 function extractHeadings(md: string): Heading[] {
   const stripped = md.replace(/```[\s\S]*?```/g, '').replace(/~~~[\s\S]*?~~~/g, '')

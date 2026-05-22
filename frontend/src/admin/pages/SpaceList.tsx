@@ -6,7 +6,7 @@ import { logout } from '../lib/auth'
 import { ThemePalette } from '../components/ThemePalette'
 
 /**
- * SpaceList Ã¢â‚¬â€ the workspace switcher / landing page.
+ * SpaceList ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the workspace switcher / landing page.
  *
  * Layout:
  *   - sticky branded header with theme toggle + signed-in chip
@@ -18,7 +18,7 @@ import { ThemePalette } from '../components/ThemePalette'
  *   - modal form for creating new spaces
  *
  * Each card's gradient is derived from a stable string hash of the space id,
- * so the same space always shows up in the same colour Ã¢â‚¬â€ useful for the
+ * so the same space always shows up in the same colour ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â useful for the
  * "muscle memory" of finding a workspace quickly.
  */
 export function SpaceList() {
@@ -65,8 +65,8 @@ export function SpaceList() {
   }, [spaces, query])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-white dark:from-[#0a0a0a] dark:to-[#0d0d0d] text-zinc-900 dark:text-zinc-200 selection:bg-[color:var(--notation-accent-30)]">
-      <header className="sticky top-0 z-30 border-b border-zinc-200 dark:border-zinc-800/50 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-md">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-white dark:from-[#0a0a0a] dark:to-[#0d0d0d] text-[var(--notation-fg)] selection:bg-[color:var(--notation-accent-30)]">
+      <header className="sticky top-0 z-30 border-b border-[var(--notation-border)] bg-white/70 dark:bg-zinc-950/70 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link to="/admin" className="flex items-center gap-2 group">
             <div className="w-7 h-7 rounded-md bg-zinc-900 dark:bg-[color:var(--notation-accent)] flex items-center justify-center transition-transform group-hover:scale-105">
@@ -91,8 +91,8 @@ export function SpaceList() {
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             {me && (
-              <div className="flex items-center gap-2 pl-3 ml-1 border-l border-zinc-200 dark:border-zinc-800">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400 hidden sm:inline">
+              <div className="flex items-center gap-2 pl-3 ml-1 border-l border-[var(--notation-border)]">
+                <span className="text-sm text-[var(--notation-fg-muted)] hidden sm:inline">
                   {me.name}
                 </span>
                 <button
@@ -113,10 +113,10 @@ export function SpaceList() {
 
       <main className="max-w-6xl mx-auto px-6 py-12">
         <div className="mb-10">
-          <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+          <h1 className="text-4xl font-bold tracking-tight text-[var(--notation-fg)]">
             Your Spaces
           </h1>
-          <p className="text-zinc-500 dark:text-zinc-400 mt-2">
+          <p className="text-[var(--notation-fg-muted)] mt-2">
             Self-hosted workspaces for notes, files, and AI sessions.
           </p>
         </div>
@@ -127,8 +127,8 @@ export function SpaceList() {
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search spacesÃ¢â‚¬Â¦"
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
+              placeholder="Search spacesÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-[var(--notation-border)] bg-white dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
             />
           </div>
           <button
@@ -188,7 +188,7 @@ function SpaceCard({ space, onDelete }: { space: api.Meta; onDelete: () => void 
     <div className="group relative">
       <Link
         to={`/admin/spaces/${encodeURIComponent(space.id)}`}
-        className="block rounded-xl border border-zinc-200 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/40 overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg dark:hover:shadow-black/20 hover:-translate-y-0.5 transition-all duration-200"
+        className="block rounded-xl border border-[var(--notation-border)]/60 bg-white dark:bg-zinc-900/40 overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg dark:hover:shadow-black/20 hover:-translate-y-0.5 transition-all duration-200"
       >
         <div
           className="h-20 flex items-center justify-center relative"
@@ -203,13 +203,13 @@ function SpaceCard({ space, onDelete }: { space: api.Meta; onDelete: () => void 
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-black/10 pointer-events-none" />
         </div>
         <div className="p-4">
-          <div className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+          <div className="font-semibold text-[var(--notation-fg)] truncate">
             {space.name || space.id}
           </div>
-          <div className="text-xs text-zinc-500 dark:text-zinc-500 mt-0.5 font-mono truncate">
+          <div className="text-xs text-[var(--notation-fg-muted)] mt-0.5 font-mono truncate">
             /{space.id}
           </div>
-          <div className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-3 flex items-center gap-1">
+          <div className="text-[11px] text-[var(--notation-fg-muted)] mt-3 flex items-center gap-1">
             {space.created_at && <span>Created {formatDate(space.created_at)}</span>}
           </div>
         </div>
@@ -234,7 +234,7 @@ function CreateCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700/60 hover:border-zinc-900/40 dark:hover:border-[color:var(--notation-accent-40)] hover:bg-zinc-50 dark:hover:bg-[color:var(--notation-accent)]/5 transition-colors flex flex-col items-center justify-center min-h-[12rem] text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-[color:var(--notation-accent)] group"
+      className="rounded-xl border-2 border-dashed border-[var(--notation-border)]/60 hover:border-zinc-900/40 dark:hover:border-[color:var(--notation-accent-40)] hover:bg-zinc-50 dark:hover:bg-[color:var(--notation-accent)]/5 transition-colors flex flex-col items-center justify-center min-h-[12rem] text-[var(--notation-fg-muted)] hover:text-zinc-700 dark:hover:text-[color:var(--notation-accent)] group"
     >
       <div className="w-10 h-10 rounded-full border-2 border-current flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
         <Plus size={20} strokeWidth={2} />
@@ -252,10 +252,10 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800/40 dark:to-zinc-900 flex items-center justify-center">
         <FolderOpen size={28} className="text-zinc-400 dark:text-zinc-600" strokeWidth={1.5} />
       </div>
-      <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+      <h3 className="text-lg font-semibold text-[var(--notation-fg)] mb-2">
         No spaces yet
       </h3>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 max-w-sm mx-auto">
+      <p className="text-sm text-[var(--notation-fg-muted)] mb-6 max-w-sm mx-auto">
         Create your first workspace to start writing notes, sharing pages, and connecting an MCP client.
       </p>
       <button
@@ -270,7 +270,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 
 function NoResults({ query }: { query: string }) {
   return (
-    <div className="text-center py-16 text-zinc-500 dark:text-zinc-400 text-sm">
+    <div className="text-center py-16 text-[var(--notation-fg-muted)] text-sm">
       No spaces match &ldquo;{query}&rdquo;.
     </div>
   )
@@ -310,11 +310,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-150"
+        className="bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Create a new Space</h2>
+          <h2 className="text-xl font-bold text-[var(--notation-fg)]">Create a new Space</h2>
           <button
             onClick={onClose}
             className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded -mr-1"
@@ -323,12 +323,12 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <X size={18} />
           </button>
         </div>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-5">
+        <p className="text-sm text-[var(--notation-fg-muted)] mb-5">
           A new workspace for notes, files, and AI sessions.
         </p>
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+            <label className="block text-xs font-medium text-[var(--notation-fg)] mb-1">
               ID
             </label>
             <input
@@ -337,21 +337,21 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               required
               pattern="[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]"
               autoFocus
-              className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
+              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-white dark:bg-zinc-950 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
               placeholder="my-project"
             />
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">
-              Lowercase aÃ¢â‚¬â€œz, digits, _ or -. 3Ã¢â‚¬â€œ32 characters.
+            <p className="text-[11px] text-[var(--notation-fg-muted)] mt-1">
+              Lowercase aÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“z, digits, _ or -. 3ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“32 characters.
             </p>
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+            <label className="block text-xs font-medium text-[var(--notation-fg)] mb-1">
               Name <span className="text-zinc-400 font-normal">(optional)</span>
             </label>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
+              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-white dark:bg-zinc-950 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
               placeholder="My Project"
             />
           </div>
@@ -362,7 +362,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 rounded-md text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              className="flex-1 px-4 py-2 rounded-md text-sm font-medium text-[var(--notation-fg)] hover:bg-[var(--notation-border)] transition-colors"
             >
               Cancel
             </button>
@@ -371,7 +371,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               disabled={submitting || !id}
               className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40 transition-colors"
             >
-              {submitting ? 'CreatingÃ¢â‚¬Â¦' : 'Create'}
+              {submitting ? 'CreatingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' : 'Create'}
             </button>
           </div>
         </form>

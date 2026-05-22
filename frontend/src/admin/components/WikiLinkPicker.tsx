@@ -24,10 +24,10 @@ type Props = {
 /**
  * WikiLinkPicker is a floating, two-stage picker for [[wiki-links]]:
  *
- *   Stage 1 â€” Pages: fuzzy substring search over the Space's markdown files.
+ *   Stage 1 Ã¢â‚¬â€ Pages: fuzzy substring search over the Space's markdown files.
  *             Click a page to insert `[[page]]`, or click its chevron to drop
  *             into stage 2 for that page.
- *   Stage 2 â€” Headings: shows the page's headings (parsed from the live editor
+ *   Stage 2 Ã¢â‚¬â€ Headings: shows the page's headings (parsed from the live editor
  *             buffer if it's the current file, otherwise fetched). Click a
  *             heading to insert `[[page#heading]]`, or "Insert without heading"
  *             to fall back to `[[page]]`.
@@ -182,26 +182,26 @@ export function WikiLinkPicker({
   return (
     <div
       ref={containerRef}
-      className="fixed z-[100] w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col max-h-80"
+      className="fixed z-[100] w-80 bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-md shadow-2xl overflow-hidden flex flex-col max-h-80"
       style={{ left, top }}
       onMouseDown={e => e.stopPropagation()}
       onKeyDown={onKey}
     >
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--notation-border)]">
         <Search size={14} className="text-zinc-400" />
         <input
           ref={inputRef}
           value={expanded ? headingQ : q}
           onChange={e => (expanded ? setHeadingQ(e.target.value) : setQ(e.target.value))}
-          placeholder={expanded ? 'Filter headingsâ€¦' : 'Search pagesâ€¦'}
-          className="flex-1 bg-transparent outline-none text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+          placeholder={expanded ? 'Filter headingsÃ¢â‚¬Â¦' : 'Search pagesÃ¢â‚¬Â¦'}
+          className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
         />
         {expanded && (
           <button
             onClick={() => setExpanded(null)}
             className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
           >
-            â† pages
+            Ã¢â€ Â pages
           </button>
         )}
       </div>
@@ -225,7 +225,7 @@ export function WikiLinkPicker({
                 >
                   <button
                     onClick={() => insertFile(f)}
-                    className="flex-1 text-left flex items-center gap-2 px-3 py-1.5 text-zinc-700 dark:text-zinc-300 min-w-0"
+                    className="flex-1 text-left flex items-center gap-2 px-3 py-1.5 text-[var(--notation-fg)] min-w-0"
                   >
                     <FileText size={12} className={active ? 'text-[color:var(--notation-accent)]' : 'opacity-60'} />
                     <span className="truncate">{clean}</span>
@@ -250,7 +250,7 @@ export function WikiLinkPicker({
             >
               <button
                 onClick={() => insertFile(expanded)}
-                className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-zinc-700 dark:text-zinc-300 border-b border-zinc-100 dark:border-zinc-800/50"
+                className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-[var(--notation-fg)] border-b border-[var(--notation-border)]/50"
               >
                 <FileText size={12} className={idx === 0 ? 'text-[color:var(--notation-accent)]' : 'opacity-60'} />
                 Insert <code className="text-xs bg-zinc-100 dark:bg-zinc-800 px-1 rounded">[[{expanded.replace(/\.md$/i, '')}]]</code>
@@ -270,7 +270,7 @@ export function WikiLinkPicker({
                   >
                     <button
                       onClick={() => insertHeading(expanded, h.text)}
-                      className="w-full text-left flex items-center gap-2 py-1.5 text-zinc-700 dark:text-zinc-300"
+                      className="w-full text-left flex items-center gap-2 py-1.5 text-[var(--notation-fg)]"
                       style={{ paddingLeft: (h.level - 1) * 10 + 12, paddingRight: 12 }}
                     >
                       <Hash size={10} className={active ? 'text-[color:var(--notation-accent)]' : 'opacity-50'} />
@@ -284,11 +284,11 @@ export function WikiLinkPicker({
         )}
       </ul>
 
-      <div className="px-3 py-1.5 border-t border-zinc-200 dark:border-zinc-800 flex items-center gap-3 text-[10px] text-zinc-500 bg-zinc-50 dark:bg-zinc-950/30">
-        <span><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">â†‘â†“</kbd> nav</span>
-        <span><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">â†’</kbd> headings</span>
-        <span><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">â†µ</kbd> insert</span>
-        <span><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">esc</kbd> close</span>
+      <div className="px-3 py-1.5 border-t border-[var(--notation-border)] flex items-center gap-3 text-[10px] text-zinc-500 bg-zinc-50 dark:bg-zinc-950/30">
+        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ â€˜Ã¢â€ â€œ</kbd> nav</span>
+        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ â€™</kbd> headings</span>
+        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ Âµ</kbd> insert</span>
+        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">esc</kbd> close</span>
       </div>
     </div>
   )

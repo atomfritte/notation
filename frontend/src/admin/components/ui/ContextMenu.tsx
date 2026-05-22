@@ -30,7 +30,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
   return (
     <div 
       ref={menuRef}
-      className="fixed z-50 min-w-[160px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md shadow-xl py-1 animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-50 min-w-[160px] bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-md shadow-xl py-1 animate-in fade-in zoom-in-95 duration-100"
       style={{ top: y, left: x }}
     >
       {items.map((item, i) => (
@@ -40,7 +40,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
             item.onClick()
             onClose()
           }}
-          className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 ${item.danger ? 'text-red-600 dark:text-red-400' : 'text-zinc-700 dark:text-zinc-300'}`}
+          className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-[var(--notation-border)] ${item.danger ? 'text-red-600 dark:text-red-400' : 'text-[var(--notation-fg)]'}`}
         >
           {item.icon}
           {item.label}

@@ -10,7 +10,7 @@ type Props = {
 }
 
 /**
- * SearchPanel Ã¢â‚¬â€ full-text search modal across all files in the Space.
+ * SearchPanel ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â full-text search modal across all files in the Space.
  * Triggered by Cmd+Shift+F. Hits the backend's /search endpoint which uses
  * the in-memory grep helper (case-insensitive substring across all .* files
  * matching the optional glob).
@@ -70,10 +70,10 @@ export function SearchPanel({ open, spaceID, onClose, onSelect }: Props) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150 flex flex-col"
+        className="w-full max-w-2xl bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150 flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--notation-border)]">
           <Search size={18} className="text-zinc-400" />
           <input
             ref={inputRef}
@@ -82,10 +82,10 @@ export function SearchPanel({ open, spaceID, onClose, onSelect }: Props) {
             onKeyDown={e => {
               if (e.key === 'Escape') onClose()
             }}
-            placeholder="Search across all pagesÃ¢â‚¬Â¦"
-            className="flex-1 bg-transparent outline-none text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+            placeholder="Search across all pagesÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+            className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
           />
-          {loading && <span className="text-xs text-zinc-400">searchingÃ¢â‚¬Â¦</span>}
+          {loading && <span className="text-xs text-zinc-400">searchingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</span>}
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
             <X size={16} />
           </button>
@@ -99,13 +99,13 @@ export function SearchPanel({ open, spaceID, onClose, onSelect }: Props) {
             <div className="p-6 text-center text-sm text-zinc-500 italic">Type at least 2 characters</div>
           )}
           {files.map(path => (
-            <div key={path} className="border-b border-zinc-100 dark:border-zinc-800/50 last:border-0">
+            <div key={path} className="border-b border-[var(--notation-border)]/50 last:border-0">
               <button
                 onClick={() => {
                   onSelect(path)
                   onClose()
                 }}
-                className="w-full text-left px-4 py-2 text-xs font-mono text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-950/30 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                className="w-full text-left px-4 py-2 text-xs font-mono text-[var(--notation-fg)] bg-zinc-50 dark:bg-zinc-950/30 hover:bg-[var(--notation-border)]"
               >
                 {path.replace(/\.md$/i, '')}
               </button>

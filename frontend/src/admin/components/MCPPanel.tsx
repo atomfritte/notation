@@ -19,7 +19,7 @@ type CreateResp = {
 type Props = { spaceID: string }
 
 /**
- * MCPPanel â€” sidebar tab for managing Bearer tokens that grant MCP access to
+ * MCPPanel Ã¢â‚¬â€ sidebar tab for managing Bearer tokens that grant MCP access to
  * this Space. Clicking a token (or finishing creation) opens
  * MCPIntegrationModal with paste-ready Claude Code / Cursor / HTTP snippets.
  */
@@ -84,7 +84,7 @@ export function MCPPanel({ spaceID }: Props) {
   return (
     <>
       <div className="p-3">
-        <h3 className="font-semibold text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wider px-2 mb-2 flex items-center gap-1">
+        <h3 className="font-semibold text-xs text-[var(--notation-fg-muted)] uppercase tracking-wider px-2 mb-2 flex items-center gap-1">
           <Plug size={12} /> MCP Tokens
         </h3>
         <p className="text-xs text-zinc-500 px-2 mb-3 leading-relaxed">
@@ -105,7 +105,7 @@ export function MCPPanel({ spaceID }: Props) {
             <input
               value={label}
               onChange={e => setLabel(e.target.value)}
-              className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2 py-1.5 rounded-md text-xs w-full text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+              className="border border-[var(--notation-border)] bg-white dark:bg-zinc-900 px-2 py-1.5 rounded-md text-xs w-full text-[var(--notation-fg)] placeholder-zinc-400"
               placeholder="Label (e.g. claude-laptop)"
               autoFocus
             />
@@ -138,19 +138,19 @@ export function MCPPanel({ spaceID }: Props) {
               <li
                 key={t.id}
                 onClick={() => setModal({ url: inferredURL })}
-                className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer transition-colors"
+                className="p-2 bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-md hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer transition-colors"
               >
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="font-mono text-xs text-zinc-900 dark:text-zinc-100">{t.id}</div>
+                    <div className="font-mono text-xs text-[var(--notation-fg)]">{t.id}</div>
                     {t.label && (
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 truncate">{t.label}</div>
+                      <div className="text-xs text-[var(--notation-fg-muted)] mt-0.5 truncate">{t.label}</div>
                     )}
                     <div className="text-[10px] text-zinc-500 mt-0.5">
                       created {new Date(t.created_at).toLocaleString()}
                       {t.last_used && (
                         <>
-                          {' Â· '}last used {new Date(t.last_used).toLocaleString()}
+                          {' Ã‚Â· '}last used {new Date(t.last_used).toLocaleString()}
                         </>
                       )}
                     </div>

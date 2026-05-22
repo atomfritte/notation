@@ -23,9 +23,12 @@
  */
 
 export type ModePalette = {
-  accent: string      // 6-digit hex
-  bg: string          // 6-digit hex
-  bgElevated: string  // 6-digit hex
+  accent: string      // links / cursor / buttons / highlights
+  bg: string          // main content background
+  bgElevated: string  // sidebar / header / modals / outline panel
+  fg: string          // primary text (body, headings)
+  fgMuted: string     // secondary text (captions, breadcrumbs, hints)
+  border: string      // dividers + hover backgrounds
 }
 
 export type Theme = {
@@ -37,7 +40,9 @@ export type Theme = {
 
 const HEX_RE = /^#[0-9A-Fa-f]{6}$/
 function isValidPalette(p: any): p is ModePalette {
-  return p && HEX_RE.test(p.accent) && HEX_RE.test(p.bg) && HEX_RE.test(p.bgElevated)
+  return p
+    && HEX_RE.test(p.accent) && HEX_RE.test(p.bg) && HEX_RE.test(p.bgElevated)
+    && HEX_RE.test(p.fg) && HEX_RE.test(p.fgMuted) && HEX_RE.test(p.border)
 }
 function isValidTheme(t: any): t is Theme {
   return t && typeof t.name === 'string' && isValidPalette(t.dark) && isValidPalette(t.light)
@@ -49,8 +54,17 @@ function isValidTheme(t: any): t is Theme {
 // accent. The four "world" themes ship full palettes inspired by popular
 // editor themes; the light variants are best-effort companions.
 
-const NEUTRAL_DARK  = { bg: '#0a0a0a', bgElevated: '#111111' } as const
-const NEUTRAL_LIGHT = { bg: '#ffffff', bgElevated: '#fafafa' } as const
+// Neutral surfaces and text colours for the "tint" themes — they share
+// these and only differ in the accent. Picked so that text/border on top of
+// the matching bg has roughly WCAG AA contrast.
+const NEUTRAL_DARK = {
+  bg: '#0A0A0A', bgElevated: '#111111',
+  fg: '#E4E4E7', fgMuted: '#A1A1AA', border: '#27272A',
+} as const
+const NEUTRAL_LIGHT = {
+  bg: '#FFFFFF', bgElevated: '#FAFAFA',
+  fg: '#18181B', fgMuted: '#71717A', border: '#E4E4E7',
+} as const
 
 function tint(name: string, dark: string, light: string): Theme {
   return {
@@ -70,23 +84,23 @@ export const BUILTIN_THEMES: Theme[] = [
   tint('Mint',   '#6EE7B7', '#059669'),
   {
     name: 'Dracula', builtIn: true,
-    dark:  { accent: '#BD93F9', bg: '#282A36', bgElevated: '#21222C' },
-    light: { accent: '#6F42C1', bg: '#F8F8F2', bgElevated: '#ECECE8' },
+    dark:  { accent: '#BD93F9', bg: '#282A36', bgElevated: '#21222C', fg: '#F8F8F2', fgMuted: '#6272A4', border: '#44475A' },
+    light: { accent: '#6F42C1', bg: '#F8F8F2', bgElevated: '#ECECE8', fg: '#21222C', fgMuted: '#6272A4', border: '#D6D6CE' },
   },
   {
     name: 'Monokai', builtIn: true,
-    dark:  { accent: '#A6E22E', bg: '#272822', bgElevated: '#1E1F1C' },
-    light: { accent: '#75A300', bg: '#FAFAFA', bgElevated: '#F0F0EE' },
+    dark:  { accent: '#A6E22E', bg: '#272822', bgElevated: '#1E1F1C', fg: '#F8F8F2', fgMuted: '#75715E', border: '#3E3D32' },
+    light: { accent: '#75A300', bg: '#FAFAFA', bgElevated: '#F0F0EE', fg: '#1E1F1C', fgMuted: '#75715E', border: '#D9D9D2' },
   },
   {
     name: 'Solarized', builtIn: true,
-    dark:  { accent: '#268BD2', bg: '#002B36', bgElevated: '#003B49' },
-    light: { accent: '#268BD2', bg: '#FDF6E3', bgElevated: '#EEE8D5' },
+    dark:  { accent: '#268BD2', bg: '#002B36', bgElevated: '#003B49', fg: '#839496', fgMuted: '#586E75', border: '#073642' },
+    light: { accent: '#268BD2', bg: '#FDF6E3', bgElevated: '#EEE8D5', fg: '#586E75', fgMuted: '#93A1A1', border: '#E0DAC4' },
   },
   {
     name: 'Nord', builtIn: true,
-    dark:  { accent: '#88C0D0', bg: '#2E3440', bgElevated: '#3B4252' },
-    light: { accent: '#5E81AC', bg: '#ECEFF4', bgElevated: '#E5E9F0' },
+    dark:  { accent: '#88C0D0', bg: '#2E3440', bgElevated: '#3B4252', fg: '#ECEFF4', fgMuted: '#81A1C1', border: '#4C566A' },
+    light: { accent: '#5E81AC', bg: '#ECEFF4', bgElevated: '#E5E9F0', fg: '#2E3440', fgMuted: '#4C566A', border: '#D8DEE4' },
   },
 ]
 
@@ -118,16 +132,28 @@ function migrateLegacyTheme(t: any): Theme | null {
   if (!t) return null
   if (isValidTheme(t)) return t
   if (typeof t.name !== 'string') return null
+  // v1: { name, accent }
+  // v2: { name, accent, bg, bgElevated }
+  // v3: { name, dark: {accent, bg, bgElevated}, light: {...} }
+  // v4 (current): adds fg, fgMuted, border per mode.
   if (HEX_RE.test(t.accent)) {
-    const dark: ModePalette = {
-      accent: t.accent,
-      bg: HEX_RE.test(t.bg) ? t.bg : '#0a0a0a',
-      bgElevated: HEX_RE.test(t.bgElevated) ? t.bgElevated : '#111111',
-    }
     return {
       name: t.name,
-      dark,
-      light: { accent: t.accent, ...NEUTRAL_LIGHT },
+      dark:  {
+        ...NEUTRAL_DARK,
+        accent: t.accent,
+        bg: HEX_RE.test(t.bg) ? t.bg : NEUTRAL_DARK.bg,
+        bgElevated: HEX_RE.test(t.bgElevated) ? t.bgElevated : NEUTRAL_DARK.bgElevated,
+      },
+      light: { ...NEUTRAL_LIGHT, accent: t.accent },
+    }
+  }
+  // v3 → v4: dark/light sub-objects exist but lack the new fg/fgMuted/border.
+  if (t.dark && t.light) {
+    return {
+      name: t.name,
+      dark:  { ...NEUTRAL_DARK,  ...t.dark  },
+      light: { ...NEUTRAL_LIGHT, ...t.light },
     }
   }
   return null
@@ -174,6 +200,9 @@ function paletteToVars(p: ModePalette): Record<string, string> {
     '--notation-accent': p.accent,
     '--notation-bg': p.bg,
     '--notation-bg-elevated': p.bgElevated,
+    '--notation-fg': p.fg,
+    '--notation-fg-muted': p.fgMuted,
+    '--notation-border': p.border,
     ...alphaSiblings(p.accent),
   }
 }
@@ -242,6 +271,24 @@ export function importVSCodeTheme(raw: unknown): VSCodeImportResult {
     'titleBar.activeBackground',
     'panel.background',
   ])
+  const fg = pickHex(colors, [
+    'editor.foreground',
+    'foreground',
+    'sideBar.foreground',
+  ])
+  const fgMuted = pickHex(colors, [
+    'descriptionForeground',
+    'disabledForeground',
+    'editorLineNumber.foreground',
+    'breadcrumb.foreground',
+  ])
+  const border = pickHex(colors, [
+    'panel.border',
+    'sideBar.border',
+    'contrastBorder',
+    'editorGroup.border',
+    'titleBar.border',
+  ])
 
   if (!accent) warnings.push('No accent colour found — kept the previous accent.')
   if (!bg) warnings.push('No editor.background found — kept the previous background.')
@@ -254,6 +301,9 @@ export function importVSCodeTheme(raw: unknown): VSCodeImportResult {
     accent: accent || current.dark.accent,
     bg: bg || current.dark.bg,
     bgElevated: bgElevated || bg || current.dark.bgElevated,
+    fg: fg || current.dark.fg,
+    fgMuted: fgMuted || fg || current.dark.fgMuted,
+    border: border || current.dark.border,
   }
   // VS-Code themes declare "type": "dark" | "light" — respect it. If absent,
   // we infer from the background brightness.

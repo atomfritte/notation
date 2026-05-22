@@ -6,7 +6,7 @@ import type { Entry } from '../lib/api'
  * MIME label for internal drag-and-drop within the FileTree. A drag whose
  * dataTransfer.types contains this string is a tree-internal move (one row
  * being dragged onto a directory). External browser drags (image files,
- * downloads, Ã¢â‚¬Â¦) won't carry it, so they're routed to the upload path
+ * downloads, ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦) won't carry it, so they're routed to the upload path
  * instead.
  */
 const INTERNAL_DRAG_TYPE = 'application/x-notation-path'
@@ -30,14 +30,14 @@ type Props = {
 }
 
 /**
- * FileTree Ã¢â‚¬â€ Windows-Explorer-style file & folder navigator.
+ * FileTree ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Windows-Explorer-style file & folder navigator.
  *
  * Features:
  *   - Click row to open file; click chevron OR row to toggle dir
- *   - Right-click any row Ã¢â€ â€™ onContextMenu(e, path, isDir)
- *   - Right-click empty area Ã¢â€ â€™ onBackgroundContextMenu(e)
- *   - Drag a file/folder onto another directory Ã¢â€ â€™ onMove
- *   - Drop browser files onto a directory Ã¢â€ â€™ onExternalDrop
+ *   - Right-click any row ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ onContextMenu(e, path, isDir)
+ *   - Right-click empty area ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ onBackgroundContextMenu(e)
+ *   - Drag a file/folder onto another directory ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ onMove
+ *   - Drop browser files onto a directory ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ onExternalDrop
  *   - Visual highlight on the active drop target
  *
  * Drag-and-drop semantics: the dragged row sets a small JSON payload on
@@ -78,7 +78,7 @@ export function FileTree({
   useEffect(() => {
     if (!isRoot || !collapseStorageKey) return
     try { localStorage.setItem(collapseStorageKey, JSON.stringify(collapsed)) }
-    catch { /* quota error etc. — not fatal */ }
+    catch { /* quota error etc. â€” not fatal */ }
   }, [collapsed, collapseStorageKey, isRoot])
 
   function toggle(path: string) {
@@ -102,9 +102,9 @@ export function FileTree({
             e.dataTransfer.dropEffect = 'copy'
           }
         }}
-        className="text-sm text-zinc-500 dark:text-zinc-400 px-3 py-6 italic text-center hover:bg-zinc-100/50 dark:hover:bg-zinc-800/20 rounded-md mx-2"
+        className="text-sm text-[var(--notation-fg-muted)] px-3 py-6 italic text-center hover:bg-[var(--notation-border)] rounded-md mx-2"
       >
-        No pages Ã¢â‚¬â€ right-click or drop files here.
+        No pages ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â right-click or drop files here.
       </div>
     )
   }
@@ -113,14 +113,14 @@ export function FileTree({
   // dragged onto the empty area below the last row land at the Space root.
   // Nested levels skip the background-drop wiring; bubbling lets the root
   // catch them. (isRoot already declared earlier for the collapse-storage
-  // wiring — reuse here.)
+  // wiring â€” reuse here.)
 
   return (
     <ul
       className="text-sm select-none"
       onContextMenu={isRoot ? (e) => {
         // Only fire background-context-menu when the click really hit the
-        // <ul>/<li> chrome Ã¢â‚¬â€ row buttons stopPropagation in their own
+        // <ul>/<li> chrome ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â row buttons stopPropagation in their own
         // onContextMenu handlers, so this catches strictly the empty space.
         if (e.target === e.currentTarget) onBackgroundContextMenu?.(e)
       } : undefined}
@@ -198,7 +198,7 @@ function FileRow({
         }}
         className={`flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-md transition-colors ${
           isActive
-            ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100 font-medium'
+            ? 'bg-[var(--notation-border)] text-[var(--notation-fg)] font-medium'
             : 'text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200'
         }`}
         style={{ paddingLeft: depth * 12 + 28 }}
@@ -284,7 +284,7 @@ function DirRow({
         className={`flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer transition-colors ${
           isDropTarget
             ? 'bg-[color:var(--notation-accent-15)] ring-1 ring-[color:var(--notation-accent-40)] text-zinc-900 dark:text-[color:var(--notation-accent)]'
-            : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'
+            : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)] hover:text-zinc-900 dark:hover:text-zinc-300'
         }`}
         style={{ paddingLeft: depth * 12 + 8 }}
         onClick={onToggle}
@@ -310,7 +310,7 @@ function DirRow({
         {collapsed
           ? <Folder size={14} className="opacity-70" />
           : <FolderOpen size={14} className="opacity-70" />}
-        <span className="font-medium text-zinc-700 dark:text-zinc-300 truncate flex-1">{entry.name}</span>
+        <span className="font-medium text-[var(--notation-fg)] truncate flex-1">{entry.name}</span>
       </div>
       {!collapsed && entry.children && (
         <FileTree

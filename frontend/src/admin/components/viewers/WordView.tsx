@@ -51,7 +51,7 @@ export default function WordView({ url, path }: Props) {
           ALLOWED_ATTR: [
             'colspan', 'rowspan', 'align', 'valign',
             'href', 'rel', 'target',
-            // data: URIs only — see ALLOWED_URI_REGEXP below.
+            // data: URIs only â€” see ALLOWED_URI_REGEXP below.
             'src', 'alt', 'title',
             'id',
           ],
@@ -78,16 +78,16 @@ export default function WordView({ url, path }: Props) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm gap-2">
-        <FileText size={16} /> Converting document…
+        <FileText size={16} /> Converting documentâ€¦
       </div>
     )
   }
   if (err) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-zinc-700 dark:text-zinc-300 p-8 gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center text-[var(--notation-fg)] p-8 gap-3">
         <AlertTriangle size={32} className="text-red-500" />
         <div className="text-sm">Could not open document</div>
-        <div className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">{err}</div>
+        <div className="text-xs text-[var(--notation-fg-muted)] font-mono">{err}</div>
       </div>
     )
   }

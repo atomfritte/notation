@@ -20,7 +20,7 @@ type TabKey = 'presets' | 'edit' | 'import'
 type Mode = 'dark' | 'light'
 
 /**
- * ThemePalette v3 — tabbed editor that handles light + dark palettes.
+ * ThemePalette v3 â€” tabbed editor that handles light + dark palettes.
  *
  * Each theme defines THREE colours (accent / bg / surface) for EACH of two
  * modes (dark / light). The Edit tab has a Dark/Light mode toggle at the top
@@ -113,12 +113,12 @@ export function ThemePalette({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-[var(--notation-bg-elevated)] border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl max-w-2xl w-full animate-in zoom-in-95 duration-150 overflow-hidden flex flex-col"
+        className="bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-2xl w-full animate-in zoom-in-95 duration-150 overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
         style={{ maxHeight: '88vh' }}
       >
         <div className="flex items-start justify-between px-6 pt-6 pb-4">
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+          <h2 className="text-xl font-bold text-[var(--notation-fg)] flex items-center gap-2">
             <Palette size={18} className="text-[color:var(--notation-accent)]" /> Themes
           </h2>
           <button
@@ -130,7 +130,7 @@ export function ThemePalette({ onClose }: Props) {
           </button>
         </div>
 
-        <nav className="px-6 border-b border-zinc-200 dark:border-zinc-800 flex gap-1 flex-shrink-0">
+        <nav className="px-6 border-b border-[var(--notation-border)] flex gap-1 flex-shrink-0">
           <TabBtn label="Presets" icon={<Sparkles size={13} />} active={tab === 'presets'} onClick={() => setTab('presets')} />
           <TabBtn label="Edit"    icon={<Pencil size={13} />}    active={tab === 'edit'}    onClick={() => setTab('edit')} />
           <TabBtn label="Import"  icon={<Download size={13} />}  active={tab === 'import'}  onClick={() => setTab('import')} />
@@ -191,8 +191,8 @@ function TabBtn({
       className={
         'px-3 py-2 text-sm font-medium flex items-center gap-1.5 border-b-2 transition-colors ' +
         (active
-          ? 'border-[color:var(--notation-accent)] text-zinc-900 dark:text-zinc-100'
-          : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200')
+          ? 'border-[color:var(--notation-accent)] text-[var(--notation-fg)]'
+          : 'border-transparent text-[var(--notation-fg-muted)] hover:text-zinc-700 dark:hover:text-zinc-200')
       }
     >
       {icon} {label}
@@ -235,7 +235,7 @@ function PresetsTab({
         </div>
       )}
       {customs.length === 0 && (
-        <div className="text-xs text-zinc-500 dark:text-zinc-400 italic">
+        <div className="text-xs text-[var(--notation-fg-muted)] italic">
           Pick a preset and tweak it in Edit, or paste a VS&nbsp;Code theme in Import.
         </div>
       )}
@@ -261,8 +261,8 @@ function EditTab({
 
       <div className="flex items-center gap-2">
         <ModeToggle active={editMode} onChange={onChangeMode} />
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
-          Editing the <strong className="text-zinc-700 dark:text-zinc-200">{editMode}</strong> palette
+        <span className="text-xs text-[var(--notation-fg-muted)]">
+          Editing the <strong className="text-[var(--notation-fg)]">{editMode}</strong> palette
         </span>
       </div>
 
@@ -275,7 +275,7 @@ function EditTab({
         />
         <ColorRow
           label="Background"
-          help="Page body — the main content area."
+          help="Page body â€” the main content area."
           value={palette.bg}
           onChange={v => onChangePalette(editMode, { bg: v })}
         />
@@ -285,18 +285,36 @@ function EditTab({
           value={palette.bgElevated}
           onChange={v => onChangePalette(editMode, { bgElevated: v })}
         />
+        <ColorRow
+          label="Text"
+          help="Body text, headings, code — primary foreground."
+          value={palette.fg}
+          onChange={v => onChangePalette(editMode, { fg: v })}
+        />
+        <ColorRow
+          label="Muted text"
+          help="Secondary copy — breadcrumbs, captions, hints."
+          value={palette.fgMuted}
+          onChange={v => onChangePalette(editMode, { fgMuted: v })}
+        />
+        <ColorRow
+          label="Border / hover"
+          help="Dividers + hover background tint for buttons."
+          value={palette.border}
+          onChange={v => onChangePalette(editMode, { border: v })}
+        />
       </div>
 
-      <div className="flex items-center gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+      <div className="flex items-center gap-2 pt-2 border-t border-[var(--notation-border)]">
         <input
           value={working.name}
           onChange={e => onChangeName(e.target.value)}
-          placeholder="Theme name…"
-          className="flex-1 px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)]"
+          placeholder="Theme nameâ€¦"
+          className="flex-1 px-3 py-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)]"
         />
         <button
           onClick={onRevert}
-          className="p-2 rounded-md text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          className="p-2 rounded-md text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-[var(--notation-border)] transition-colors"
           title="Discard preview, go back to active theme"
         >
           <RotateCcw size={14} />
@@ -324,11 +342,11 @@ function ImportTab({
 }) {
   return (
     <div className="space-y-3">
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="text-sm text-[var(--notation-fg-muted)]">
         Paste a VS&nbsp;Code colour-theme JSON. We extract the accent, the
         editor background, and the sidebar background. The theme's
         <code className="px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] mx-1">"type"</code>
-        field (dark/light) decides which mode of your theme is filled —
+        field (dark/light) decides which mode of your theme is filled â€”
         the other mode keeps its current palette. Comments inside the
         JSON are tolerated.
       </p>
@@ -338,7 +356,7 @@ function ImportTab({
         placeholder='{ "type": "dark", "name": "Tokyo Night", "colors": { ... } }'
         rows={10}
         spellCheck={false}
-        className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)]"
+        className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)]"
       />
       <div className="flex items-center gap-2">
         <button
@@ -352,7 +370,7 @@ function ImportTab({
       </div>
       {warnings.length > 0 && (
         <ul className="text-xs text-amber-600 dark:text-amber-400 space-y-1">
-          {warnings.map((w, i) => <li key={i}>· {w}</li>)}
+          {warnings.map((w, i) => <li key={i}>Â· {w}</li>)}
         </ul>
       )}
     </div>
@@ -363,7 +381,7 @@ function ImportTab({
 
 function SectionHeading({ label }: { label: string }) {
   return (
-    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">
+    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--notation-fg-muted)] mb-2">
       {label}
     </h3>
   )
@@ -371,7 +389,7 @@ function SectionHeading({ label }: { label: string }) {
 
 function ModeToggle({ active, onChange }: { active: Mode; onChange: (m: Mode) => void }) {
   return (
-    <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-800 p-0.5 bg-[var(--notation-bg)]">
+    <div className="inline-flex rounded-md border border-[var(--notation-border)] p-0.5 bg-[var(--notation-bg)]">
       {([
         { k: 'dark',  icon: <Moon size={12} />, label: 'Dark' },
         { k: 'light', icon: <Sun size={12} />,  label: 'Light' },
@@ -382,8 +400,8 @@ function ModeToggle({ active, onChange }: { active: Mode; onChange: (m: Mode) =>
           className={
             'px-2.5 py-1 text-xs font-medium rounded flex items-center gap-1 transition-colors ' +
             (active === opt.k
-              ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
-              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200')
+              ? 'bg-zinc-200 dark:bg-zinc-800 text-[var(--notation-fg)]'
+              : 'text-[var(--notation-fg-muted)] hover:text-zinc-700 dark:hover:text-zinc-200')
           }
         >
           {opt.icon} {opt.label}
@@ -409,7 +427,7 @@ function ThemeCard({
           'w-full rounded-lg border overflow-hidden transition-all text-left ' +
           (active
             ? 'border-[color:var(--notation-accent)] ring-2 ring-[color:var(--notation-accent-30)]'
-            : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700')
+            : 'border-[var(--notation-border)] hover:border-zinc-300 dark:hover:border-zinc-700')
         }
       >
         <div className="flex h-14">
@@ -417,7 +435,7 @@ function ThemeCard({
           <ThemeMiniSwatch palette={theme.light} />
         </div>
         <div className="px-2.5 py-2 flex items-center justify-between bg-[var(--notation-bg-elevated)]">
-          <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200 truncate">{theme.name}</span>
+          <span className="text-xs font-medium text-[var(--notation-fg)] truncate">{theme.name}</span>
           {active && <Check size={12} className="text-[color:var(--notation-accent)] flex-shrink-0" />}
         </div>
       </button>
@@ -461,7 +479,7 @@ function PreviewCard({ label, palette, isDark }: { label: string; palette: ModeP
   const textColor = isDark ? '#FFFFFFCC' : '#000000CC'
   const lineColor = isDark ? '#FFFFFF26' : '#00000026'
   return (
-    <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800">
+    <div className="rounded-lg overflow-hidden border border-[var(--notation-border)]">
       <div className="flex h-24" style={{ background: palette.bg }}>
         <div className="w-1/3 p-2 flex flex-col gap-1.5" style={{ background: palette.bgElevated }}>
           <div className="h-1.5 rounded" style={{ background: palette.accent, width: '80%' }} />
@@ -489,7 +507,7 @@ function PreviewCard({ label, palette, isDark }: { label: string; palette: ModeP
           </div>
         </div>
       </div>
-      <div className="px-2 py-1 text-[10px] uppercase tracking-wider font-semibold bg-[var(--notation-bg-elevated)] text-zinc-500 dark:text-zinc-400">
+      <div className="px-2 py-1 text-[10px] uppercase tracking-wider font-semibold bg-[var(--notation-bg-elevated)] text-[var(--notation-fg-muted)]">
         {label}
       </div>
     </div>
@@ -512,22 +530,22 @@ function ColorRow({
         type="color"
         value={value}
         onChange={e => onChange(e.target.value.toUpperCase())}
-        className="w-10 h-10 rounded-md cursor-pointer bg-transparent border border-zinc-200 dark:border-zinc-800 p-0.5 flex-shrink-0"
+        className="w-10 h-10 rounded-md cursor-pointer bg-transparent border border-[var(--notation-border)] p-0.5 flex-shrink-0"
         aria-label={label}
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
-          <label htmlFor={id} className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{label}</label>
+          <label htmlFor={id} className="text-sm font-medium text-[var(--notation-fg)]">{label}</label>
           <input
             value={value}
             onChange={e => {
               const v = e.target.value.toUpperCase()
               if (/^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v)
             }}
-            className="px-1.5 py-0.5 text-[11px] font-mono rounded border border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg)] w-20 focus:outline-none focus:ring-1 focus:ring-[color:var(--notation-accent-40)]"
+            className="px-1.5 py-0.5 text-[11px] font-mono rounded border border-[var(--notation-border)] bg-[var(--notation-bg)] w-20 focus:outline-none focus:ring-1 focus:ring-[color:var(--notation-accent-40)]"
           />
         </div>
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">{help}</p>
+        <p className="text-[11px] text-[var(--notation-fg-muted)] mt-0.5">{help}</p>
       </div>
     </div>
   )

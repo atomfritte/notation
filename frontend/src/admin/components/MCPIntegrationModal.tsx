@@ -7,7 +7,7 @@ type Props = {
   open: boolean
   spaceID: string
   url: string
-  /** Raw token â€” present only immediately after creation. Existing tokens are
+  /** Raw token Ã¢â‚¬â€ present only immediately after creation. Existing tokens are
    *  hashed-only on the server, so the modal renders a placeholder instead. */
   rawToken?: string
   onClose: () => void
@@ -17,7 +17,7 @@ type Props = {
  * MCPIntegrationModal shows multi-client connection snippets for an MCP
  * endpoint. After a token is created, the modal opens with the raw token so
  * the user can copy and paste into their client config. For pre-existing
- * tokens the modal opens with <PASTE_YOUR_TOKEN> placeholders â€” the secret
+ * tokens the modal opens with <PASTE_YOUR_TOKEN> placeholders Ã¢â‚¬â€ the secret
  * cannot be recovered server-side.
  */
 export function MCPIntegrationModal({ open, spaceID, url, rawToken, onClose }: Props) {
@@ -61,17 +61,17 @@ curl -X POST '${url}' \\
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-150 flex flex-col max-h-[90vh]"
+        className="w-full max-w-2xl bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-150 flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--notation-border)]">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            <h2 className="text-lg font-semibold text-[var(--notation-fg)]">
               Connect MCP client
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
               Give Claude Code (or any MCP client) read+write access to{' '}
-              <span className="font-mono text-zinc-700 dark:text-zinc-300">{spaceID}</span>.
+              <span className="font-mono text-[var(--notation-fg)]">{spaceID}</span>.
             </p>
           </div>
           <button
@@ -92,7 +92,7 @@ curl -X POST '${url}' \\
                     Save this token now
                   </div>
                   <div className="text-amber-800 dark:text-amber-400">
-                    The token is shown once. After closing this dialog it cannot be recovered â€” revoke
+                    The token is shown once. After closing this dialog it cannot be recovered Ã¢â‚¬â€ revoke
                     and create a new one if lost.
                   </div>
                 </div>
@@ -109,7 +109,7 @@ curl -X POST '${url}' \\
           />
 
           <div>
-            <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800 mb-3">
+            <div className="flex items-center gap-1 border-b border-[var(--notation-border)] mb-3">
               {(['claude', 'cursor', 'http'] as const).map(t => (
                 <button
                   key={t}
@@ -174,7 +174,7 @@ curl -X POST '${url}' \\
           </div>
         </div>
 
-        <div className="px-5 py-3 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
+        <div className="px-5 py-3 border-t border-[var(--notation-border)] flex justify-end">
           <button
             onClick={onClose}
             className="px-4 py-1.5 text-sm font-medium bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
@@ -191,8 +191,8 @@ function Field({ label, value, mono, secret }: { label: string; value: string; m
   return (
     <div>
       <div className="text-xs text-zinc-500 mb-1">{label}</div>
-      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-md px-3 py-2">
-        <code className={`flex-1 break-all text-zinc-800 dark:text-zinc-200 text-xs select-all ${mono ? 'font-mono' : ''} ${secret ? 'opacity-70 italic' : ''}`}>
+      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-950/50 border border-[var(--notation-border)] rounded-md px-3 py-2">
+        <code className={`flex-1 break-all text-[var(--notation-fg)] text-xs select-all ${mono ? 'font-mono' : ''} ${secret ? 'opacity-70 italic' : ''}`}>
           {value}
         </code>
         {!secret && <CopyButton value={value} />}

@@ -22,7 +22,7 @@ type Props = {
 }
 
 /**
- * SidebarTabs — collapsible nav for the SpaceView sidebar.
+ * SidebarTabs â€” collapsible nav for the SpaceView sidebar.
  *
  * Collapsed (default) it shows just the active tab as a row with a chevron;
  * tapping the row expands the full list. Picking a different tab in the
@@ -38,7 +38,7 @@ export function SidebarTabs({ active, onPick }: Props) {
     return (
       <button
         onClick={() => setExpanded(true)}
-        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium bg-zinc-100 dark:bg-zinc-800/60 text-zinc-900 dark:text-zinc-200 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 transition-colors"
+        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium bg-zinc-100 dark:bg-zinc-800/60 text-[var(--notation-fg)] hover:bg-[var(--notation-border)] transition-colors"
         title="Show all sections"
       >
         {activeTab.icon}
@@ -62,8 +62,8 @@ export function SidebarTabs({ active, onPick }: Props) {
             className={
               'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ' +
               (isActive
-                ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200'
-                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300')
+                ? 'bg-zinc-200 dark:bg-zinc-800 text-[var(--notation-fg)]'
+                : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)] hover:text-zinc-900 dark:hover:text-zinc-300')
             }
           >
             {t.icon}

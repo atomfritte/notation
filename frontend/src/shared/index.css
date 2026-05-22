@@ -31,6 +31,9 @@
   --notation-accent-50: #65A30D80;
   --notation-bg: #FFFFFF;
   --notation-bg-elevated: #FAFAFA;
+  --notation-fg: #18181B;
+  --notation-fg-muted: #71717A;
+  --notation-border: #E4E4E7;
 }
 .dark {
   --notation-accent: #BFF355;
@@ -42,6 +45,9 @@
   --notation-accent-50: #BFF35580;
   --notation-bg: #0A0A0A;
   --notation-bg-elevated: #111111;
+  --notation-fg: #E4E4E7;
+  --notation-fg-muted: #A1A1AA;
+  --notation-border: #27272A;
 }
 
 /* ---- Print stylesheet ----------------------------------------------------
@@ -323,30 +329,51 @@ mark.comment-anchor.comment-anchor-blink {
   line-height: 1.6;
   border-radius: 8px;
   padding: 1em 1.25em;
-  background-color: #0d1117;
+  background-color: var(--notation-bg-elevated);
+  border: 1px solid var(--notation-border);
 }
-.dark .prose pre { background-color: #0a0a0a; border: 1px solid rgba(255,255,255,0.06); }
 .prose pre code { font-weight: 400; }
 
-/* Override prose colors for dark mode */
+/* Prose colours come from theme variables in BOTH modes — the variables
+   themselves swap via :root vs .dark scope, so we don't need a separate
+   .dark .prose override. We still apply `prose-invert` in dark mode so the
+   default classes for some sub-elements (e.g. ::marker) flip correctly, but
+   our overrides take precedence on the colour tokens. */
 .prose {
   @apply max-w-none transition-colors duration-200;
+  --tw-prose-body: var(--notation-fg);
+  --tw-prose-headings: var(--notation-fg);
+  --tw-prose-lead: var(--notation-fg-muted);
+  --tw-prose-links: var(--notation-accent);
+  --tw-prose-bold: var(--notation-fg);
+  --tw-prose-counters: var(--notation-fg-muted);
+  --tw-prose-bullets: var(--notation-fg-muted);
+  --tw-prose-hr: var(--notation-border);
+  --tw-prose-quotes: var(--notation-fg);
+  --tw-prose-quote-borders: var(--notation-accent);
+  --tw-prose-captions: var(--notation-fg-muted);
+  --tw-prose-code: var(--notation-fg);
+  --tw-prose-pre-code: var(--notation-fg);
+  --tw-prose-pre-bg: var(--notation-bg-elevated);
+  --tw-prose-th-borders: var(--notation-border);
+  --tw-prose-td-borders: var(--notation-border);
 }
 .dark .prose {
   @apply prose-invert;
-  --tw-prose-body: theme('colors.zinc.400');
-  --tw-prose-headings: theme('colors.zinc.100');
+  --tw-prose-body: var(--notation-fg);
+  --tw-prose-headings: var(--notation-fg);
+  --tw-prose-lead: var(--notation-fg-muted);
   --tw-prose-links: var(--notation-accent);
-  --tw-prose-bold: theme('colors.zinc.100');
-  --tw-prose-counters: theme('colors.zinc.500');
-  --tw-prose-bullets: theme('colors.zinc.500');
-  --tw-prose-hr: theme('colors.zinc.700');
-  --tw-prose-quotes: theme('colors.zinc.300');
+  --tw-prose-bold: var(--notation-fg);
+  --tw-prose-counters: var(--notation-fg-muted);
+  --tw-prose-bullets: var(--notation-fg-muted);
+  --tw-prose-hr: var(--notation-border);
+  --tw-prose-quotes: var(--notation-fg);
   --tw-prose-quote-borders: var(--notation-accent);
-  --tw-prose-captions: theme('colors.zinc.500');
-  --tw-prose-code: theme('colors.zinc.300');
-  --tw-prose-pre-code: theme('colors.zinc.300');
-  --tw-prose-pre-bg: theme('colors.zinc.900');
-  --tw-prose-th-borders: theme('colors.zinc.800');
-  --tw-prose-td-borders: theme('colors.zinc.800');
+  --tw-prose-captions: var(--notation-fg-muted);
+  --tw-prose-code: var(--notation-fg);
+  --tw-prose-pre-code: var(--notation-fg);
+  --tw-prose-pre-bg: var(--notation-bg-elevated);
+  --tw-prose-th-borders: var(--notation-border);
+  --tw-prose-td-borders: var(--notation-border);
 }

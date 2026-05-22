@@ -22,7 +22,7 @@ function ShareUI() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   )
-  // Mobile drawer state Ã¢â‚¬â€ same pattern as admin SpaceView.
+  // Mobile drawer state ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â same pattern as admin SpaceView.
   const [isMobile, setIsMobile] = useState<boolean>(() =>
     typeof window === 'undefined' ? false : window.matchMedia('(max-width: 767px)').matches,
   )
@@ -132,18 +132,18 @@ function ShareUI() {
 
   function onNewAnchorComment(anchor: api.CommentAnchor) {
     setPendingAnchor(anchor)
-    // Don't pre-fill the textarea ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â CommentRow renders the anchor quote.
+    // Don't pre-fill the textarea ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â CommentRow renders the anchor quote.
   }
 
   if (err && !info) {
     return (
       <div className="p-8 max-w-xl mx-auto">
-        <h1 className="text-xl font-bold mb-2 text-zinc-900 dark:text-zinc-100">Share unavailable</h1>
+        <h1 className="text-xl font-bold mb-2 text-[var(--notation-fg)]">Share unavailable</h1>
         <p className="text-red-600 dark:text-red-400">{err}</p>
       </div>
     )
   }
-  if (!info) return <div className="p-8 text-zinc-500">loadingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦</div>
+  if (!info) return <div className="p-8 text-zinc-500">loadingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦</div>
 
   const canEdit = info.permission === 'edit'
   const canComment = info.permission === 'comment' || info.permission === 'edit'
@@ -160,21 +160,21 @@ function ShareUI() {
       )}
       <aside
         className={
-          'flex flex-col bg-[var(--notation-bg-elevated)] border-r border-zinc-200 dark:border-zinc-800/50 ' +
+          'flex flex-col bg-[var(--notation-bg-elevated)] border-r border-[var(--notation-border)] ' +
           'fixed inset-y-0 left-0 z-40 w-72 ' +
           'md:static md:z-auto md:w-64 md:flex-shrink-0 ' +
           'transition-transform md:transition-none duration-200 ease-in-out ' +
           (sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0')
         }
       >
-        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800/50">
-          <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200 font-medium">
+        <div className="p-4 border-b border-[var(--notation-border)]">
+          <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium">
             <div className="w-5 h-5 rounded bg-zinc-900 text-white dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase">
               {info.space.id.charAt(0)}
             </div>
             <span className="truncate">{info.space.name}</span>
           </div>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-2 flex items-center gap-1.5">
+          <p className="text-[11px] text-[var(--notation-fg-muted)] mt-2 flex items-center gap-1.5">
             <span
               className={
                 'px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ' +
@@ -203,7 +203,7 @@ function ShareUI() {
       <main className="flex-1 flex flex-col min-w-0">
         {file ? (
           <>
-            <header className="h-12 flex justify-between items-center px-4 border-b border-zinc-200 dark:border-zinc-800/50 flex-shrink-0 text-sm gap-2">
+            <header className="h-12 flex justify-between items-center px-4 border-b border-[var(--notation-border)] flex-shrink-0 text-sm gap-2">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <button
                   onClick={() => setSidebarOpen(v => !v)}
@@ -212,7 +212,7 @@ function ShareUI() {
                 >
                   <PanelLeft size={18} />
                 </button>
-                <span className="text-zinc-500 dark:text-zinc-400 truncate">{file.replace(/\.md$/i, '')}</span>
+                <span className="text-[var(--notation-fg-muted)] truncate">{file.replace(/\.md$/i, '')}</span>
               </div>
               {canEdit && isTextFile(file) && (
                 <button
@@ -230,13 +230,13 @@ function ShareUI() {
             </header>
             {editing ? (
               <div className="flex-1 flex flex-col">
-                <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800/50 flex gap-3 items-center text-sm">
+                <div className="px-3 py-2 border-b border-[var(--notation-border)] flex gap-3 items-center text-sm">
                   <button
                     onClick={save}
                     disabled={saving || editBuffer === content}
                     className="px-3 py-1 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md disabled:opacity-40 font-medium"
                   >
-                    {saving ? 'SavingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦' : 'Save'}
+                    {saving ? 'SavingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦' : 'Save'}
                   </button>
                   {editBuffer !== content && (
                     <span className="text-amber-600 dark:text-amber-400 text-xs">unsaved changes</span>
@@ -246,7 +246,7 @@ function ShareUI() {
                   value={editBuffer}
                   onChange={e => setEditBuffer(e.target.value)}
                   spellCheck={false}
-                  className="flex-1 p-6 font-mono text-sm resize-none outline-none w-full bg-[var(--notation-bg)] text-zinc-800 dark:text-zinc-200"
+                  className="flex-1 p-6 font-mono text-sm resize-none outline-none w-full bg-[var(--notation-bg)] text-[var(--notation-fg)]"
                 />
               </div>
             ) : isMarkdownFile(file) ? (
@@ -271,12 +271,12 @@ function ShareUI() {
             {!editing && canComment && isMarkdownFile(file) && (
               <div
                 id="share-comments-panel"
-                className="border-t border-zinc-200 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-950/50 max-h-80 overflow-y-auto"
+                className="border-t border-[var(--notation-border)] bg-zinc-50 dark:bg-zinc-950/50 max-h-80 overflow-y-auto"
               >
                 {pendingAnchor && (
                   <div className="px-4 pt-3 text-xs">
                     <div className="text-amber-700 dark:text-amber-300 font-semibold mb-1">Anchoring to selection</div>
-                    <div className="italic text-zinc-600 dark:text-zinc-400 line-clamp-2">ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“{pendingAnchor.quote}ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â</div>
+                    <div className="italic text-[var(--notation-fg-muted)] line-clamp-2">ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ{pendingAnchor.quote}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â</div>
                     <button
                       onClick={() => { setPendingAnchor(null); setPendingComment('') }}
                       className="mt-1 text-amber-700 dark:text-amber-300 hover:underline"
@@ -306,7 +306,7 @@ function ShareUI() {
           <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-4 p-8 text-center">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden flex items-center gap-2 px-3 py-2 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-sm"
+              className="md:hidden flex items-center gap-2 px-3 py-2 rounded-md bg-zinc-100 dark:bg-zinc-800 text-[var(--notation-fg)] text-sm"
             >
               <PanelLeft size={16} /> Open file list
             </button>

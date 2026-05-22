@@ -72,20 +72,20 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150"
+        className="w-full max-w-xl bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150"
         onClick={e => e.stopPropagation()}
         onKeyDown={onKey}
       >
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--notation-border)]">
           <Search size={18} className="text-zinc-400" />
           <input
             ref={inputRef}
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="Jump to pageâ€¦"
-            className="flex-1 bg-transparent outline-none text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+            placeholder="Jump to pageÃ¢â‚¬Â¦"
+            className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
           />
-          <kbd className="text-[10px] px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-700 rounded text-zinc-500">esc</kbd>
+          <kbd className="text-[10px] px-1.5 py-0.5 border border-[var(--notation-border)] rounded text-zinc-500">esc</kbd>
         </div>
         <ul ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
           {results.length === 0 && (
@@ -103,8 +103,8 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
               className={
                 'flex items-center gap-3 px-4 py-2 text-sm cursor-pointer transition-colors ' +
                 (i === idx
-                  ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100'
-                  : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50')
+                  ? 'bg-zinc-100 dark:bg-zinc-800 text-[var(--notation-fg)]'
+                  : 'text-[var(--notation-fg)] hover:bg-zinc-50 dark:hover:bg-zinc-800/50')
               }
             >
               <FileText size={14} className={i === idx ? 'text-[color:var(--notation-accent)]' : 'opacity-50'} />
@@ -117,10 +117,10 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
             </li>
           ))}
         </ul>
-        <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-800 flex items-center gap-3 text-[11px] text-zinc-500 bg-zinc-50 dark:bg-zinc-950/30">
+        <div className="px-4 py-2 border-t border-[var(--notation-border)] flex items-center gap-3 text-[11px] text-zinc-500 bg-zinc-50 dark:bg-zinc-950/30">
           <span className="flex items-center gap-1"><ArrowRight size={11} /> select</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">â†‘â†“</kbd> navigate</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">â†µ</kbd> open</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ â€˜Ã¢â€ â€œ</kbd> navigate</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ Âµ</kbd> open</span>
         </div>
       </div>
     </div>
@@ -143,7 +143,7 @@ function Highlighted({ text, positions }: { text: string; positions: number[] })
 type Result = { path: string; score: number; positions: number[] }
 
 /**
- * fuzzyMatch â€” simple subsequence fuzzy matcher with scoring:
+ * fuzzyMatch Ã¢â‚¬â€ simple subsequence fuzzy matcher with scoring:
  *   +10 for chars that match at the start of a segment (after `/`)
  *   +5  for chars that continue a contiguous run
  *   +1  otherwise

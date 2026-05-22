@@ -9,7 +9,7 @@ type Props = { url: string; path: string }
  * Security model: the file is fetched as an ArrayBuffer and parsed
  * entirely on the client (SheetJS is a pure-JS parser). The HTML SheetJS
  * emits via `sheet_to_html` is then run through DOMPurify with a tight
- * allowlist before we drop it into the DOM via dangerouslySetInnerHTML ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
+ * allowlist before we drop it into the DOM via dangerouslySetInnerHTML ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
  * so even if a hostile workbook smuggles markup through the parser, it
  * can't execute scripts, load remote resources, or set on* handlers.
  *
@@ -54,16 +54,16 @@ export default function SpreadsheetView({ url }: Props) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm gap-2">
-        <Sheet size={16} /> Parsing spreadsheetÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦
+        <Sheet size={16} /> Parsing spreadsheetÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦
       </div>
     )
   }
   if (err) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-zinc-700 dark:text-zinc-300 p-8 gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center text-[var(--notation-fg)] p-8 gap-3">
         <AlertTriangle size={32} className="text-red-500" />
         <div className="text-sm">Could not open spreadsheet</div>
-        <div className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">{err}</div>
+        <div className="text-xs text-[var(--notation-fg-muted)] font-mono">{err}</div>
       </div>
     )
   }
@@ -72,7 +72,7 @@ export default function SpreadsheetView({ url }: Props) {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {workbook.SheetNames.length > 1 && (
-        <div className="flex gap-1 px-2 py-1 border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto bg-zinc-50 dark:bg-zinc-950/30 flex-shrink-0">
+        <div className="flex gap-1 px-2 py-1 border-b border-[var(--notation-border)] overflow-x-auto bg-zinc-50 dark:bg-zinc-950/30 flex-shrink-0">
           {workbook.SheetNames.map((name: string) => (
             <button
               key={name}
@@ -115,7 +115,7 @@ function SheetTable({ workbook, sheetName }: { workbook: any; sheetName: string 
       }
       const raw = (XLSX as any).utils.sheet_to_html(ws)
       // Tight allowlist: only table-structure tags + the cell-content tags
-      // SheetJS emits. No href, no src, no style ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the inline styles SheetJS
+      // SheetJS emits. No href, no src, no style ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the inline styles SheetJS
       // adds for borders are nice-to-have, not security-relevant.
       const clean = DOMPurify.sanitize(raw, {
         ALLOWED_TAGS: [
@@ -135,7 +135,7 @@ function SheetTable({ workbook, sheetName }: { workbook: any; sheetName: string 
   }, [workbook, sheetName])
 
   if (!purifyReady) {
-    return <div className="flex-1 flex items-center justify-center text-zinc-500 text-xs">RenderingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</div>
+    return <div className="flex-1 flex items-center justify-center text-zinc-500 text-xs">RenderingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦</div>
   }
   return (
     <div className="flex-1 overflow-auto p-4 bg-[var(--notation-bg)]">

@@ -48,7 +48,7 @@ export function SpaceView() {
   }, [])
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
-    // Default closed on phones Ã¢â‚¬â€ give the user the content first. On desktop
+    // Default closed on phones ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â give the user the content first. On desktop
     // the sidebar is the workspace navigator, default-open is the right call.
     if (typeof window === 'undefined') return true
     return !window.matchMedia('(max-width: 767px)').matches
@@ -146,7 +146,7 @@ export function SpaceView() {
   }, [spaceID, file, content, location.hash])
 
   // ---------- Sidebar drag-resize ----------
-  // Manual implementation rather than a library ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the handle is a vertical
+  // Manual implementation rather than a library ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â the handle is a vertical
   // strip on the aside's right edge; mousedown registers global mousemove +
   // mouseup so the cursor keeps dragging even if it briefly leaves the
   // handle. The body cursor + select-none make the gesture feel native.
@@ -274,7 +274,7 @@ export function SpaceView() {
   const uploadInto = useCallback(async (fileList: FileList, parentDir: string) => {
     const files = Array.from(fileList)
     if (files.length === 0) return
-    setUploadStatus(`Uploading ${files.length}ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦`)
+    setUploadStatus(`Uploading ${files.length}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦`)
     let ok = 0
     for (const f of files) {
       const target = parentDir ? `${parentDir}/${f.name}` : f.name
@@ -356,7 +356,7 @@ export function SpaceView() {
     (p: string) => {
       setSearchParams({ file: p })
       // On mobile, after picking a file we want the content full-screen
-      // immediately Ã¢â‚¬â€ keep the drawer behaviour explorer-like.
+      // immediately ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â keep the drawer behaviour explorer-like.
       if (isMobile) setSidebarOpen(false)
     },
     [setSearchParams, isMobile],
@@ -391,7 +391,7 @@ export function SpaceView() {
   function onNewAnchorComment(anchor: api.CommentAnchor) {
     setPendingAnchor(anchor)
     setShowComments(true)
-    // Don't pre-fill the textarea with the quote ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the anchor metadata renders
+    // Don't pre-fill the textarea with the quote ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â the anchor metadata renders
     // the quote in the CommentRow already, double-display looked wrong.
   }
 
@@ -435,7 +435,7 @@ export function SpaceView() {
         })
         .catch(e => setErr(String(e)))
     } else {
-      // Binary file ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â viewer streams via direct URL, no content fetch needed.
+      // Binary file ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â viewer streams via direct URL, no content fetch needed.
       setContent('')
       setEtag(null)
     }
@@ -444,11 +444,11 @@ export function SpaceView() {
     refreshComments()
   }, [spaceID, file, refreshComments])
 
-  // uploadFiles is the single ingress point for the upload UX ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â both the
+  // uploadFiles is the single ingress point for the upload UX ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â both the
   // drag-drop overlay AND the explicit "Upload" button call into it.
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return
-    setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦`)
+    setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦`)
     let ok = 0
     let lastPath = ''
     for (const f of files) {
@@ -489,12 +489,12 @@ export function SpaceView() {
         e.preventDefault()
         onNewFile()
       }
-      // Cmd/Ctrl+K ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â file palette
+      // Cmd/Ctrl+K ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â file palette
       if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setPaletteOpen(true)
       }
-      // Cmd/Ctrl+Shift+F ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â full-text search
+      // Cmd/Ctrl+Shift+F ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â full-text search
       if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setSearchOpen(true)
@@ -539,14 +539,14 @@ export function SpaceView() {
       )}
 
       <aside
-        className={`flex flex-col bg-[var(--notation-bg-elevated)] border-r border-zinc-200 dark:border-zinc-800/50
+        className={`flex flex-col bg-[var(--notation-bg-elevated)] border-r border-[var(--notation-border)]
           fixed inset-y-0 left-0 z-40 w-72
           md:static md:z-auto md:w-auto md:flex-shrink-0
           ${resizing ? '' : 'transition-transform md:transition-[width] duration-200 ease-in-out'}
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           ${!sidebarOpen ? 'md:border-r-0' : ''}`}
         style={{
-          // Inline width is desktop-only Ã¢â‚¬â€ mobile uses the static w-72 class.
+          // Inline width is desktop-only ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â mobile uses the static w-72 class.
           width: isMobile ? undefined : (sidebarOpen ? sidebarWidth : 0),
         }}
       >
@@ -558,10 +558,10 @@ export function SpaceView() {
              avatar swaps to a left-chevron on hover so the action is obvious. */}
           <Link
             to="/admin"
-            className="h-12 flex items-center px-4 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 transition-colors mt-2 mx-2 rounded-md group"
+            className="h-12 flex items-center px-4 hover:bg-[var(--notation-border)] transition-colors mt-2 mx-2 rounded-md group"
             title="Back to all Spaces"
           >
-            <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200 font-medium w-full">
+            <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium w-full">
               <div className="w-5 h-5 rounded bg-zinc-900 text-white dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase relative">
                 <span className="group-hover:opacity-0 transition-opacity">{spaceID.charAt(0)}</span>
                 <ChevronLeft size={12} className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -577,7 +577,7 @@ export function SpaceView() {
             />
           </div>
 
-          <div className="px-5 mt-6 mb-2 text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+          <div className="px-5 mt-6 mb-2 text-xs font-semibold text-[var(--notation-fg-muted)] uppercase tracking-wider">
             {sidebarTab === 'files' && 'Workspace'}
             {sidebarTab === 'bookmarks' && 'Favorites'}
             {sidebarTab === 'shares' && 'Active Shares'}
@@ -610,7 +610,7 @@ export function SpaceView() {
                       key={b}
                       onClick={() => selectFile(b)}
                       onContextMenu={(e) => handleBookmarkContextMenu(e, b)}
-                      className={`flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-md transition-colors ${file === b ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100 font-medium' : 'text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200'}`}
+                      className={`flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-md transition-colors ${file === b ? 'bg-[var(--notation-border)] text-[var(--notation-fg)] font-medium' : 'text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200'}`}
                     >
                       <FileText size={14} className="opacity-70" />
                       <span className="truncate">{b.replace(/\.md$/i, '')}</span>
@@ -625,7 +625,7 @@ export function SpaceView() {
             {sidebarTab === 'audit' && <AuditPanel spaceID={spaceID} />}
           </div>
 
-          <div className="p-2 border-t border-zinc-200 dark:border-zinc-800/50 flex gap-1">
+          <div className="p-2 border-t border-[var(--notation-border)] flex gap-1">
             <button
               onClick={onNewFile}
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800/50 rounded-md transition-colors text-sm font-medium"
@@ -689,7 +689,7 @@ export function SpaceView() {
             <div className="bg-white dark:bg-zinc-900 rounded-lg px-6 py-4 shadow-xl flex items-center gap-3">
               <Upload size={24} className="text-zinc-900 dark:text-[color:var(--notation-accent)]" />
               <div>
-                <div className="text-zinc-900 dark:text-zinc-100 font-semibold">Drop to upload</div>
+                <div className="text-[var(--notation-fg)] font-semibold">Drop to upload</div>
                 <div className="text-xs text-zinc-500">Files land in this Space's root</div>
               </div>
             </div>
@@ -711,8 +711,8 @@ export function SpaceView() {
               className={
                 'p-1.5 mr-1 rounded-md transition-colors flex-shrink-0 ' +
                 (sidebarOpen
-                  ? 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                  : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800')
+                  ? 'text-[var(--notation-fg)] hover:bg-[var(--notation-border)]'
+                  : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)]')
               }
               title={sidebarOpen ? 'Hide sidebar (Cmd/Ctrl+\\)' : 'Show sidebar (Cmd/Ctrl+\\)'}
               aria-pressed={sidebarOpen}
@@ -721,12 +721,12 @@ export function SpaceView() {
             </button>
 
             {file && (
-              <div className="flex items-center text-sm text-zinc-500 dark:text-zinc-400">
+              <div className="flex items-center text-sm text-[var(--notation-fg-muted)]">
                 <Link to="/admin" className="hover:text-zinc-800 dark:hover:text-zinc-200 hover:underline truncate max-w-[100px]" title="Back to all Spaces">{spaceID}</Link>
                 {pathParts.map((part, i) => (
                   <span key={i} className="flex items-center">
                     <span className="mx-1.5 text-zinc-300 dark:text-zinc-600">/</span>
-                    <span className={`${i === pathParts.length - 1 ? 'text-zinc-900 dark:text-zinc-200 font-medium' : 'hover:text-zinc-800 dark:hover:text-zinc-200 hover:underline cursor-pointer'} truncate max-w-[150px]`}>
+                    <span className={`${i === pathParts.length - 1 ? 'text-[var(--notation-fg)] font-medium' : 'hover:text-zinc-800 dark:hover:text-zinc-200 hover:underline cursor-pointer'} truncate max-w-[150px]`}>
                       {part.replace(/\.md$/i, '')}
                     </span>
                   </span>
@@ -760,7 +760,7 @@ export function SpaceView() {
               <button onClick={() => toggleBookmark(file)} className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-zinc-900 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Favorite">
                 <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
               </button>
-              <button onClick={() => setShowComments(!showComments)} className={`p-1.5 rounded-md transition-colors flex items-center gap-1 ${showComments ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-200' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Comments">
+              <button onClick={() => setShowComments(!showComments)} className={`p-1.5 rounded-md transition-colors flex items-center gap-1 ${showComments ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Comments">
                 <MessageSquare size={18} />
                 {comments.length > 0 && <span className="text-xs font-bold text-zinc-900 dark:text-[color:var(--notation-accent)]">{comments.length}</span>}
               </button>
@@ -820,7 +820,7 @@ export function SpaceView() {
               />
             ) : file ? (
               // In edit mode the editor manages its own scroll, so the wrapper
-              // must give it a definite height ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â otherwise Monaco's `height: 100%`
+              // must give it a definite height ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â otherwise Monaco's `height: 100%`
               // collapses to zero and the text is invisible. In read mode we
               // want the natural-flow content with bottom padding instead.
               <div
@@ -832,7 +832,7 @@ export function SpaceView() {
               >
                 {!editing && !content.startsWith('# ') && (
                    <div className="max-w-3xl mx-auto px-8 pt-12 pb-4">
-                      <h1 className="text-4xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{displayTitle}</h1>
+                      <h1 className="text-4xl font-bold text-[var(--notation-fg)] tracking-tight">{displayTitle}</h1>
                    </div>
                 )}
 
@@ -840,7 +840,7 @@ export function SpaceView() {
                   <Suspense
                     fallback={
                       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-                        Loading editorÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦
+                        Loading editorÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦
                       </div>
                     }
                   >
@@ -855,7 +855,7 @@ export function SpaceView() {
                         setContent(c)
                         setEtag(newEtag)
                         refreshTree()
-                        // Drop back to read mode after a successful save ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the
+                        // Drop back to read mode after a successful save ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â the
                         // user can re-enter edit via the Eye/Edit toggle in
                         // the header.
                         setEditing(false)
@@ -888,7 +888,7 @@ export function SpaceView() {
                 )}
               </div>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-500 p-8">
+              <div className="h-full flex flex-col items-center justify-center text-[var(--notation-fg-muted)] p-8">
                 <FileText size={48} className="mb-4 opacity-20 dark:opacity-10" />
                 <p className="text-lg">Select a page to start writing</p>
                 <button onClick={onNewFile} className="mt-4 px-4 py-2 bg-zinc-100 text-zinc-900 dark:bg-[color:var(--notation-accent-10)] dark:text-[color:var(--notation-accent)] hover:bg-zinc-200 dark:hover:bg-[color:var(--notation-accent-20)] font-medium rounded-md transition-colors">
@@ -899,16 +899,16 @@ export function SpaceView() {
           </div>
 
           {showOutline && file && !editing && isMarkdownFile(file) && (
-            <div className="w-[240px] border-l border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-4 duration-200 overflow-y-auto">
+            <div className="w-[240px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-4 duration-200 overflow-y-auto">
               <Outline content={content} />
               <BacklinksPanel spaceID={spaceID} path={file} onSelect={selectFile} />
             </div>
           )}
 
           {showComments && file && (
-            <div id="comments-panel" className="w-[320px] border-l border-zinc-200 dark:border-zinc-800 bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
-              <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-[var(--notation-bg-elevated)]">
-                 <h3 className="font-semibold text-sm text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
+            <div id="comments-panel" className="w-[320px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
+              <div className="p-3 border-b border-[var(--notation-border)] flex justify-between items-center bg-[var(--notation-bg-elevated)]">
+                 <h3 className="font-semibold text-sm text-[var(--notation-fg)] flex items-center gap-2">
                     <MessageSquare size={16} /> Comments
                  </h3>
                  <button onClick={() => { setShowComments(false); setPendingAnchor(null); setPendingComment('') }} className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">&times;</button>
@@ -916,7 +916,7 @@ export function SpaceView() {
               {pendingAnchor && (
                 <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/50 text-xs">
                   <div className="text-amber-900 dark:text-amber-300 font-semibold mb-1">Anchoring to selection</div>
-                  <div className="text-amber-800 dark:text-amber-400/80 italic line-clamp-2">ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“{pendingAnchor.quote}ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â</div>
+                  <div className="text-amber-800 dark:text-amber-400/80 italic line-clamp-2">ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ{pendingAnchor.quote}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â</div>
                   <button
                     onClick={() => { setPendingAnchor(null); setPendingComment('') }}
                     className="mt-1 text-amber-700 dark:text-amber-300 hover:underline"

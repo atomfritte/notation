@@ -43,14 +43,14 @@ export function Claim({ onDone }: Props) {
           spellCheck={false}
           autoComplete="off"
           placeholder="paste token here"
-          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-zinc-400 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-zinc-300 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 font-mono text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+          className="w-full bg-white dark:bg-zinc-950 border border-[var(--notation-border)] focus:border-zinc-400 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-zinc-300 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 font-mono text-sm text-[var(--notation-fg)] placeholder-zinc-400"
         />
         <button
           type="submit"
           disabled={busy || !token.trim()}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] font-semibold text-sm rounded-md transition-colors disabled:opacity-40"
         >
-          <Key size={14} /> {busy ? 'Claimingâ€¦' : 'Claim admin'}
+          <Key size={14} /> {busy ? 'ClaimingÃ¢â‚¬Â¦' : 'Claim admin'}
         </button>
         {err && (
           <div className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400 mt-2">
@@ -59,9 +59,9 @@ export function Claim({ onDone }: Props) {
           </div>
         )}
       </form>
-      <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-500">
+      <p className="mt-4 text-xs text-[var(--notation-fg-muted)]">
         Where do I find this? Run <code className="px-1 bg-zinc-100 dark:bg-zinc-800 rounded">docker logs notation</code>{' '}
-        â€” the token is printed in a banner each restart, until claimed.
+        Ã¢â‚¬â€ the token is printed in a banner each restart, until claimed.
       </p>
     </AuthShell>
   )

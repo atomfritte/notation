@@ -20,7 +20,7 @@ function colorFor(action: string): string {
 }
 
 /**
- * AuditPanel â€” recent audit-log entries for the Space. Reads JSONL from
+ * AuditPanel Ã¢â‚¬â€ recent audit-log entries for the Space. Reads JSONL from
  * <space>/.notation/audit.log via the backend's /audit endpoint, newest first.
  */
 export function AuditPanel({ spaceID }: Props) {
@@ -42,13 +42,13 @@ export function AuditPanel({ spaceID }: Props) {
   return (
     <div className="p-3">
       <div className="flex items-center justify-between px-2 mb-2">
-        <h3 className="font-semibold text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+        <h3 className="font-semibold text-xs text-[var(--notation-fg-muted)] uppercase tracking-wider flex items-center gap-1">
           <ShieldCheck size={12} /> Audit Log
         </h3>
         <button
           onClick={refresh}
           disabled={loading}
-          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
+          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1 rounded-md hover:bg-[var(--notation-border)] disabled:opacity-50"
           title="Refresh"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
@@ -63,17 +63,17 @@ export function AuditPanel({ spaceID }: Props) {
             <li
               key={i}
               className="text-xs px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 rounded-md transition-colors"
-              title={[e.actor, e.action, e.path, e.ip, e.ua].filter(Boolean).join(' Â· ')}
+              title={[e.actor, e.action, e.path, e.ip, e.ua].filter(Boolean).join(' Ã‚Â· ')}
             >
               <div className="flex items-center gap-2">
                 <span className={`font-semibold ${colorFor(e.action)}`}>{e.action}</span>
-                {e.path && <span className="text-zinc-600 dark:text-zinc-400 truncate font-mono text-[10px]">{e.path}</span>}
+                {e.path && <span className="text-[var(--notation-fg-muted)] truncate font-mono text-[10px]">{e.path}</span>}
               </div>
               <div className="text-[10px] text-zinc-500 mt-0.5 truncate">
                 <span className="font-mono">{e.actor}</span>
-                <span className="mx-1">Â·</span>
+                <span className="mx-1">Ã‚Â·</span>
                 <span>{new Date(e.ts).toLocaleString()}</span>
-                {e.err && <span className="text-red-500 ml-2">âš  {e.err}</span>}
+                {e.err && <span className="text-red-500 ml-2">Ã¢Å¡Â  {e.err}</span>}
               </div>
             </li>
           ))}

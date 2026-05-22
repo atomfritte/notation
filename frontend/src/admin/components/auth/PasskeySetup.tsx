@@ -6,7 +6,7 @@ import { AuthShell } from './AuthShell'
 type Props = { onDone: () => void }
 
 /**
- * PasskeySetup runs right after the bootstrap claim â€” the admin has a session
+ * PasskeySetup runs right after the bootstrap claim Ã¢â‚¬â€ the admin has a session
  * but no credentials. We force a passkey registration here so that future
  * logins don't depend on the bootstrap token (which rotates per restart) and
  * are phishing-resistant. The admin can always add more passkeys later from
@@ -44,14 +44,14 @@ export function PasskeySetup({ onDone }: Props) {
     >
       <div className="space-y-3">
         <div>
-          <label className="block text-xs text-zinc-600 dark:text-zinc-400 mb-1">
+          <label className="block text-xs text-[var(--notation-fg-muted)] mb-1">
             Label this device
           </label>
           <input
             value={label}
             onChange={e => setLabel(e.target.value)}
             placeholder="MacBook"
-            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-zinc-400 dark:focus:border-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100"
+            className="w-full bg-white dark:bg-zinc-950 border border-[var(--notation-border)] focus:border-zinc-400 dark:focus:border-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 text-sm text-[var(--notation-fg)]"
           />
         </div>
         <button
@@ -59,7 +59,7 @@ export function PasskeySetup({ onDone }: Props) {
           disabled={busy}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] font-semibold text-sm rounded-md transition-colors disabled:opacity-40"
         >
-          <Fingerprint size={16} /> {busy ? 'Waiting for deviceâ€¦' : 'Register passkey'}
+          <Fingerprint size={16} /> {busy ? 'Waiting for deviceÃ¢â‚¬Â¦' : 'Register passkey'}
         </button>
         {err && (
           <div className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400">
@@ -67,14 +67,14 @@ export function PasskeySetup({ onDone }: Props) {
             <span>{err}</span>
           </div>
         )}
-        <ul className="text-xs text-zinc-500 dark:text-zinc-500 mt-4 space-y-1.5">
+        <ul className="text-xs text-[var(--notation-fg-muted)] mt-4 space-y-1.5">
           <li className="flex items-center gap-2">
             <Check size={12} className="text-[color:var(--notation-accent)]" />
             Nothing is sent or stored on a server.
           </li>
           <li className="flex items-center gap-2">
             <Check size={12} className="text-[color:var(--notation-accent)]" />
-            Works with Touch ID, Face ID, Windows Hello, YubiKeyâ€¦
+            Works with Touch ID, Face ID, Windows Hello, YubiKeyÃ¢â‚¬Â¦
           </li>
           <li className="flex items-center gap-2">
             <Check size={12} className="text-[color:var(--notation-accent)]" />

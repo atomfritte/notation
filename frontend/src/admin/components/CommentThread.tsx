@@ -43,7 +43,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
     }
   }, [initialText])
 
-  // Group: parents Ã¢â€ â€™ replies (sorted by creation time within each group).
+  // Group: parents ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ replies (sorted by creation time within each group).
   const { tops, repliesByParent } = useMemo(() => {
     const tops: CommentItem[] = []
     const repliesByParent: Record<string, CommentItem[]> = {}
@@ -80,7 +80,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
 
   return (
     <aside className="p-4">
-      <h3 className="font-semibold text-sm mb-3 text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+      <h3 className="font-semibold text-sm mb-3 text-[var(--notation-fg)] flex items-center gap-2">
         Comments
         {comments.length > 0 && (
           <span className="bg-zinc-100 dark:bg-zinc-800 text-lime-600 dark:text-[color:var(--notation-accent)] px-2 py-0.5 rounded-full text-xs font-bold">
@@ -102,7 +102,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
               onReply={canAdd && onAdd ? (text) => submitReply(c.id, text) : undefined}
             />
             {repliesByParent[c.id]?.length ? (
-              <ul className="pl-5 mt-2 border-l-2 border-zinc-200 dark:border-zinc-800 space-y-2">
+              <ul className="pl-5 mt-2 border-l-2 border-[var(--notation-border)] space-y-2">
                 {repliesByParent[c.id].map(r => (
                   <li key={r.id}>
                     <CommentRow
@@ -124,8 +124,8 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
-            placeholder="Add a commentÃ¢â‚¬Â¦"
-            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-zinc-900 dark:text-zinc-100 resize-none transition-all"
+            placeholder="Add a commentÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+            className="w-full bg-white dark:bg-zinc-900 border border-[var(--notation-border)] focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none transition-all"
             rows={2}
             disabled={submitting}
           />
@@ -134,7 +134,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
             disabled={!text.trim() || submitting}
             className="self-end px-4 py-1.5 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 font-semibold text-sm rounded-md shadow-sm disabled:opacity-40 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
           >
-            {submitting ? 'PostingÃ¢â‚¬Â¦' : 'Post Comment'}
+            {submitting ? 'PostingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' : 'Post Comment'}
           </button>
         </form>
       )}
@@ -184,16 +184,16 @@ function CommentRow({
         'rounded-md border text-sm transition-all ' +
         (active
           ? 'border-[color:var(--notation-accent)] bg-[color:var(--notation-accent)]/5 dark:bg-[color:var(--notation-accent-10)] shadow-sm'
-          : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900') +
+          : 'border-[var(--notation-border)] bg-zinc-50 dark:bg-zinc-900') +
         (compact ? ' p-2' : ' p-3')
       }
     >
-      <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1.5">
-        <span className="font-semibold text-zinc-700 dark:text-zinc-300 truncate">{comment.author}</span>
+      <div className="flex justify-between text-xs text-[var(--notation-fg-muted)] mb-1.5">
+        <span className="font-semibold text-[var(--notation-fg)] truncate">{comment.author}</span>
         <span className="flex-shrink-0">{new Date(comment.created_at).toLocaleString()}</span>
       </div>
       {comment.anchor?.quote && (
-        <div className="text-xs text-zinc-600 dark:text-zinc-400 mb-2 pl-2 border-l-2 border-zinc-300 dark:border-zinc-700 italic flex items-start gap-1">
+        <div className="text-xs text-[var(--notation-fg-muted)] mb-2 pl-2 border-l-2 border-[var(--notation-border)] italic flex items-start gap-1">
           <Quote size={10} className="mt-0.5 flex-shrink-0 opacity-60" />
           <span className="line-clamp-2">{comment.anchor.quote}</span>
         </div>
@@ -213,11 +213,11 @@ function CommentRow({
           <textarea
             value={replyText}
             onChange={e => setReplyText(e.target.value)}
-            placeholder="Write a replyÃ¢â‚¬Â¦"
+            placeholder="Write a replyÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
             autoFocus
             rows={2}
             disabled={busy}
-            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-zinc-900 dark:text-zinc-100 resize-none"
+            className="w-full bg-white dark:bg-zinc-950 border border-[var(--notation-border)] focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none"
           />
           <div className="flex gap-1.5 justify-end">
             <button
@@ -235,7 +235,7 @@ function CommentRow({
               disabled={!replyText.trim() || busy}
               className="px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40"
             >
-              {busy ? 'Ã¢â‚¬Â¦' : 'Reply'}
+              {busy ? 'ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' : 'Reply'}
             </button>
           </div>
         </form>

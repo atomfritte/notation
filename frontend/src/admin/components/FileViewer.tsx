@@ -35,17 +35,17 @@ type Props = {
  * FileViewer is the read-only dispatcher for any file in the Space. The
  * extension determines the rendering path:
  *
- *   .md / .markdown        â†’ MarkdownView (rehype pipeline + comments)
- *   .png .jpg .gif .webp â€¦ â†’ ImageView (direct backend URL)
- *   .pdf                   â†’ PDFView (iframe)
- *   .mp4 .webm .mov        â†’ VideoView (native <video> with Range support)
- *   .mp3 .wav .ogg .flac   â†’ AudioView (native <audio>)
- *   .docx                  â†’ WordView (mammoth + DOMPurify, lazy)
- *   .xlsx .ods .csv .tsv   â†’ SpreadsheetView (SheetJS + DOMPurify, lazy)
- *   .json .ts .py .go .yml â†’ CodeView (highlight.js by language guess)
- *   anything else          â†’ DownloadView (offers a download link)
+ *   .md / .markdown        Ã¢â€ â€™ MarkdownView (rehype pipeline + comments)
+ *   .png .jpg .gif .webp Ã¢â‚¬Â¦ Ã¢â€ â€™ ImageView (direct backend URL)
+ *   .pdf                   Ã¢â€ â€™ PDFView (iframe)
+ *   .mp4 .webm .mov        Ã¢â€ â€™ VideoView (native <video> with Range support)
+ *   .mp3 .wav .ogg .flac   Ã¢â€ â€™ AudioView (native <audio>)
+ *   .docx                  Ã¢â€ â€™ WordView (mammoth + DOMPurify, lazy)
+ *   .xlsx .ods .csv .tsv   Ã¢â€ â€™ SpreadsheetView (SheetJS + DOMPurify, lazy)
+ *   .json .ts .py .go .yml Ã¢â€ â€™ CodeView (highlight.js by language guess)
+ *   anything else          Ã¢â€ â€™ DownloadView (offers a download link)
  *
- * For binary types the caller can pass an empty `content` â€” the viewer
+ * For binary types the caller can pass an empty `content` Ã¢â‚¬â€ the viewer
  * fetches via the file URL directly.
  */
 export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
@@ -89,7 +89,7 @@ export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
 function LazyLoading() {
   return (
     <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-      Loading viewerâ€¦
+      Loading viewerÃ¢â‚¬Â¦
     </div>
   )
 }
@@ -151,7 +151,7 @@ function DownloadView({ url, path }: { url: string; path: string }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
       <FileQuestion size={48} className="text-zinc-300 dark:text-zinc-700 mb-4" />
-      <p className="text-zinc-700 dark:text-zinc-300 font-medium mb-1">{filename}</p>
+      <p className="text-[var(--notation-fg)] font-medium mb-1">{filename}</p>
       <p className="text-sm text-zinc-500 mb-6">No inline preview available for this file type.</p>
       <a
         href={url}
