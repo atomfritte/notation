@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { Folder, FolderPlus, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette } from 'lucide-react'
+import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
@@ -20,6 +20,7 @@ import { FileViewer } from '../components/FileViewer'
 import { BacklinksPanel } from '../components/BacklinksPanel'
 import { HistoryView } from '../components/HistoryView'
 import { ThemePalette } from '../components/ThemePalette'
+import { SidebarTabs, type SidebarTabKey } from '../components/SidebarTabs'
 
 export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
@@ -62,7 +63,7 @@ export function SpaceView() {
   }, [sidebarWidth])
   const mainScrollRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
-  const [sidebarTab, setSidebarTab] = useState<'files' | 'bookmarks' | 'shares' | 'mcp' | 'history' | 'audit'>('files')
+  const [sidebarTab, setSidebarTab] = useState<SidebarTabKey>('files')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [showOutline, setShowOutline] = useState(false)
@@ -569,25 +570,11 @@ export function SpaceView() {
             </div>
           </Link>
 
-          <div className="px-3 mt-4 space-y-0.5">
-            <button onClick={() => setSidebarTab('bookmarks')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'bookmarks' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
-              <Bookmark size={16} /> Bookmarks
-            </button>
-            <button onClick={() => setSidebarTab('files')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'files' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
-              <Folder size={16} /> Pages
-            </button>
-            <button onClick={() => setSidebarTab('shares')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'shares' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
-              <Share2 size={16} /> Sharing
-            </button>
-            <button onClick={() => setSidebarTab('mcp')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'mcp' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
-              <Settings size={16} /> Integration
-            </button>
-            <button onClick={() => setSidebarTab('history')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'history' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
-              <GitCommit size={16} /> History
-            </button>
-            <button onClick={() => setSidebarTab('audit')} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${sidebarTab === 'audit' ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
-              <ShieldCheck size={16} /> Audit
-            </button>
+          <div className="px-3 mt-4">
+            <SidebarTabs
+              active={sidebarTab}
+              onPick={setSidebarTab}
+            />
           </div>
 
           <div className="px-5 mt-6 mb-2 text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
@@ -609,6 +596,7 @@ export function SpaceView() {
                 onBackgroundContextMenu={handleTreeBackgroundContextMenu}
                 onMove={movePathToDir}
                 onExternalDrop={uploadInto}
+                collapseStorageKey={`notation_tree_collapsed_${spaceID}`}
               />
             )}
             

@@ -1,4 +1,4 @@
-import { useState, useRef, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useState, useRef, type Dispatch, type SetStateAction } from 'react'
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen } from 'lucide-react'
 import type { Entry } from '../lib/api'
 
@@ -23,6 +23,9 @@ type Props = {
   onMove?: (fromPath: string, toDir: string) => void
   /** External drag: browser file(s) dropped onto a directory or onto root. */
   onExternalDrop?: (files: FileList, toDir: string) => void
+  /** localStorage key for persisting the collapsed-folders map. Optional;
+   *  if omitted the state stays in-memory only. */
+  collapseStorageKey?: string
   depth?: number
 }
 
@@ -51,13 +54,32 @@ export function FileTree({
   onBackgroundContextMenu,
   onMove,
   onExternalDrop,
+  collapseStorageKey,
   depth = 0,
 }: Props) {
   // Single per-tree-instance "which row is the active drop target" state.
   // Lifted here so siblings can de-highlight each other when the cursor
   // crosses between them.
   const [dropTarget, setDropTarget] = useState<string | null>(null)
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  // Collapsed-folders map. Only the root instance bothers with localStorage;
+  // nested recursive instances skip the persistence wiring (they get a fresh
+  // empty map and never write back), since the root already covers the whole
+  // tree.
+  const isRoot = depth === 0
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    if (!isRoot || !collapseStorageKey || typeof window === 'undefined') return {}
+    try {
+      const raw = localStorage.getItem(collapseStorageKey)
+      return raw ? JSON.parse(raw) : {}
+    } catch {
+      return {}
+    }
+  })
+  useEffect(() => {
+    if (!isRoot || !collapseStorageKey) return
+    try { localStorage.setItem(collapseStorageKey, JSON.stringify(collapsed)) }
+    catch { /* quota error etc. — not fatal */ }
+  }, [collapsed, collapseStorageKey, isRoot])
 
   function toggle(path: string) {
     setCollapsed(prev => ({ ...prev, [path]: !prev[path] }))
@@ -90,8 +112,8 @@ export function FileTree({
   // Root-level <ul> doubles as the background drop target so external files
   // dragged onto the empty area below the last row land at the Space root.
   // Nested levels skip the background-drop wiring; bubbling lets the root
-  // catch them.
-  const isRoot = depth === 0
+  // catch them. (isRoot already declared earlier for the collapse-storage
+  // wiring — reuse here.)
 
   return (
     <ul
