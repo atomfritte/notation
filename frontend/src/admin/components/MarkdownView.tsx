@@ -13,7 +13,24 @@ import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
 import { Mermaid } from './Mermaid'
 import 'katex/dist/katex.min.css'
-import 'highlight.js/styles/github-dark.css'
+// Load both highlight.js palettes as raw strings via Vite's ?inline query
+// so we can apply them scoped per mode: github.css runs globally for light
+// mode; github-dark.css has every `.hljs*` selector prefixed with `.dark`
+// before injection, so its overrides only apply when the documentElement
+// has the dark class. Without this, the dark palette's pastel string
+// colours leaked into light mode and rendered washed-out on the light
+// code-block background (see screenshot).
+import githubLight from 'highlight.js/styles/github.css?inline'
+import githubDark  from 'highlight.js/styles/github-dark.css?inline'
+if (typeof document !== 'undefined' && !document.getElementById('notation-hljs-styles')) {
+  const tag = document.createElement('style')
+  tag.id = 'notation-hljs-styles'
+  // Scope the dark palette to `.dark`, then concatenate. Light goes first
+  // so `.dark .hljs-*` wins via specificity when the class is on <html>.
+  const darkScoped = githubDark.replace(/(^|[,}\s])(\.hljs[a-z0-9-]*)/g, '$1.dark $2')
+  tag.textContent = githubLight + '\n' + darkScoped
+  document.head.appendChild(tag)
+}
 
 // Schema for rehype-sanitize. We start from the spec defaults (which strip
 // <script>, on* handlers, javascript: hrefs, etc.) and add a small allowlist
