@@ -376,7 +376,7 @@ export function MarkdownView({
           paper. */}
       {hoverTip && hoverTip.comment.text && (
         <div
-          className="fixed z-50 pointer-events-none px-3 py-2 max-w-sm rounded-md shadow-lg bg-white dark:bg-zinc-900 border border-[var(--notation-border)] text-xs no-print"
+          className="fixed z-50 pointer-events-none px-3 py-2 max-w-sm rounded-md shadow-lg bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-xs no-print"
           style={{ left: hoverTip.x, top: hoverTip.y }}
         >
           <div className="flex items-baseline gap-2 mb-1">
@@ -683,7 +683,7 @@ function CodeBlockWrapper({ className, children, ...rest }: { className?: string
     <pre className={`group relative ${className ?? ''}`} {...rest}>
       <button
         onClick={copy}
-        className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition px-2 py-1 text-xs bg-zinc-800 text-zinc-200 hover:bg-zinc-700 rounded shadow"
+        className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition px-2 py-1 text-xs bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] rounded shadow"
         aria-label="Copy code"
       >
         {copied ? '✓ Copied' : 'Copy'}

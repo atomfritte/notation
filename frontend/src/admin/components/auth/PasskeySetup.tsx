@@ -51,18 +51,18 @@ export function PasskeySetup({ onDone }: Props) {
             value={label}
             onChange={e => setLabel(e.target.value)}
             placeholder="MacBook"
-            className="w-full bg-white dark:bg-zinc-950 border border-[var(--notation-border)] focus:border-zinc-400 dark:focus:border-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 text-sm text-[var(--notation-fg)]"
+            className="w-full bg-white bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-[var(--notation-border)] dark:focus:border-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 text-sm text-[var(--notation-fg)]"
           />
         </div>
         <button
           onClick={register}
           disabled={busy}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] font-semibold text-sm rounded-md transition-colors disabled:opacity-40"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] font-semibold text-sm rounded-md transition-colors disabled:opacity-40"
         >
           <Fingerprint size={16} /> {busy ? 'Waiting for device…' : 'Register passkey'}
         </button>
         {err && (
-          <div className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400">
+          <div className="flex items-start gap-2 text-xs text-[var(--notation-danger)] dark:text-[var(--notation-danger)]">
             <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
             <span>{err}</span>
           </div>

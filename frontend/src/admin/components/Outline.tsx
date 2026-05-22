@@ -56,7 +56,7 @@ export function Outline({ content }: Props) {
   }
 
   if (headings.length === 0) {
-    return <div className="p-4 text-xs text-zinc-500 italic">No headings in this page yet.</div>
+    return <div className="p-4 text-xs text-[var(--notation-fg-muted)] italic">No headings in this page yet.</div>
   }
 
   const minLevel = Math.min(...headings.map(h => h.level))
@@ -76,8 +76,8 @@ export function Outline({ content }: Props) {
               className={
                 'block w-full text-left px-2 py-1 rounded-md truncate transition-colors ' +
                 (active === h.id
-                  ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-[color:var(--notation-accent)] font-medium border-l-2 border-zinc-900 dark:border-[color:var(--notation-accent)] -ml-0.5 pl-[6px]'
-                  : 'text-zinc-600 hover:bg-zinc-100/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200')
+                  ? 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)] font-medium border-l-2 border-[var(--notation-border)] dark:border-[color:var(--notation-accent)] -ml-0.5 pl-[6px]'
+                  : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-bg-alt)]/70 hover:text-[var(--notation-fg)] dark:text-[var(--notation-fg-muted)] hover:bg-[var(--notation-bg-alt)]/50 hover:text-[var(--notation-fg)]')
               }
               style={{ paddingLeft: (h.level - minLevel) * 12 + 8 }}
               title={h.text}

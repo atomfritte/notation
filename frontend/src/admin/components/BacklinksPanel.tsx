@@ -45,7 +45,7 @@ export function BacklinksPanel({ spaceID, path, onSelect }: Props) {
 
   if (loading) {
     return (
-      <div className="p-4 text-xs text-zinc-500">Looking for backlinks…</div>
+      <div className="p-4 text-xs text-[var(--notation-fg-muted)]">Looking for backlinks…</div>
     )
   }
 
@@ -54,9 +54,9 @@ export function BacklinksPanel({ spaceID, path, onSelect }: Props) {
       <h3 className="font-semibold text-xs text-[var(--notation-fg-muted)] uppercase tracking-wider px-2 mb-2 flex items-center gap-1">
         <Link2 size={12} /> Linked from
       </h3>
-      {err && <p className="text-xs text-red-600 mb-2 px-2">{err}</p>}
+      {err && <p className="text-xs text-[var(--notation-danger)] mb-2 px-2">{err}</p>}
       {hits.length === 0 ? (
-        <p className="text-xs text-zinc-500 italic px-2">
+        <p className="text-xs text-[var(--notation-fg-muted)] italic px-2">
           No other page links here yet.
         </p>
       ) : (
@@ -65,7 +65,7 @@ export function BacklinksPanel({ spaceID, path, onSelect }: Props) {
             <li key={h.path}>
               <button
                 onClick={() => onSelect(h.path)}
-                className="block w-full text-left px-2 py-1.5 rounded-md text-sm text-zinc-700 hover:bg-zinc-100/70 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-100 transition-colors truncate"
+                className="block w-full text-left px-2 py-1.5 rounded-md text-sm text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/70 hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 hover:text-[var(--notation-fg)] transition-colors truncate"
               >
                 {h.path.replace(/\.md$/i, '')}
               </button>

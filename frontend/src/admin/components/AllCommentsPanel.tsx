@@ -78,7 +78,7 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
     return <div className="p-4 text-xs text-[var(--notation-fg-muted)] italic">Loading…</div>
   }
   if (err) {
-    return <div className="p-4 text-xs text-red-500">Error: {err}</div>
+    return <div className="p-4 text-xs text-[var(--notation-danger)]">Error: {err}</div>
   }
   if (groups.length === 0) {
     return (
@@ -148,7 +148,7 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
                     <button
                       onClick={() => onDelete(c.id)}
                       title="Delete"
-                      className="absolute opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-[var(--notation-fg-muted)] hover:text-red-500"
+                      className="absolute opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-[var(--notation-fg-muted)] hover:text-[var(--notation-danger)]"
                       style={{ position: 'relative', float: 'right', marginTop: '-30px', marginRight: '4px' }}
                     >
                       <Trash2 size={11} />

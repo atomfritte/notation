@@ -70,15 +70,15 @@ export function SearchPanel({ open, onClose, onSelect, onSearch }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[8vh] bg-black/40 backdrop-blur-sm animate-in fade-in duration-100"
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[8vh] bg-[var(--notation-backdrop)] backdrop-blur-sm animate-in fade-in duration-100"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150 flex flex-col"
+        className="w-full max-w-2xl bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150 flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--notation-border)]">
-          <Search size={18} className="text-zinc-400" />
+          <Search size={18} className="text-[var(--notation-fg-muted)]" />
           <input
             ref={inputRef}
             value={q}
@@ -89,18 +89,18 @@ export function SearchPanel({ open, onClose, onSelect, onSearch }: Props) {
             placeholder="Search across all pages…"
             className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
           />
-          {loading && <span className="text-xs text-zinc-400">searching…</span>}
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
+          {loading && <span className="text-xs text-[var(--notation-fg-muted)]">searching…</span>}
+          <button onClick={onClose} className="text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]">
             <X size={16} />
           </button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
-          {err && <div className="p-4 text-sm text-red-600">{err}</div>}
+          {err && <div className="p-4 text-sm text-[var(--notation-danger)]">{err}</div>}
           {!err && q.trim().length >= 2 && results.length === 0 && !loading && (
-            <div className="p-6 text-center text-sm text-zinc-500 italic">No matches</div>
+            <div className="p-6 text-center text-sm text-[var(--notation-fg-muted)] italic">No matches</div>
           )}
           {q.trim().length < 2 && (
-            <div className="p-6 text-center text-sm text-zinc-500 italic">Type at least 2 characters</div>
+            <div className="p-6 text-center text-sm text-[var(--notation-fg-muted)] italic">Type at least 2 characters</div>
           )}
           {files.map(path => (
             <div key={path} className="border-b border-[var(--notation-border)]/50 last:border-0">
@@ -109,7 +109,7 @@ export function SearchPanel({ open, onClose, onSelect, onSearch }: Props) {
                   onSelect(path)
                   onClose()
                 }}
-                className="w-full text-left px-4 py-2 text-xs font-mono text-[var(--notation-fg)] bg-zinc-50 dark:bg-zinc-950/30 hover:bg-[var(--notation-border)]"
+                className="w-full text-left px-4 py-2 text-xs font-mono text-[var(--notation-fg)] bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/30 hover:bg-[var(--notation-border)]"
               >
                 {path.replace(/\.md$/i, '')}
               </button>
@@ -121,10 +121,10 @@ export function SearchPanel({ open, onClose, onSelect, onSearch }: Props) {
                       onSelect(path, m.line)
                       onClose()
                     }}
-                    className="px-4 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/30 cursor-pointer flex gap-3"
+                    className="px-4 py-2 text-xs hover:bg-[var(--notation-bg-alt)] hover:bg-[var(--notation-bg-alt)]/30 cursor-pointer flex gap-3"
                   >
-                    <span className="text-zinc-400 select-none w-8 text-right shrink-0">{m.line}</span>
-                    <span className="text-zinc-600 dark:text-zinc-300 truncate">
+                    <span className="text-[var(--notation-fg-muted)] select-none w-8 text-right shrink-0">{m.line}</span>
+                    <span className="text-[var(--notation-fg-muted)] text-[var(--notation-fg)] truncate">
                       <Highlight text={m.content} query={q} />
                     </span>
                   </li>
@@ -158,7 +158,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((p, k) =>
         p.hit ? (
-          <mark key={k} className="bg-[color:var(--notation-accent-30)] text-zinc-900 dark:text-[color:var(--notation-accent)] rounded px-0.5">
+          <mark key={k} className="bg-[color:var(--notation-accent-30)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)] rounded px-0.5">
             {p.s}
           </mark>
         ) : (

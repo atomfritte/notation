@@ -57,11 +57,11 @@ curl -X POST '${url}' \\
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-100 p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--notation-backdrop)] backdrop-blur-sm animate-in fade-in duration-100 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-150 flex flex-col max-h-[90vh]"
+        className="w-full max-w-2xl bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-150 flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--notation-border)]">
@@ -69,14 +69,14 @@ curl -X POST '${url}' \\
             <h2 className="text-lg font-semibold text-[var(--notation-fg)]">
               Connect MCP client
             </h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
+            <p className="text-xs text-[var(--notation-fg-muted)] mt-0.5">
               Give Claude Code (or any MCP client) read+write access to{' '}
               <span className="font-mono text-[var(--notation-fg)]">{spaceID}</span>.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-1 rounded-md"
+            className="text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:text-[var(--notation-fg)] p-1 rounded-md"
           >
             <X size={18} />
           </button>
@@ -84,14 +84,14 @@ curl -X POST '${url}' \\
 
         <div className="overflow-y-auto px-5 py-4 space-y-4">
           {fresh && (
-            <div className="border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 rounded-md p-3">
+            <div className="border border-[var(--notation-warning)] dark:border-[var(--notation-warning)]/50 bg-[var(--notation-warning)] dark:bg-[var(--notation-warning)]/30 rounded-md p-3">
               <div className="flex items-start gap-2">
-                <AlertTriangle size={14} className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <AlertTriangle size={14} className="text-[var(--notation-warning)] dark:text-[var(--notation-warning)] mt-0.5 flex-shrink-0" />
                 <div className="text-xs">
-                  <div className="font-semibold text-amber-900 dark:text-amber-300 mb-0.5">
+                  <div className="font-semibold text-[var(--notation-warning)] dark:text-[var(--notation-warning)] mb-0.5">
                     Save this token now
                   </div>
-                  <div className="text-amber-800 dark:text-amber-400">
+                  <div className="text-[var(--notation-warning)] dark:text-[var(--notation-warning)]">
                     The token is shown once. After closing this dialog it cannot be recovered — revoke
                     and create a new one if lost.
                   </div>
@@ -117,8 +117,8 @@ curl -X POST '${url}' \\
                   className={
                     'px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ' +
                     (tab === t
-                      ? 'border-zinc-900 dark:border-[color:var(--notation-accent)] text-zinc-900 dark:text-[color:var(--notation-accent)]'
-                      : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200')
+                      ? 'border-[var(--notation-border)] dark:border-[color:var(--notation-accent)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]'
+                      : 'border-transparent text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]')
                   }
                 >
                   {t === 'claude' ? 'Claude Code' : t === 'cursor' ? 'Cursor' : 'Raw HTTP'}
@@ -129,14 +129,14 @@ curl -X POST '${url}' \\
             {tab === 'claude' && (
               <div className="space-y-3">
                 <div>
-                  <p className="text-xs text-zinc-500 mb-1.5">Quick add via CLI:</p>
+                  <p className="text-xs text-[var(--notation-fg-muted)] mb-1.5">Quick add via CLI:</p>
                   <CodeBlock value={cliClaude} />
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-500 mb-1.5">
-                    Or paste into <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">.mcp.json</code>{' '}
+                  <p className="text-xs text-[var(--notation-fg-muted)] mb-1.5">
+                    Or paste into <code className="bg-[var(--notation-bg-alt)] px-1 rounded">.mcp.json</code>{' '}
                     (project) or{' '}
-                    <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">~/.claude/mcp.json</code>{' '}
+                    <code className="bg-[var(--notation-bg-alt)] px-1 rounded">~/.claude/mcp.json</code>{' '}
                     (global):
                   </p>
                   <CodeBlock value={claudeJson} />
@@ -146,9 +146,9 @@ curl -X POST '${url}' \\
 
             {tab === 'cursor' && (
               <div className="space-y-3">
-                <p className="text-xs text-zinc-500">
-                  Add to <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">~/.cursor/mcp.json</code>{' '}
-                  (global) or <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">.cursor/mcp.json</code>{' '}
+                <p className="text-xs text-[var(--notation-fg-muted)]">
+                  Add to <code className="bg-[var(--notation-bg-alt)] px-1 rounded">~/.cursor/mcp.json</code>{' '}
+                  (global) or <code className="bg-[var(--notation-bg-alt)] px-1 rounded">.cursor/mcp.json</code>{' '}
                   in your project root. Restart Cursor after saving.
                 </p>
                 <CodeBlock value={cursorJson} />
@@ -157,12 +157,12 @@ curl -X POST '${url}' \\
 
             {tab === 'http' && (
               <div className="space-y-3">
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-[var(--notation-fg-muted)]">
                   The endpoint speaks JSON-RPC 2.0 over plain HTTP. Useful for debugging or building
                   your own integration. Example list-tools call:
                 </p>
                 <CodeBlock value={curlSnippet} />
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-[var(--notation-fg-muted)]">
                   Tools the server exposes:{' '}
                   <code>list_files</code>, <code>get_tree</code>, <code>glob</code>, <code>outline</code>,{' '}
                   <code>read_file</code>, <code>write_file</code>, <code>create_file</code>,{' '}
@@ -177,7 +177,7 @@ curl -X POST '${url}' \\
         <div className="px-5 py-3 border-t border-[var(--notation-border)] flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-sm font-medium bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
+            className="px-4 py-1.5 text-sm font-medium bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] rounded-md hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] transition-colors"
           >
             Done
           </button>
@@ -190,8 +190,8 @@ curl -X POST '${url}' \\
 function Field({ label, value, mono, secret }: { label: string; value: string; mono?: boolean; secret?: boolean }) {
   return (
     <div>
-      <div className="text-xs text-zinc-500 mb-1">{label}</div>
-      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-950/50 border border-[var(--notation-border)] rounded-md px-3 py-2">
+      <div className="text-xs text-[var(--notation-fg-muted)] mb-1">{label}</div>
+      <div className="flex items-center gap-2 bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/50 border border-[var(--notation-border)] rounded-md px-3 py-2">
         <code className={`flex-1 break-all text-[var(--notation-fg)] text-xs select-all ${mono ? 'font-mono' : ''} ${secret ? 'opacity-70 italic' : ''}`}>
           {value}
         </code>
@@ -204,7 +204,7 @@ function Field({ label, value, mono, secret }: { label: string; value: string; m
 function CodeBlock({ value }: { value: string }) {
   return (
     <div className="relative group">
-      <pre className="bg-zinc-950 text-zinc-100 rounded-md p-3 text-xs overflow-x-auto font-mono leading-relaxed border border-zinc-800">
+      <pre className="bg-[var(--notation-bg-elevated)] text-[var(--notation-fg)] rounded-md p-3 text-xs overflow-x-auto font-mono leading-relaxed border border-[var(--notation-border)]">
         <code>{value}</code>
       </pre>
       <div className="absolute top-2 right-2 opacity-60 hover:opacity-100 transition-opacity">
@@ -225,7 +225,7 @@ function CopyButton({ value }: { value: string }) {
   return (
     <button
       onClick={onCopy}
-      className="p-1.5 bg-zinc-800 dark:bg-zinc-800 text-zinc-300 hover:text-white rounded-md transition-colors"
+      className="p-1.5 bg-[var(--notation-bg-alt)] bg-[var(--notation-bg-alt)] text-[var(--notation-fg-muted)] hover:text-white rounded-md transition-colors"
       aria-label="Copy"
     >
       {copied ? <Check size={14} /> : <Copy size={14} />}

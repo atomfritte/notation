@@ -63,14 +63,14 @@ export function MCPPanel({ spaceID }: Props) {
         <h3 className="font-semibold text-xs text-[var(--notation-fg-muted)] uppercase tracking-wider px-2 mb-2 flex items-center gap-1">
           <Plug size={12} /> MCP Tokens
         </h3>
-        <p className="text-xs text-zinc-500 px-2 mb-3 leading-relaxed">
+        <p className="text-xs text-[var(--notation-fg-muted)] px-2 mb-3 leading-relaxed">
           Connect Claude Code, Cursor or any MCP client to read & edit this Space.
         </p>
 
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors mb-3"
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] rounded-md transition-colors mb-3"
           >
             <Plus size={12} /> New token
           </button>
@@ -81,14 +81,14 @@ export function MCPPanel({ spaceID }: Props) {
             <input
               value={label}
               onChange={e => setLabel(e.target.value)}
-              className="border border-[var(--notation-border)] bg-white dark:bg-zinc-900 px-2 py-1.5 rounded-md text-xs w-full text-[var(--notation-fg)] placeholder-zinc-400"
+              className="border border-[var(--notation-border)] bg-white bg-[var(--notation-bg-alt)] px-2 py-1.5 rounded-md text-xs w-full text-[var(--notation-fg)] placeholder-zinc-400"
               placeholder="Label (e.g. claude-laptop)"
               autoFocus
             />
             <div className="flex gap-1">
               <button
                 type="submit"
-                className="flex-1 px-2 py-1 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 text-xs font-medium rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944]"
+                className="flex-1 px-2 py-1 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] text-xs font-medium rounded-md hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944]"
               >
                 Create
               </button>
@@ -98,7 +98,7 @@ export function MCPPanel({ spaceID }: Props) {
                   setShowForm(false)
                   setLabel('')
                 }}
-                className="px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                className="px-2 py-1 text-xs text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]"
               >
                 Cancel
               </button>
@@ -107,14 +107,14 @@ export function MCPPanel({ spaceID }: Props) {
         )}
 
         {tokens.length === 0 ? (
-          <p className="text-xs text-zinc-500 italic px-2">No tokens yet.</p>
+          <p className="text-xs text-[var(--notation-fg-muted)] italic px-2">No tokens yet.</p>
         ) : (
           <ul className="space-y-1">
             {tokens.map(t => (
               <li
                 key={t.id}
                 onClick={() => setModal({ url: inferredURL })}
-                className="p-2 bg-white dark:bg-zinc-900 border border-[var(--notation-border)] rounded-md hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer transition-colors"
+                className="p-2 bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-md hover:border-[var(--notation-border)] dark:hover:border-[var(--notation-border)] cursor-pointer transition-colors"
               >
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0 flex-1">
@@ -122,7 +122,7 @@ export function MCPPanel({ spaceID }: Props) {
                     {t.label && (
                       <div className="text-xs text-[var(--notation-fg-muted)] mt-0.5 truncate">{t.label}</div>
                     )}
-                    <div className="text-[10px] text-zinc-500 mt-0.5">
+                    <div className="text-[10px] text-[var(--notation-fg-muted)] mt-0.5">
                       created {new Date(t.created_at).toLocaleString()}
                       {t.last_used && (
                         <>
@@ -133,7 +133,7 @@ export function MCPPanel({ spaceID }: Props) {
                   </div>
                   <button
                     onClick={(e) => onDelete(t.id, e)}
-                    className="text-xs text-red-600 dark:text-red-400 hover:underline flex-shrink-0"
+                    className="text-xs text-[var(--notation-danger)] dark:text-[var(--notation-danger)] hover:underline flex-shrink-0"
                   >
                     revoke
                   </button>
@@ -143,7 +143,7 @@ export function MCPPanel({ spaceID }: Props) {
           </ul>
         )}
 
-        {err && <p className="text-red-600 dark:text-red-400 mt-2 text-xs px-2">{err}</p>}
+        {err && <p className="text-[var(--notation-danger)] dark:text-[var(--notation-danger)] mt-2 text-xs px-2">{err}</p>}
       </div>
 
       <MCPIntegrationModal

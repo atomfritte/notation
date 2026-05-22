@@ -215,20 +215,20 @@ function ShareUI() {
     return (
       <div className="p-8 max-w-xl mx-auto">
         <h1 className="text-xl font-bold mb-2 text-[var(--notation-fg)]">Share unavailable</h1>
-        <p className="text-red-600 dark:text-red-400">{err}</p>
+        <p className="text-[var(--notation-danger)] dark:text-[var(--notation-danger)]">{err}</p>
       </div>
     )
   }
-  if (!info) return <div className="p-8 text-zinc-500">loading…</div>
+  if (!info) return <div className="p-8 text-[var(--notation-fg-muted)]">loading…</div>
 
   const canEdit = info.permission === 'edit'
   const canComment = info.permission === 'comment' || info.permission === 'edit'
 
   return (
-    <div className="flex h-screen bg-[var(--notation-bg)] text-zinc-900 dark:text-zinc-300 overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
+    <div className="flex h-screen bg-[var(--notation-bg)] text-[var(--notation-fg)] overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {isMobile && sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-30 bg-[var(--notation-backdrop)] backdrop-blur-sm md:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-label="Close sidebar"
         />
@@ -244,7 +244,7 @@ function ShareUI() {
       >
         <div className="p-4 border-b border-[var(--notation-border)]">
           <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium">
-            <div className="w-5 h-5 rounded bg-zinc-900 text-white dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase">
+            <div className="w-5 h-5 rounded bg-[var(--notation-bg-alt)] text-white dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase">
               {info.space.id.charAt(0)}
             </div>
             <span className="truncate">{info.space.name}</span>
@@ -254,10 +254,10 @@ function ShareUI() {
               className={
                 'px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ' +
                 (info.permission === 'edit'
-                  ? 'bg-[color:var(--notation-accent-20)] text-zinc-900 dark:text-[color:var(--notation-accent)]'
+                  ? 'bg-[color:var(--notation-accent-20)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]'
                   : info.permission === 'comment'
-                  ? 'bg-amber-200/40 text-amber-900 dark:bg-amber-500/10 dark:text-amber-300'
-                  : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400')
+                  ? 'bg-[var(--notation-warning)]/40 text-[var(--notation-warning)] dark:bg-[var(--notation-warning)]/10 dark:text-[var(--notation-warning)]'
+                  : 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] text-[var(--notation-fg-muted)]')
               }
             >
               {info.permission}
@@ -431,12 +431,12 @@ function ShareUI() {
                       <button
                         onClick={save}
                         disabled={saving || editBuffer === content}
-                        className="px-3 py-1 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md disabled:opacity-40 font-medium"
+                        className="px-3 py-1 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] rounded-md disabled:opacity-40 font-medium"
                       >
                         {saving ? 'Saving…' : 'Save'}
                       </button>
                       {editBuffer !== content && (
-                        <span className="text-amber-600 dark:text-amber-400 text-xs">unsaved changes</span>
+                        <span className="text-[var(--notation-warning)] dark:text-[var(--notation-warning)] text-xs">unsaved changes</span>
                       )}
                     </div>
                     <textarea
@@ -472,11 +472,11 @@ function ShareUI() {
                   >
                     {pendingAnchor && (
                       <div className="px-4 pt-3 text-xs">
-                        <div className="text-amber-700 dark:text-amber-300 font-semibold mb-1">Anchoring to selection</div>
+                        <div className="text-[var(--notation-warning)] dark:text-[var(--notation-warning)] font-semibold mb-1">Anchoring to selection</div>
                         <div className="italic text-[var(--notation-fg-muted)] line-clamp-2">“{pendingAnchor.quote}”</div>
                         <button
                           onClick={() => { setPendingAnchor(null); setPendingComment('') }}
-                          className="mt-1 text-amber-700 dark:text-amber-300 hover:underline"
+                          className="mt-1 text-[var(--notation-warning)] dark:text-[var(--notation-warning)] hover:underline"
                         >
                           drop anchor
                         </button>
@@ -496,7 +496,7 @@ function ShareUI() {
                   </div>
                 )}
                 {err && info && (
-                  <div className="p-2 text-red-600 dark:text-red-400 text-sm border-t border-red-200 dark:border-red-900/50">{err}</div>
+                  <div className="p-2 text-[var(--notation-danger)] dark:text-[var(--notation-danger)] text-sm border-t border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/50">{err}</div>
                 )}
               </div>
 
@@ -508,10 +508,10 @@ function ShareUI() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-4 p-8 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center text-[var(--notation-fg-muted)] gap-4 p-8 text-center">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden flex items-center gap-2 px-3 py-2 rounded-md bg-zinc-100 dark:bg-zinc-800 text-[var(--notation-fg)] text-sm"
+              className="md:hidden flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] text-sm"
             >
               <PanelLeft size={16} /> Open file list
             </button>
@@ -576,7 +576,7 @@ export function App() {
         <Route path="/s/:token/*" element={<ShareUI />} />
         <Route
           path="*"
-          element={<div className="p-8 text-red-600 dark:text-red-400">Invalid share URL.</div>}
+          element={<div className="p-8 text-[var(--notation-danger)] dark:text-[var(--notation-danger)]">Invalid share URL.</div>}
         />
       </Routes>
     </BrowserRouter>

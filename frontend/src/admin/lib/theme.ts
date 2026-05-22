@@ -1,34 +1,70 @@
 /**
- * Theme system — three colours × two modes.
+ * Theme system — full palette per mode (dark + light).
  *
- * Every theme defines a full palette for BOTH dark and light mode:
+ * Each theme defines a Palette for BOTH modes:
  *
  *   { name,
- *     dark:  { accent, bg, bgElevated },
- *     light: { accent, bg, bgElevated } }
+ *     dark:  { accent, bg, bgElevated, ..., chromeFg, ..., danger, ... },
+ *     light: { ... } }
  *
- * `accent` drives links/cursor/buttons.
- * `bg` is the main content surface.
- * `bgElevated` is the sidebar / header / modal surface, deliberately distinct
- * from `bg` so the chrome reads as chrome.
+ * Surfaces:
+ *   - `bg`         : main content area background
+ *   - `bgElevated` : chrome surface (sidebars, header, modals, popovers)
+ *   - `bgAlt`      : subtle off-bg (hover bg, alt-row stripe, inline code)
  *
- * applyTheme() writes a dynamic <style> tag with both `:root` and `.dark`
- * scopes, so flipping the `.dark` class on the documentElement is enough to
- * swap palettes without re-applying. Consumers reference the colours via
- * `bg-[var(--notation-bg)]` and friends (no `dark:` prefix needed).
+ * Foregrounds:
+ *   - `fg`, `fgMuted`, `border`     : on content
+ *   - `chromeFg`, `chromeFgMuted`, `chromeBorder` : on chrome
+ *     (the `.surface-elevated` cascade in index.css rebinds the content
+ *     tokens to these inside chrome wrappers, so most components don't
+ *     need to know which surface they're on)
+ *
+ * Status:
+ *   - `danger, warning, success, info`
+ *
+ * Misc:
+ *   - `fgOnAccent` : text colour painted on top of `accent`
+ *   - `backdrop`   : modal/overlay scrim (rgba)
+ *
+ * applyTheme() writes a dynamic <style> tag scoping :root + .dark. Flipping
+ * the `.dark` class on documentElement swaps palettes. Consumers reference
+ * the colours via `bg-[var(--notation-...)]`.
  *
  * Storage:
  *   notation_active_theme  → theme name
- *   notation_themes        → user-saved Theme[] (custom + VS-Code imports)
+ *   notation_themes        → user-saved Theme[]
  */
 
 export type ModePalette = {
-  accent: string      // links / cursor / buttons / highlights
-  bg: string          // main content background
-  bgElevated: string  // sidebar / header / modals / outline panel
-  fg: string          // primary text (body, headings)
-  fgMuted: string     // secondary text (captions, breadcrumbs, hints)
-  border: string      // dividers + hover backgrounds
+  // Accent & content surface (the original 6)
+  accent: string
+  bg: string
+  bgElevated: string
+  fg: string
+  fgMuted: string
+  border: string
+
+  // Subtle surface tint — hover bg, alt-row stripes, inline code highlights.
+  bgAlt: string
+
+  // Chrome surface foregrounds — were auto-derived by luminance, now user-
+  // controlled with the same auto-derivation as defaults when unset.
+  chromeFg: string
+  chromeFgMuted: string
+  chromeBorder: string
+
+  // Status colours.
+  danger: string
+  warning: string
+  success: string
+  info: string
+
+  // Text painted on top of the accent (primary buttons, accent badges).
+  fgOnAccent: string
+
+  // Modal / popover scrim. Stored as an rgba(...) string so partial alpha
+  // works without us baking in a specific tint.
+  backdrop: string
 }
 
 export type Theme = {
@@ -39,10 +75,20 @@ export type Theme = {
 }
 
 const HEX_RE = /^#[0-9A-Fa-f]{6}$/
+// Backdrop accepts rgba(...) or hex (we mainly persist rgba for partial-alpha
+// scrims, but treat #RRGGBB as opaque).
+const BACKDROP_RE = /^(#[0-9A-Fa-f]{6}|rgba?\([^)]+\))$/
+
 function isValidPalette(p: any): p is ModePalette {
-  return p
-    && HEX_RE.test(p.accent) && HEX_RE.test(p.bg) && HEX_RE.test(p.bgElevated)
-    && HEX_RE.test(p.fg) && HEX_RE.test(p.fgMuted) && HEX_RE.test(p.border)
+  if (!p) return false
+  const hexFields = [
+    'accent', 'bg', 'bgElevated', 'fg', 'fgMuted', 'border',
+    'bgAlt', 'chromeFg', 'chromeFgMuted', 'chromeBorder',
+    'danger', 'warning', 'success', 'info', 'fgOnAccent',
+  ] as const
+  for (const f of hexFields) if (!HEX_RE.test(p[f])) return false
+  if (!BACKDROP_RE.test(p.backdrop)) return false
+  return true
 }
 function isValidTheme(t: any): t is Theme {
   return t && typeof t.name === 'string' && isValidPalette(t.dark) && isValidPalette(t.light)
@@ -50,28 +96,49 @@ function isValidTheme(t: any): t is Theme {
 
 // ---- Built-ins -----------------------------------------------------------
 //
-// The six "tint" themes share neutral dark/light surfaces and only differ in
-// accent. The four "world" themes ship full palettes inspired by popular
+// The six "tint" themes share neutral dark/light surfaces and only differ
+// in accent. The four "world" themes ship full palettes inspired by popular
 // editor themes; the light variants are best-effort companions.
 
-// Neutral surfaces and text colours for the "tint" themes — they share
-// these and only differ in the accent. Picked so that text/border on top of
-// the matching bg has roughly WCAG AA contrast.
+// Status defaults — Tailwind 500/400 pairs, picked for AA contrast against
+// the neutral backgrounds below. Custom themes that don't override these
+// inherit them via fillPalette().
+const DEFAULT_STATUS_DARK = {
+  danger: '#F87171',   // red-400
+  warning: '#FBBF24',  // amber-400
+  success: '#34D399',  // emerald-400
+  info: '#60A5FA',     // blue-400
+} as const
+const DEFAULT_STATUS_LIGHT = {
+  danger: '#DC2626',   // red-600
+  warning: '#D97706',  // amber-600
+  success: '#059669',  // emerald-600
+  info: '#2563EB',     // blue-600
+} as const
+
 const NEUTRAL_DARK = {
-  bg: '#0A0A0A', bgElevated: '#111111',
+  bg: '#0A0A0A', bgElevated: '#111111', bgAlt: '#1F1F23',
   fg: '#E4E4E7', fgMuted: '#A1A1AA', border: '#27272A',
+  chromeFg: '#FAFAFA', chromeFgMuted: '#A1A1AA', chromeBorder: '#2A2A2E',
+  fgOnAccent: '#0A0A0A',
+  backdrop: 'rgba(0, 0, 0, 0.55)',
+  ...DEFAULT_STATUS_DARK,
 } as const
 const NEUTRAL_LIGHT = {
-  bg: '#FFFFFF', bgElevated: '#FAFAFA',
+  bg: '#FFFFFF', bgElevated: '#FAFAFA', bgAlt: '#F4F4F5',
   fg: '#18181B', fgMuted: '#71717A', border: '#E4E4E7',
+  chromeFg: '#18181B', chromeFgMuted: '#71717A', chromeBorder: '#E4E4E7',
+  fgOnAccent: '#FFFFFF',
+  backdrop: 'rgba(0, 0, 0, 0.35)',
+  ...DEFAULT_STATUS_LIGHT,
 } as const
 
 function tint(name: string, dark: string, light: string): Theme {
   return {
     name,
     builtIn: true,
-    dark:  { accent: dark,  ...NEUTRAL_DARK  },
-    light: { accent: light, ...NEUTRAL_LIGHT },
+    dark:  { ...NEUTRAL_DARK,  accent: dark,  fgOnAccent: pickOnAccent(dark) },
+    light: { ...NEUTRAL_LIGHT, accent: light, fgOnAccent: pickOnAccent(light) },
   }
 }
 
@@ -84,25 +151,50 @@ export const BUILTIN_THEMES: Theme[] = [
   tint('Mint',   '#6EE7B7', '#059669'),
   {
     name: 'Dracula', builtIn: true,
-    dark:  { accent: '#BD93F9', bg: '#282A36', bgElevated: '#21222C', fg: '#F8F8F2', fgMuted: '#6272A4', border: '#44475A' },
-    light: { accent: '#6F42C1', bg: '#F8F8F2', bgElevated: '#ECECE8', fg: '#21222C', fgMuted: '#6272A4', border: '#D6D6CE' },
+    dark:  fillPalette({ accent: '#BD93F9', bg: '#282A36', bgElevated: '#21222C', fg: '#F8F8F2', fgMuted: '#6272A4', border: '#44475A' }, NEUTRAL_DARK),
+    light: fillPalette({ accent: '#6F42C1', bg: '#F8F8F2', bgElevated: '#ECECE8', fg: '#21222C', fgMuted: '#6272A4', border: '#D6D6CE' }, NEUTRAL_LIGHT),
   },
   {
     name: 'Monokai', builtIn: true,
-    dark:  { accent: '#A6E22E', bg: '#272822', bgElevated: '#1E1F1C', fg: '#F8F8F2', fgMuted: '#75715E', border: '#3E3D32' },
-    light: { accent: '#75A300', bg: '#FAFAFA', bgElevated: '#F0F0EE', fg: '#1E1F1C', fgMuted: '#75715E', border: '#D9D9D2' },
+    dark:  fillPalette({ accent: '#A6E22E', bg: '#272822', bgElevated: '#1E1F1C', fg: '#F8F8F2', fgMuted: '#75715E', border: '#3E3D32' }, NEUTRAL_DARK),
+    light: fillPalette({ accent: '#75A300', bg: '#FAFAFA', bgElevated: '#F0F0EE', fg: '#1E1F1C', fgMuted: '#75715E', border: '#D9D9D2' }, NEUTRAL_LIGHT),
   },
   {
     name: 'Solarized', builtIn: true,
-    dark:  { accent: '#268BD2', bg: '#002B36', bgElevated: '#003B49', fg: '#839496', fgMuted: '#586E75', border: '#073642' },
-    light: { accent: '#268BD2', bg: '#FDF6E3', bgElevated: '#EEE8D5', fg: '#586E75', fgMuted: '#93A1A1', border: '#E0DAC4' },
+    dark:  fillPalette({ accent: '#268BD2', bg: '#002B36', bgElevated: '#003B49', fg: '#839496', fgMuted: '#586E75', border: '#073642' }, NEUTRAL_DARK),
+    light: fillPalette({ accent: '#268BD2', bg: '#FDF6E3', bgElevated: '#EEE8D5', fg: '#586E75', fgMuted: '#93A1A1', border: '#E0DAC4' }, NEUTRAL_LIGHT),
   },
   {
     name: 'Nord', builtIn: true,
-    dark:  { accent: '#88C0D0', bg: '#2E3440', bgElevated: '#3B4252', fg: '#ECEFF4', fgMuted: '#81A1C1', border: '#4C566A' },
-    light: { accent: '#5E81AC', bg: '#ECEFF4', bgElevated: '#E5E9F0', fg: '#2E3440', fgMuted: '#4C566A', border: '#D8DEE4' },
+    dark:  fillPalette({ accent: '#88C0D0', bg: '#2E3440', bgElevated: '#3B4252', fg: '#ECEFF4', fgMuted: '#81A1C1', border: '#4C566A' }, NEUTRAL_DARK),
+    light: fillPalette({ accent: '#5E81AC', bg: '#ECEFF4', bgElevated: '#E5E9F0', fg: '#2E3440', fgMuted: '#4C566A', border: '#D8DEE4' }, NEUTRAL_LIGHT),
   },
 ]
+
+// fillPalette takes a partial palette (the explicitly-set tokens for a
+// hand-tuned theme) and fills in any missing field from the neutral defaults
+// for that mode, then derives chrome + fg-on-accent from the chosen colours.
+function fillPalette(partial: Partial<ModePalette>, neutral: typeof NEUTRAL_DARK | typeof NEUTRAL_LIGHT): ModePalette {
+  const merged: ModePalette = { ...neutral, ...partial } as ModePalette
+  // chrome* defaults: derive from bgElevated via luminance, like we did in v4.
+  // The previous version did this inline in applyTheme; we now bake it into
+  // the palette so the theme editor can show + override the derived values.
+  if (partial.chromeFg === undefined) merged.chromeFg = pickOnSurface(merged.bgElevated)
+  if (partial.chromeFgMuted === undefined) merged.chromeFgMuted = mix(merged.chromeFg, merged.bgElevated, 0.45)
+  if (partial.chromeBorder === undefined) merged.chromeBorder = mix(merged.chromeFg, merged.bgElevated, 0.85)
+  if (partial.fgOnAccent === undefined) merged.fgOnAccent = pickOnAccent(merged.accent)
+  return merged
+}
+
+/** Pick black or white based on bg luminance — WCAG-ish contrast pick. */
+function pickOnSurface(bg: string): string {
+  return luminance(bg) > 0.45 ? '#0A0A0A' : '#FAFAFA'
+}
+
+/** Same heuristic but tuned for buttons (slightly different cutoff). */
+function pickOnAccent(accent: string): string {
+  return luminance(accent) > 0.55 ? '#0A0A0A' : '#FFFFFF'
+}
 
 // ---- Storage -------------------------------------------------------------
 
@@ -125,35 +217,38 @@ export function loadCustomThemes(): Theme[] {
   } catch { return [] }
 }
 
-// v1 stored `{ name, accent }`, v2 stored `{ name, accent, bg, bgElevated }`,
-// v3 stores `{ name, dark, light }`. Roll old shapes forward so users don't
-// lose their saved themes.
+// Migration history (newest first):
+//   v5 (current): adds bgAlt + chromeFg/chromeFgMuted/chromeBorder +
+//                 danger/warning/success/info + fgOnAccent + backdrop
+//   v4: per-mode fg/fgMuted/border
+//   v3: per-mode {accent, bg, bgElevated}
+//   v2: top-level {accent, bg, bgElevated}
+//   v1: { accent }
 function migrateLegacyTheme(t: any): Theme | null {
   if (!t) return null
   if (isValidTheme(t)) return t
   if (typeof t.name !== 'string') return null
-  // v1: { name, accent }
-  // v2: { name, accent, bg, bgElevated }
-  // v3: { name, dark: {accent, bg, bgElevated}, light: {...} }
-  // v4 (current): adds fg, fgMuted, border per mode.
-  if (HEX_RE.test(t.accent)) {
+
+  // v3 or v4 → v5: dark/light sub-objects exist; fill in any missing tokens
+  // from the neutral defaults (and re-derive chrome* + fgOnAccent if absent).
+  if (t.dark && t.light && typeof t.dark === 'object' && typeof t.light === 'object') {
     return {
       name: t.name,
-      dark:  {
-        ...NEUTRAL_DARK,
-        accent: t.accent,
-        bg: HEX_RE.test(t.bg) ? t.bg : NEUTRAL_DARK.bg,
-        bgElevated: HEX_RE.test(t.bgElevated) ? t.bgElevated : NEUTRAL_DARK.bgElevated,
-      },
-      light: { ...NEUTRAL_LIGHT, accent: t.accent },
+      dark:  fillPalette(t.dark,  NEUTRAL_DARK),
+      light: fillPalette(t.light, NEUTRAL_LIGHT),
     }
   }
-  // v3 → v4: dark/light sub-objects exist but lack the new fg/fgMuted/border.
-  if (t.dark && t.light) {
+  // v1/v2 → v5
+  if (HEX_RE.test(t.accent)) {
+    const darkPartial: Partial<ModePalette> = {
+      accent: t.accent,
+      bg: HEX_RE.test(t.bg) ? t.bg : undefined,
+      bgElevated: HEX_RE.test(t.bgElevated) ? t.bgElevated : undefined,
+    }
     return {
       name: t.name,
-      dark:  { ...NEUTRAL_DARK,  ...t.dark  },
-      light: { ...NEUTRAL_LIGHT, ...t.light },
+      dark:  fillPalette(darkPartial, NEUTRAL_DARK),
+      light: fillPalette({ accent: t.accent }, NEUTRAL_LIGHT),
     }
   }
   return null
@@ -214,23 +309,23 @@ function mix(a: string, b: string, ratio: number): string {
 }
 
 function paletteToVars(p: ModePalette): Record<string, string> {
-  // Auto-derive a "text on elevated surface" colour so that elements painted
-  // on bg-elevated (sidebar, header, modals, outline panel) stay legible
-  // even when the user picks a sidebar bg that's far away from their main
-  // text colour — e.g. dark sidebar in an otherwise light theme. WCAG
-  // relative luminance threshold picks black or white; the muted + border
-  // variants are mixed back toward the surface for subtlety.
-  const onElev = luminance(p.bgElevated) > 0.45 ? '#0A0A0A' : '#FAFAFA'
   return {
     '--notation-accent': p.accent,
     '--notation-bg': p.bg,
     '--notation-bg-elevated': p.bgElevated,
+    '--notation-bg-alt': p.bgAlt,
     '--notation-fg': p.fg,
     '--notation-fg-muted': p.fgMuted,
     '--notation-border': p.border,
-    '--notation-fg-on-elevated': onElev,
-    '--notation-fg-on-elevated-muted': mix(onElev, p.bgElevated, 0.45),
-    '--notation-border-on-elevated': mix(onElev, p.bgElevated, 0.85),
+    '--notation-fg-on-elevated': p.chromeFg,
+    '--notation-fg-on-elevated-muted': p.chromeFgMuted,
+    '--notation-border-on-elevated': p.chromeBorder,
+    '--notation-danger': p.danger,
+    '--notation-warning': p.warning,
+    '--notation-success': p.success,
+    '--notation-info': p.info,
+    '--notation-fg-on-accent': p.fgOnAccent,
+    '--notation-backdrop': p.backdrop,
     ...alphaSiblings(p.accent),
   }
 }
@@ -317,22 +412,39 @@ export function importVSCodeTheme(raw: unknown): VSCodeImportResult {
     'editorGroup.border',
     'titleBar.border',
   ])
+  const chromeFg = pickHex(colors, [
+    'sideBar.foreground',
+    'titleBar.activeForeground',
+    'activityBar.foreground',
+  ])
+  // Status colours from VS Code's notification + git decorations palette.
+  const danger = pickHex(colors, ['errorForeground', 'notificationsErrorIcon.foreground', 'gitDecoration.deletedResourceForeground'])
+  const warning = pickHex(colors, ['notificationsWarningIcon.foreground', 'editorWarning.foreground', 'gitDecoration.modifiedResourceForeground'])
+  const success = pickHex(colors, ['notificationsInfoIcon.foreground', 'gitDecoration.addedResourceForeground', 'terminal.ansiGreen'])
+  const info = pickHex(colors, ['notificationsInfoIcon.foreground', 'editorInfo.foreground', 'terminal.ansiBlue'])
 
   if (!accent) warnings.push('No accent colour found — kept the previous accent.')
   if (!bg) warnings.push('No editor.background found — kept the previous background.')
   if (!bgElevated) warnings.push('No sidebar background found — falling back to the page background.')
 
-  // Start from the currently-active theme so the OTHER mode keeps its
-  // existing palette and we only replace the one we're importing into.
   const current = findTheme(getActiveThemeName())
-  const palette: ModePalette = {
-    accent: accent || current.dark.accent,
-    bg: bg || current.dark.bg,
-    bgElevated: bgElevated || bg || current.dark.bgElevated,
-    fg: fg || current.dark.fg,
-    fgMuted: fgMuted || fg || current.dark.fgMuted,
-    border: border || current.dark.border,
+  const neutral = (declaredType === 'light') ? NEUTRAL_LIGHT : NEUTRAL_DARK
+  const baseSide = (declaredType === 'light') ? current.light : current.dark
+
+  const partial: Partial<ModePalette> = {
+    accent: accent || baseSide.accent,
+    bg: bg || baseSide.bg,
+    bgElevated: bgElevated || bg || baseSide.bgElevated,
+    fg: fg || baseSide.fg,
+    fgMuted: fgMuted || fg || baseSide.fgMuted,
+    border: border || baseSide.border,
+    chromeFg: chromeFg || undefined,
+    danger: danger || undefined,
+    warning: warning || undefined,
+    success: success || undefined,
+    info: info || undefined,
   }
+  const palette = fillPalette(partial, neutral)
   // VS-Code themes declare "type": "dark" | "light" — respect it. If absent,
   // we infer from the background brightness.
   const mode: 'dark' | 'light' =
@@ -362,7 +474,6 @@ function pickHex(colors: Record<string, string>, keys: string[]): string | null 
 }
 
 function inferMode(hex: string): 'dark' | 'light' {
-  // Cheap luminance heuristic on the bg colour.
   const r = parseInt(hex.slice(1, 3), 16)
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)

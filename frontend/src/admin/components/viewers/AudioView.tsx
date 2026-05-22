@@ -10,8 +10,8 @@ type Props = { url: string; path: string }
 export function AudioView({ url, path }: Props) {
   const filename = path.split('/').pop() ?? path
   return (
-    <div className="flex-1 flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950/40 p-8 gap-6">
-      <Music size={64} className="text-zinc-400 dark:text-zinc-600" />
+    <div className="flex-1 flex flex-col items-center justify-center bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/40 p-8 gap-6">
+      <Music size={64} className="text-[var(--notation-fg-muted)] text-[var(--notation-fg-muted)]" />
       <div className="text-sm text-[var(--notation-fg)] font-medium">{filename}</div>
       <audio src={url} controls preload="metadata" className="w-full max-w-md" aria-label={path}>
         Your browser does not support the audio element.

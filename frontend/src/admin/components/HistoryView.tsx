@@ -113,15 +113,15 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[var(--notation-bg)]">
       <header className="h-12 flex items-center px-4 border-b border-[var(--notation-border)] flex-shrink-0 gap-3">
-        <GitCommit size={16} className="text-zinc-500" />
+        <GitCommit size={16} className="text-[var(--notation-fg-muted)]" />
         <div className="text-sm font-medium text-[var(--notation-fg)]">History</div>
-        <div className="text-sm text-zinc-500 truncate">{path.replace(/\.md$/i, '')}</div>
+        <div className="text-sm text-[var(--notation-fg-muted)] truncate">{path.replace(/\.md$/i, '')}</div>
         <div className="ml-auto flex items-center gap-2">
           {selected.length === 1 && (
             <button
               onClick={doRestore}
               disabled={restoring}
-              className="px-3 py-1.5 text-sm font-medium bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40 flex items-center gap-1.5"
+              className="px-3 py-1.5 text-sm font-medium bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40 flex items-center gap-1.5"
             >
               <RotateCcw size={14} /> {restoring ? 'Restoring…' : 'Restore this version'}
             </button>
@@ -129,14 +129,14 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
           {selected.length > 0 && (
             <button
               onClick={() => setSelected([])}
-              className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              className="text-xs text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]"
             >
               Clear
             </button>
           )}
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-md"
+            className="p-1.5 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] rounded-md"
             title="Close history"
           >
             <X size={18} />
@@ -145,12 +145,12 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <aside className="w-72 flex-shrink-0 border-r border-[var(--notation-border)] overflow-y-auto bg-zinc-50/30 dark:bg-zinc-950/30">
-          <div className="px-3 py-2 text-xs text-zinc-500 border-b border-[var(--notation-border)] sticky top-0 bg-zinc-50 dark:bg-zinc-950">
+        <aside className="w-72 flex-shrink-0 border-r border-[var(--notation-border)] overflow-y-auto bg-[var(--notation-bg-elevated)]/30 bg-[var(--notation-bg-elevated)]/30">
+          <div className="px-3 py-2 text-xs text-[var(--notation-fg-muted)] border-b border-[var(--notation-border)] sticky top-0 bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]">
             {commits.length} version{commits.length === 1 ? '' : 's'} · select 1 to preview, 2 to compare
           </div>
           {commits.length === 0 ? (
-            <p className="p-4 text-sm text-zinc-500 italic">No history for this file yet.</p>
+            <p className="p-4 text-sm text-[var(--notation-fg-muted)] italic">No history for this file yet.</p>
           ) : (
             <ul>
               {commits.map((c, i) => {
@@ -161,30 +161,30 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
                     <button
                       onClick={() => toggle(c.hash)}
                       className={
-                        'w-full text-left px-3 py-2 flex items-start gap-2 border-b border-zinc-100 dark:border-zinc-900/50 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors ' +
+                        'w-full text-left px-3 py-2 flex items-start gap-2 border-b border-[var(--notation-border)] border-[var(--notation-border)]/50 hover:bg-[var(--notation-bg-alt)] hover:bg-[var(--notation-bg-alt)] transition-colors ' +
                         (sel ? 'bg-[color:var(--notation-accent-10)] dark:bg-[color:var(--notation-accent-10)]' : '')
                       }
                     >
                       <div
                         className={
-                          'mt-1 flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center text-zinc-50 ' +
+                          'mt-1 flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center text-[var(--notation-fg)] ' +
                           (sel
-                            ? 'border-zinc-900 dark:border-[color:var(--notation-accent)] bg-zinc-900 dark:bg-[color:var(--notation-accent)]'
+                            ? 'border-[var(--notation-border)] dark:border-[color:var(--notation-accent)] bg-[var(--notation-bg-alt)] dark:bg-[color:var(--notation-accent)]'
                             : 'border-[var(--notation-border)]')
                         }
                       >
-                        {sel && <Check size={10} className="text-white dark:text-zinc-950" />}
+                        {sel && <Check size={10} className="text-[var(--notation-fg-on-accent)]" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-sm text-[var(--notation-fg)] truncate">{c.subject || '(no message)'}</div>
-                        <div className="text-[11px] text-zinc-500 mt-0.5 flex items-center gap-1.5">
+                        <div className="text-[11px] text-[var(--notation-fg-muted)] mt-0.5 flex items-center gap-1.5">
                           <span className="font-mono">{c.hash.slice(0, 7)}</span>
                           <span>·</span>
                           <span className="truncate">{c.author}</span>
                         </div>
-                        <div className="text-[10px] text-zinc-400 mt-0.5">{new Date(c.date).toLocaleString()}</div>
+                        <div className="text-[10px] text-[var(--notation-fg-muted)] mt-0.5">{new Date(c.date).toLocaleString()}</div>
                         {i === 0 && (
-                          <span className="inline-block mt-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-800 text-[var(--notation-fg)] rounded">
+                          <span className="inline-block mt-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-[var(--notation-bg-alt)] bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] rounded">
                             current
                           </span>
                         )}
@@ -199,7 +199,7 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
 
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {err && (
-            <div className="px-4 py-2 text-sm text-red-600 dark:text-red-400 border-b border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30">
+            <div className="px-4 py-2 text-sm text-[var(--notation-danger)] dark:text-[var(--notation-danger)] border-b border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/50 bg-[var(--notation-danger)] dark:bg-[var(--notation-danger)]/30">
               {err}
             </div>
           )}
@@ -209,7 +209,7 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
             </div>
           )}
           {selected.length === 1 && previewLoading && (
-            <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">Loading…</div>
+            <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">Loading…</div>
           )}
           {selected.length === 1 && !previewLoading && (
             <FileViewer
@@ -222,16 +222,16 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
           )}
           {selected.length === 2 && (
             previewLoading ? (
-              <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">Loading…</div>
+              <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">Loading…</div>
             ) : compareFrom === compareTo ? (
-              <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm flex-col gap-2">
+              <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm flex-col gap-2">
                 <GitCompareArrows size={20} className="opacity-50" />
                 No differences between the selected versions.
               </div>
             ) : (
               <Suspense
                 fallback={
-                  <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
+                  <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">
                     Loading diff editor…
                   </div>
                 }

@@ -45,7 +45,7 @@ export function Mermaid({ chart, theme }: Props) {
 
   if (err) {
     return (
-      <pre className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 p-3 rounded-md overflow-auto">
+      <pre className="text-xs text-[var(--notation-danger)] dark:text-[var(--notation-danger)] bg-[var(--notation-danger)] dark:bg-[var(--notation-danger)]/30 border border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/50 p-3 rounded-md overflow-auto">
         Mermaid error: {err}
         {'\n'}
         {chart}
