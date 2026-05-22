@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 /**
  * Vite builds two SPA entries (admin + share) into ../backend/web/dist where
@@ -8,7 +9,7 @@ import react from '@vitejs/plugin-react'
  * unauthenticated share visitors can still load the bundle.
  */
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   base: '/s/',
   build: {
     outDir: '../backend/web/dist',
