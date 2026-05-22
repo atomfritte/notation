@@ -13,21 +13,33 @@ import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
 import { Mermaid } from './Mermaid'
 import 'katex/dist/katex.min.css'
-// Load both highlight.js palettes as raw strings via Vite's ?inline query
-// so we can apply them scoped per mode: github.css runs globally for light
-// mode; github-dark.css has every `.hljs*` selector prefixed with `.dark`
-// before injection, so its overrides only apply when the documentElement
-// has the dark class. Without this, the dark palette's pastel string
-// colours leaked into light mode and rendered washed-out on the light
-// code-block background (see screenshot).
+// Load both highlight.js palettes as raw strings via Vite's `?inline`
+// query so we can apply them scoped per mode: github.css runs globally
+// for light mode; every rule in github-dark.css is rewritten so its
+// selectors are prefixed with `.dark` before injection. That way the
+// dark palette's pastel hues only kick in when the documentElement has
+// the `.dark` class.
+//
+// The selector-rewrite has to cover ALL hljs selectors github-dark
+// emits — not just `.hljs-foo` but also `pre code.hljs`, `code.hljs`,
+// and any contextual variants — otherwise the unscoped rules paint the
+// dark bg + light text in light mode (the bug the user saw).
 import githubLight from 'highlight.js/styles/github.css?inline'
 import githubDark  from 'highlight.js/styles/github-dark.css?inline'
 if (typeof document !== 'undefined' && !document.getElementById('notation-hljs-styles')) {
   const tag = document.createElement('style')
   tag.id = 'notation-hljs-styles'
-  // Scope the dark palette to `.dark`, then concatenate. Light goes first
-  // so `.dark .hljs-*` wins via specificity when the class is on <html>.
-  const darkScoped = githubDark.replace(/(^|[,}\s])(\.hljs[a-z0-9-]*)/g, '$1.dark $2')
+  // Walk every rule (selector block followed by `{ … }`). For each
+  // comma-separated selector, prepend `.dark ` so the whole sheet
+  // applies only under `.dark`. @-rules and existing scoped rules pass
+  // through untouched.
+  const darkScoped = githubDark.replace(/(^|\})\s*([^{}@]+?)\s*\{/g, (_, brace, selectors) => {
+    const scoped = selectors
+      .split(',')
+      .map((s: string) => `.dark ${s.trim()}`)
+      .join(', ')
+    return `${brace}\n${scoped} {`
+  })
   tag.textContent = githubLight + '\n' + darkScoped
   document.head.appendChild(tag)
 }
