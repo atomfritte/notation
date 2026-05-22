@@ -32,7 +32,26 @@ export function SpaceView() {
   const [editing, setEditing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Mobile detection drives the sidebar UX: on mobile the aside slides in
+  // as a drawer (off-screen by default) instead of taking up document
+  // width. matchMedia + listener keeps state in sync with viewport resize.
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(max-width: 767px)').matches
+  })
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    // Default closed on phones — give the user the content first. On desktop
+    // the sidebar is the workspace navigator, default-open is the right call.
+    if (typeof window === 'undefined') return true
+    return !window.matchMedia('(max-width: 767px)').matches
+  })
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const v = parseInt(localStorage.getItem('notation_sidebar_width') || '', 10)
     return Number.isFinite(v) && v >= 180 && v <= 600 ? v : 256
@@ -335,8 +354,11 @@ export function SpaceView() {
   const selectFile = useCallback(
     (p: string) => {
       setSearchParams({ file: p })
+      // On mobile, after picking a file we want the content full-screen
+      // immediately — keep the drawer behaviour explorer-like.
+      if (isMobile) setSidebarOpen(false)
     },
-    [setSearchParams],
+    [setSearchParams, isMobile],
   )
 
   async function onNewFile() {
@@ -505,13 +527,31 @@ export function SpaceView() {
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
       {themeOpen && <ThemePalette onClose={() => setThemeOpen(false)} />}
       
+      {/* Mobile backdrop: dim + tap-to-close the drawer. Only rendered on
+         small viewports so desktop never sees it. */}
+      {isMobile && sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close sidebar"
+        />
+      )}
+
       <aside
-        className={`flex-shrink-0 flex flex-col bg-zinc-50 dark:bg-[#111111] ${resizing ? '' : 'transition-[width] duration-200 ease-in-out'} border-r border-zinc-200 dark:border-zinc-800/50 relative ${sidebarOpen ? '' : 'border-r-0'}`}
-        style={{ width: sidebarOpen ? sidebarWidth : 0 }}
+        className={`flex flex-col bg-zinc-50 dark:bg-[#111111] border-r border-zinc-200 dark:border-zinc-800/50
+          fixed inset-y-0 left-0 z-40 w-72
+          md:static md:z-auto md:w-auto md:flex-shrink-0
+          ${resizing ? '' : 'transition-transform md:transition-[width] duration-200 ease-in-out'}
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          ${!sidebarOpen ? 'md:border-r-0' : ''}`}
+        style={{
+          // Inline width is desktop-only — mobile uses the static w-72 class.
+          width: isMobile ? undefined : (sidebarOpen ? sidebarWidth : 0),
+        }}
       >
         <div
-          className="h-full flex flex-col absolute top-0 left-0"
-          style={{ width: sidebarWidth }}
+          className="h-full flex flex-col absolute top-0 left-0 w-full md:w-auto"
+          style={{ width: isMobile ? undefined : sidebarWidth }}
         >
           {/* Clickable header takes you back to the Spaces overview. The
              avatar swaps to a left-chevron on hover so the action is obvious. */}
@@ -625,12 +665,13 @@ export function SpaceView() {
         </div>
 
         {/* Drag handle for resizing the sidebar. Hidden when the sidebar is
-            collapsed; a 6px hit area with a thinner visible indicator on
-            hover keeps it discoverable without intruding on the layout. */}
-        {sidebarOpen && (
+            collapsed AND on mobile (drawer width is fixed there). A 6px hit
+            area with a thinner visible indicator on hover keeps it
+            discoverable without intruding on the layout. */}
+        {sidebarOpen && !isMobile && (
           <div
             onMouseDown={startResize}
-            className="absolute top-0 right-0 h-full w-1.5 -mr-0.5 cursor-col-resize group z-20"
+            className="absolute top-0 right-0 h-full w-1.5 -mr-0.5 cursor-col-resize group z-20 hidden md:block"
             title="Drag to resize"
           >
             <div className="h-full w-px ml-auto bg-transparent group-hover:bg-zinc-300 dark:group-hover:bg-zinc-700 transition-colors" />
@@ -705,13 +746,13 @@ export function SpaceView() {
                 <Search size={18} />
               </button>
               {isMarkdownFile(file) && (
-                <button onClick={() => setShowOutline(v => !v)} className={`p-1.5 rounded-md transition-colors ${showOutline ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Outline">
+                <button onClick={() => setShowOutline(v => !v)} className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${showOutline ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Outline">
                   <List size={18} />
                 </button>
               )}
               <button
                 onClick={() => { setHistoryMode(v => !v); setEditing(false) }}
-                className={`p-1.5 rounded-md transition-colors ${historyMode ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}
+                className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${historyMode ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}
                 title="Version history"
               >
                 <History size={18} />
@@ -721,7 +762,7 @@ export function SpaceView() {
                   {editing ? <Eye size={16} /> : <Edit3 size={16} />}
                 </button>
               )}
-              <button onClick={() => toggleBookmark(file)} className={`p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-zinc-900 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Favorite">
+              <button onClick={() => toggleBookmark(file)} className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-zinc-900 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Favorite">
                 <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
               </button>
               <button onClick={() => setShowComments(!showComments)} className={`p-1.5 rounded-md transition-colors flex items-center gap-1 ${showComments ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-200' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Comments">
@@ -732,7 +773,7 @@ export function SpaceView() {
               {isMarkdownFile(file) && !editing && (
                 <button
                   onClick={() => window.print()}
-                  className="p-1.5 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
+                  className="hidden md:inline-flex p-1.5 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
                   title="Print this page"
                 >
                   <Printer size={18} />
@@ -741,7 +782,7 @@ export function SpaceView() {
 
               <button
                 onClick={() => setThemeOpen(true)}
-                className="p-1.5 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
+                className="hidden md:inline-flex p-1.5 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
                 title="Accent colour"
               >
                 <Palette size={18} />

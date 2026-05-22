@@ -247,7 +247,7 @@ export function MarkdownView({
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
-      <article ref={articleRef} className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-8">
+      <article ref={articleRef} className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-4 md:p-8">
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]}
           rehypePlugins={[
