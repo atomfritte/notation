@@ -3,6 +3,7 @@ import { Palette, Check, Trash2, X, Sparkles, Pencil, Download, RotateCcw, Save,
 import {
   type Theme,
   type ModePalette,
+  type HeaderStyle,
   BUILTIN_THEMES,
   applyTheme,
   loadCustomThemes,
@@ -12,6 +13,8 @@ import {
   setActiveThemeName,
   findTheme,
   importVSCodeTheme,
+  getHeaderStyle,
+  setHeaderStyle,
 } from '../lib/theme'
 
 type Props = { onClose: () => void }
@@ -266,6 +269,10 @@ function EditTab({
         </span>
       </div>
 
+      <PaletteSection title="Layout">
+        <HeaderStyleRow />
+      </PaletteSection>
+
       <PaletteSection title="Content surface">
         <ColorRow label="Accent" help="Links, cursor, primary buttons, active states."
           value={palette.accent} onChange={v => onChangePalette(editMode, { accent: v })} />
@@ -516,6 +523,50 @@ function PreviewCard({ label, palette, isDark }: { label: string; palette: ModeP
       </div>
       <div className="px-2 py-1 text-[10px] uppercase tracking-wider font-semibold bg-[var(--notation-bg-elevated)] text-[var(--notation-fg-muted)]">
         {label}
+      </div>
+    </div>
+  )
+}
+
+// HeaderStyleRow toggles the reading-pane header between chrome (default —
+// matches the sidebars) and content (matches the page body, flush reading
+// area). The setter dispatches the custom event so any mounted SpaceView
+// re-renders without needing a context.
+function HeaderStyleRow() {
+  const [style, setStyle] = useState<HeaderStyle>(() => getHeaderStyle())
+  function pick(s: HeaderStyle) {
+    setStyle(s)
+    setHeaderStyle(s)
+  }
+  return (
+    <div className="flex items-start gap-3">
+      <div className="w-10 h-10 rounded-md border border-[var(--notation-border)] overflow-hidden flex-shrink-0">
+        {/* Mini diagram: top strip = header, bottom = page body. The strip
+            colour reflects which surface the header is currently following. */}
+        <div className="h-3" style={{ background: style === 'chrome' ? 'var(--notation-bg-elevated)' : 'var(--notation-bg)' }} />
+        <div className="h-7" style={{ background: 'var(--notation-bg)' }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <label className="text-sm font-medium text-[var(--notation-fg)]">Header style</label>
+        <p className="text-[11px] text-[var(--notation-fg-muted)] mt-0.5 mb-2">
+          Reading-pane header follows the sidebar (chrome) or the page body (content).
+        </p>
+        <div className="inline-flex rounded-md border border-[var(--notation-border)] p-0.5 bg-[var(--notation-bg)]">
+          {(['chrome', 'content'] as const).map(opt => (
+            <button
+              key={opt}
+              onClick={() => pick(opt)}
+              className={
+                'px-2.5 py-1 text-xs font-medium rounded transition-colors ' +
+                (style === opt
+                  ? 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)]'
+                  : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]')
+              }
+            >
+              {opt === 'chrome' ? 'Follow sidebars' : 'Follow content'}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

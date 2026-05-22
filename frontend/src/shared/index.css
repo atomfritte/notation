@@ -44,7 +44,7 @@
      below for how these reach the DOM. */
   --notation-fg-on-elevated: #18181B;
   --notation-fg-on-elevated-muted: #71717A;
-  --notation-border-on-elevated: #E4E4E7;
+  --notation-border-on-elevated: #ECECEC;
   /* Status colours — Tailwind 600 (darker for light bg). */
   --notation-danger: #DC2626;
   --notation-warning: #D97706;
@@ -79,7 +79,7 @@
   --notation-border: #27272A;
   --notation-fg-on-elevated: #FAFAFA;
   --notation-fg-on-elevated-muted: #A1A1AA;
-  --notation-border-on-elevated: #2A2A2E;
+  --notation-border-on-elevated: #1E1E20;
   /* Status colours — Tailwind 400 (lighter for dark bg). */
   --notation-danger: #F87171;
   --notation-warning: #FBBF24;
@@ -184,29 +184,47 @@
   body {
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
+  /* Scrollbars follow the active theme. The 2px border around the thumb
+     uses the underlying surface as its fill so the thumb appears to float
+     on top of whatever it's scrolling. Inside .surface-elevated the
+     cascade rebinds --notation-bg → bg-elevated, so chrome scrollbars
+     automatically inherit the chrome surface colour. */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-zinc-300 rounded-full border-2 border-solid border-white dark:bg-zinc-800 dark:border-[var(--notation-bg)];
+    background-color: var(--notation-bg-alt);
+    border: 2px solid var(--notation-bg);
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-zinc-400 dark:bg-zinc-700;
+    background-color: var(--notation-fg-muted);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  /* Firefox + spec-compliant: thumb-track pair. `transparent` track keeps
+     the gutter matching whatever surface we're inside. */
+  * {
+    scrollbar-color: var(--notation-bg-alt) transparent;
+    scrollbar-width: thin;
   }
 }
 
 /* wiki-link styling: a soft dotted underline distinguishes intra-space links from external ones */
 .prose .wiki-link {
   text-decoration: none;
-  @apply border-b border-dashed border-lime-600 text-lime-600 dark:border-[color:var(--notation-accent)] dark:text-[color:var(--notation-accent)];
+  border-bottom: 1px dashed var(--notation-accent);
+  color: var(--notation-accent);
   transition: all 0.2s ease-in-out;
 }
-.prose .wiki-link:hover { 
-  @apply bg-lime-600/10 dark:bg-[color:var(--notation-accent-10)] border-solid;
+.prose .wiki-link:hover {
+  background-color: var(--notation-accent-10);
+  border-bottom-style: solid;
 }
 
 /* Heading anchors stay clickable but the wrap doesn't override heading color */
@@ -216,12 +234,16 @@
   transition: color 0.2s;
 }
 .prose h1 > a:hover, .prose h2 > a:hover, .prose h3 > a:hover, .prose h4 > a:hover {
-  @apply text-lime-600 dark:text-[color:var(--notation-accent)];
+  color: var(--notation-accent);
 }
 
 /* Highlight / Bookmark passages */
 mark {
-  @apply bg-lime-200 text-zinc-900 dark:bg-[color:var(--notation-accent-30)] dark:text-[color:var(--notation-accent)] rounded-sm px-1 py-0.5;
+  background-color: var(--notation-accent-30);
+  color: var(--notation-accent);
+  border-radius: 0.125rem;
+  padding: 0.125rem 0.25rem;
+  @apply rounded-sm;
 }
 
 /* Comment anchors: subtler than the yellow highlight `<mark>` style; the

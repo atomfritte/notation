@@ -20,6 +20,7 @@ import { FileViewer } from '../components/FileViewer'
 import { BacklinksPanel } from '../components/BacklinksPanel'
 import { HistoryView } from '../components/HistoryView'
 import { ThemePalette } from '../components/ThemePalette'
+import { getHeaderStyle, HEADER_STYLE_EVENT, type HeaderStyle } from '../lib/theme'
 import { SidebarTabs, type SidebarTabKey } from '../components/SidebarTabs'
 import { AllCommentsPanel } from '../components/AllCommentsPanel'
 
@@ -72,6 +73,15 @@ export function SpaceView() {
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [historyMode, setHistoryMode] = useState(false)
   const [themeOpen, setThemeOpen] = useState(false)
+  // Mirror the header-style preference into local state so the header
+  // re-renders when ThemePalette toggles it. The dispatched custom event
+  // carries the new value as detail.
+  const [headerStyle, setHeaderStyle] = useState<HeaderStyle>(() => getHeaderStyle())
+  useEffect(() => {
+    const onChange = (e: Event) => setHeaderStyle((e as CustomEvent).detail as HeaderStyle)
+    window.addEventListener(HEADER_STYLE_EVENT, onChange)
+    return () => window.removeEventListener(HEADER_STYLE_EVENT, onChange)
+  }, [])
   
   const [comments, setComments] = useState<api.CommentItem[]>([])
   const [allComments, setAllComments] = useState<api.AllCommentItem[]>([])
@@ -742,7 +752,11 @@ export function SpaceView() {
             {uploadStatus}
           </div>
         )}
-        <header className="surface-elevated h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 bg-[color:var(--notation-bg-elevated)]/90 backdrop-blur-sm">
+        <header className={`h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 backdrop-blur-sm ${
+          headerStyle === 'chrome'
+            ? 'surface-elevated bg-[color:var(--notation-bg-elevated)]/90 border-b border-[var(--notation-border)]'
+            : 'bg-[color:var(--notation-bg)]/90'
+        }`}>
           <div className="flex items-center gap-2 overflow-hidden">
             {/* Single always-visible toggle for the left sidebar. The previous
                 "hover to reveal" close button was undiscoverable; one explicit
