@@ -437,8 +437,13 @@ export default function Editor({
           onMount={handleMount}
           theme={theme === 'dark' ? 'notation-dark' : 'notation-light'}
           options={{
-            fontSize: 15,
-            fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif',
+            fontSize: 14,
+            // Use the same monospace stack as the markdown viewer's code
+            // blocks — keeps fenced code legible inside the editor and
+            // matches the look of what the reader will eventually see.
+            // Monaco doesn't read CSS vars, so the stack is duplicated here
+            // (kept in sync with --notation-code-font in shared/index.css).
+            fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', 'Courier New', monospace",
             lineNumbers: 'on',
             lineNumbersMinChars: 3,
             renderLineHighlight: 'all',

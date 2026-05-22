@@ -32,7 +32,7 @@ export default function MonacoDiff({ original, modified, language, theme }: Prop
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
           fontSize: 13,
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+          fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', 'Courier New', monospace",
           wordWrap: 'on',
           renderIndicators: true,
           ignoreTrimWhitespace: false,
