@@ -658,7 +658,7 @@ Everything is a single `net/http` server. No daemon, no database, no message bro
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE) for the full text. If you haven't added a `LICENSE` file to the repo yet, drop one in the root before publishing.
+MIT — see [`LICENSE`](LICENSE) for the full text.
 
 ---
 
