@@ -19,7 +19,7 @@ import 'highlight.js/styles/github-dark.css'
 // <script>, on* handlers, javascript: hrefs, etc.) and add a small allowlist
 // of inline HTML elements we actually want to render: <mark> for highlights,
 // <details>/<summary> for collapsibles, <kbd>/<sub>/<sup> for typography.
-// Without sanitize, rehype-raw passes raw HTML through unchanged â†’ XSS.
+// Without sanitize, rehype-raw passes raw HTML through unchanged → XSS.
 const SAFE_TAGS = ['mark', 'details', 'summary', 'kbd', 'sub', 'sup'] as const
 const sanitizeSchema = {
   ...defaultSchema,
@@ -46,7 +46,7 @@ export type AnchorPayload = { quote: string; prefix: string; suffix: string }
 type CommentLite = {
   id: string
   anchor?: AnchorPayload
-  // Optional preview metadata â€” when present, surfaced in the on-hover
+  // Optional preview metadata — when present, surfaced in the on-hover
   // tooltip over the rendered anchor mark. Existing callers can keep
   // passing the minimal id-only shape.
   text?: string
@@ -59,11 +59,11 @@ type Props = {
   theme?: 'light' | 'dark'
   /** Comments with anchors are rendered as <mark> overlays on the matching text. */
   comments?: CommentLite[]
-  /** Comment ID to flash/highlight (sidebar â†’ viewer coordination). */
+  /** Comment ID to flash/highlight (sidebar → viewer coordination). */
   activeCommentID?: string | null
   /** Called when the cursor enters/leaves an anchor mark in the viewer. */
   onHoverMark?: (id: string | null) => void
-  /** Called when the user clicks an anchor mark â€” opens the matching comment. */
+  /** Called when the user clicks an anchor mark — opens the matching comment. */
   onSelectAnchor?: (id: string) => void
   /** Called when the user selects text in the viewer and clicks the "Comment"
    *  toolbar. Receives a text-quote selector payload. */
@@ -87,7 +87,7 @@ export function MarkdownView({
     { x: number; y: number; comment: CommentLite } | null
   >(null)
 
-  // O(1) lookup from comment id â†’ metadata so the hover handler doesn't scan
+  // O(1) lookup from comment id → metadata so the hover handler doesn't scan
   // the array on every mouse move.
   const commentsByID = useRef<Map<string, CommentLite>>(new Map())
   useEffect(() => {
@@ -377,7 +377,7 @@ export function MarkdownView({
           </div>
           <div className="text-[var(--notation-fg)] whitespace-pre-wrap break-words">
             {hoverTip.comment.text.length > 240
-              ? hoverTip.comment.text.slice(0, 240) + 'â€¦'
+              ? hoverTip.comment.text.slice(0, 240) + '…'
               : hoverTip.comment.text}
           </div>
         </div>
@@ -509,7 +509,7 @@ function rangeForOffsets(root: HTMLElement, start: number, end: number): Range |
 }
 
 function wrapRangeWithMark(range: Range, commentID: string) {
-  // Easy case: range within a single text node â†’ surroundContents works cleanly.
+  // Easy case: range within a single text node → surroundContents works cleanly.
   if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
     const m = document.createElement('mark')
     m.className = 'comment-anchor'
@@ -517,7 +517,7 @@ function wrapRangeWithMark(range: Range, commentID: string) {
     try {
       range.surroundContents(m)
     } catch {
-      /* ignore â€” exotic node hierarchy */
+      /* ignore — exotic node hierarchy */
     }
     return
   }
@@ -576,7 +576,7 @@ function CodeBlockWrapper({ className, children, ...rest }: { className?: string
         className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition px-2 py-1 text-xs bg-zinc-800 text-zinc-200 hover:bg-zinc-700 rounded shadow"
         aria-label="Copy code"
       >
-        {copied ? 'âœ“ Copied' : 'Copy'}
+        {copied ? '✓ Copied' : 'Copy'}
       </button>
       {children}
     </pre>

@@ -22,7 +22,7 @@ function ShareUI() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   )
-  // Mobile drawer state ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â same pattern as admin SpaceView.
+  // Mobile drawer state — same pattern as admin SpaceView.
   const [isMobile, setIsMobile] = useState<boolean>(() =>
     typeof window === 'undefined' ? false : window.matchMedia('(max-width: 767px)').matches,
   )
@@ -132,7 +132,7 @@ function ShareUI() {
 
   function onNewAnchorComment(anchor: api.CommentAnchor) {
     setPendingAnchor(anchor)
-    // Don't pre-fill the textarea ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â CommentRow renders the anchor quote.
+    // Don't pre-fill the textarea — CommentRow renders the anchor quote.
   }
 
   if (err && !info) {
@@ -143,7 +143,7 @@ function ShareUI() {
       </div>
     )
   }
-  if (!info) return <div className="p-8 text-zinc-500">loadingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦</div>
+  if (!info) return <div className="p-8 text-zinc-500">loading…</div>
 
   const canEdit = info.permission === 'edit'
   const canComment = info.permission === 'comment' || info.permission === 'edit'
@@ -236,7 +236,7 @@ function ShareUI() {
                     disabled={saving || editBuffer === content}
                     className="px-3 py-1 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md disabled:opacity-40 font-medium"
                   >
-                    {saving ? 'SavingÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦' : 'Save'}
+                    {saving ? 'Saving…' : 'Save'}
                   </button>
                   {editBuffer !== content && (
                     <span className="text-amber-600 dark:text-amber-400 text-xs">unsaved changes</span>
@@ -276,7 +276,7 @@ function ShareUI() {
                 {pendingAnchor && (
                   <div className="px-4 pt-3 text-xs">
                     <div className="text-amber-700 dark:text-amber-300 font-semibold mb-1">Anchoring to selection</div>
-                    <div className="italic text-[var(--notation-fg-muted)] line-clamp-2">ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ{pendingAnchor.quote}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â</div>
+                    <div className="italic text-[var(--notation-fg-muted)] line-clamp-2">“{pendingAnchor.quote}”</div>
                     <button
                       onClick={() => { setPendingAnchor(null); setPendingComment('') }}
                       className="mt-1 text-amber-700 dark:text-amber-300 hover:underline"

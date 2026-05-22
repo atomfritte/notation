@@ -35,17 +35,17 @@ type Props = {
  * FileViewer is the read-only dispatcher for any file in the Space. The
  * extension determines the rendering path:
  *
- *   .md / .markdown        Ã¢â€ â€™ MarkdownView (rehype pipeline + comments)
- *   .png .jpg .gif .webp Ã¢â‚¬Â¦ Ã¢â€ â€™ ImageView (direct backend URL)
- *   .pdf                   Ã¢â€ â€™ PDFView (iframe)
- *   .mp4 .webm .mov        Ã¢â€ â€™ VideoView (native <video> with Range support)
- *   .mp3 .wav .ogg .flac   Ã¢â€ â€™ AudioView (native <audio>)
- *   .docx                  Ã¢â€ â€™ WordView (mammoth + DOMPurify, lazy)
- *   .xlsx .ods .csv .tsv   Ã¢â€ â€™ SpreadsheetView (SheetJS + DOMPurify, lazy)
- *   .json .ts .py .go .yml Ã¢â€ â€™ CodeView (highlight.js by language guess)
- *   anything else          Ã¢â€ â€™ DownloadView (offers a download link)
+ *   .md / .markdown        → MarkdownView (rehype pipeline + comments)
+ *   .png .jpg .gif .webp … → ImageView (direct backend URL)
+ *   .pdf                   → PDFView (iframe)
+ *   .mp4 .webm .mov        → VideoView (native <video> with Range support)
+ *   .mp3 .wav .ogg .flac   → AudioView (native <audio>)
+ *   .docx                  → WordView (mammoth + DOMPurify, lazy)
+ *   .xlsx .ods .csv .tsv   → SpreadsheetView (SheetJS + DOMPurify, lazy)
+ *   .json .ts .py .go .yml → CodeView (highlight.js by language guess)
+ *   anything else          → DownloadView (offers a download link)
  *
- * For binary types the caller can pass an empty `content` Ã¢â‚¬â€ the viewer
+ * For binary types the caller can pass an empty `content` — the viewer
  * fetches via the file URL directly.
  */
 export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
@@ -89,7 +89,7 @@ export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
 function LazyLoading() {
   return (
     <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-      Loading viewerÃ¢â‚¬Â¦
+      Loading viewer…
     </div>
   )
 }

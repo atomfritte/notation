@@ -4,7 +4,7 @@ type Props = { chart: string; theme: 'light' | 'dark' }
 
 /**
  * Mermaid renders ```mermaid blocks as SVG. The library is loaded lazily so the
- * initial bundle stays slim â€” users who never view a Mermaid diagram never pay
+ * initial bundle stays slim — users who never view a Mermaid diagram never pay
  * the ~500KB cost. Each instance gets a unique id to allow multiple diagrams
  * per page; re-renders on chart or theme change.
  */

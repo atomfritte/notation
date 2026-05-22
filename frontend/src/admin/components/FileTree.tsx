@@ -6,7 +6,7 @@ import type { Entry } from '../lib/api'
  * MIME label for internal drag-and-drop within the FileTree. A drag whose
  * dataTransfer.types contains this string is a tree-internal move (one row
  * being dragged onto a directory). External browser drags (image files,
- * downloads, ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦) won't carry it, so they're routed to the upload path
+ * downloads, …) won't carry it, so they're routed to the upload path
  * instead.
  */
 const INTERNAL_DRAG_TYPE = 'application/x-notation-path'
@@ -30,14 +30,14 @@ type Props = {
 }
 
 /**
- * FileTree ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Windows-Explorer-style file & folder navigator.
+ * FileTree — Windows-Explorer-style file & folder navigator.
  *
  * Features:
  *   - Click row to open file; click chevron OR row to toggle dir
- *   - Right-click any row ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ onContextMenu(e, path, isDir)
- *   - Right-click empty area ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ onBackgroundContextMenu(e)
- *   - Drag a file/folder onto another directory ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ onMove
- *   - Drop browser files onto a directory ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ onExternalDrop
+ *   - Right-click any row → onContextMenu(e, path, isDir)
+ *   - Right-click empty area → onBackgroundContextMenu(e)
+ *   - Drag a file/folder onto another directory → onMove
+ *   - Drop browser files onto a directory → onExternalDrop
  *   - Visual highlight on the active drop target
  *
  * Drag-and-drop semantics: the dragged row sets a small JSON payload on
@@ -78,7 +78,7 @@ export function FileTree({
   useEffect(() => {
     if (!isRoot || !collapseStorageKey) return
     try { localStorage.setItem(collapseStorageKey, JSON.stringify(collapsed)) }
-    catch { /* quota error etc. â€” not fatal */ }
+    catch { /* quota error etc. — not fatal */ }
   }, [collapsed, collapseStorageKey, isRoot])
 
   function toggle(path: string) {
@@ -104,7 +104,7 @@ export function FileTree({
         }}
         className="text-sm text-[var(--notation-fg-muted)] px-3 py-6 italic text-center hover:bg-[var(--notation-border)] rounded-md mx-2"
       >
-        No pages ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â right-click or drop files here.
+        No pages — right-click or drop files here.
       </div>
     )
   }
@@ -113,14 +113,14 @@ export function FileTree({
   // dragged onto the empty area below the last row land at the Space root.
   // Nested levels skip the background-drop wiring; bubbling lets the root
   // catch them. (isRoot already declared earlier for the collapse-storage
-  // wiring â€” reuse here.)
+  // wiring — reuse here.)
 
   return (
     <ul
       className="text-sm select-none"
       onContextMenu={isRoot ? (e) => {
         // Only fire background-context-menu when the click really hit the
-        // <ul>/<li> chrome ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â row buttons stopPropagation in their own
+        // <ul>/<li> chrome — row buttons stopPropagation in their own
         // onContextMenu handlers, so this catches strictly the empty space.
         if (e.target === e.currentTarget) onBackgroundContextMenu?.(e)
       } : undefined}

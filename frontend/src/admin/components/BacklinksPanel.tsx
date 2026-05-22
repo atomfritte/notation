@@ -9,7 +9,7 @@ type Props = {
 }
 
 /**
- * BacklinksPanel â€” finds files that link to the current page via [[wikilink]]
+ * BacklinksPanel — finds files that link to the current page via [[wikilink]]
  * syntax. Implementation reuses the backend search endpoint, querying for the
  * page's display name wrapped in [[ to scope hits. Results exclude the page
  * itself and are deduplicated by source file.
@@ -45,7 +45,7 @@ export function BacklinksPanel({ spaceID, path, onSelect }: Props) {
 
   if (loading) {
     return (
-      <div className="p-4 text-xs text-zinc-500">Looking for backlinksâ€¦</div>
+      <div className="p-4 text-xs text-zinc-500">Looking for backlinks…</div>
     )
   }
 

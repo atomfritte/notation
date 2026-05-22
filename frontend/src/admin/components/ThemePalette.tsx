@@ -20,7 +20,7 @@ type TabKey = 'presets' | 'edit' | 'import'
 type Mode = 'dark' | 'light'
 
 /**
- * ThemePalette v3 â€” tabbed editor that handles light + dark palettes.
+ * ThemePalette v3 — tabbed editor that handles light + dark palettes.
  *
  * Each theme defines THREE colours (accent / bg / surface) for EACH of two
  * modes (dark / light). The Edit tab has a Dark/Light mode toggle at the top
@@ -275,7 +275,7 @@ function EditTab({
         />
         <ColorRow
           label="Background"
-          help="Page body â€” the main content area."
+          help="Page body — the main content area."
           value={palette.bg}
           onChange={v => onChangePalette(editMode, { bg: v })}
         />
@@ -309,7 +309,7 @@ function EditTab({
         <input
           value={working.name}
           onChange={e => onChangeName(e.target.value)}
-          placeholder="Theme nameâ€¦"
+          placeholder="Theme name…"
           className="flex-1 px-3 py-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)]"
         />
         <button
@@ -346,7 +346,7 @@ function ImportTab({
         Paste a VS&nbsp;Code colour-theme JSON. We extract the accent, the
         editor background, and the sidebar background. The theme's
         <code className="px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[11px] mx-1">"type"</code>
-        field (dark/light) decides which mode of your theme is filled â€”
+        field (dark/light) decides which mode of your theme is filled —
         the other mode keeps its current palette. Comments inside the
         JSON are tolerated.
       </p>
@@ -370,7 +370,7 @@ function ImportTab({
       </div>
       {warnings.length > 0 && (
         <ul className="text-xs text-amber-600 dark:text-amber-400 space-y-1">
-          {warnings.map((w, i) => <li key={i}>Â· {w}</li>)}
+          {warnings.map((w, i) => <li key={i}>· {w}</li>)}
         </ul>
       )}
     </div>

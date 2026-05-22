@@ -48,7 +48,7 @@ export function SpaceView() {
   }, [])
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
-    // Default closed on phones ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â give the user the content first. On desktop
+    // Default closed on phones — give the user the content first. On desktop
     // the sidebar is the workspace navigator, default-open is the right call.
     if (typeof window === 'undefined') return true
     return !window.matchMedia('(max-width: 767px)').matches
@@ -146,7 +146,7 @@ export function SpaceView() {
   }, [spaceID, file, content, location.hash])
 
   // ---------- Sidebar drag-resize ----------
-  // Manual implementation rather than a library ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â the handle is a vertical
+  // Manual implementation rather than a library — the handle is a vertical
   // strip on the aside's right edge; mousedown registers global mousemove +
   // mouseup so the cursor keeps dragging even if it briefly leaves the
   // handle. The body cursor + select-none make the gesture feel native.
@@ -274,7 +274,7 @@ export function SpaceView() {
   const uploadInto = useCallback(async (fileList: FileList, parentDir: string) => {
     const files = Array.from(fileList)
     if (files.length === 0) return
-    setUploadStatus(`Uploading ${files.length}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦`)
+    setUploadStatus(`Uploading ${files.length}…`)
     let ok = 0
     for (const f of files) {
       const target = parentDir ? `${parentDir}/${f.name}` : f.name
@@ -356,7 +356,7 @@ export function SpaceView() {
     (p: string) => {
       setSearchParams({ file: p })
       // On mobile, after picking a file we want the content full-screen
-      // immediately ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â keep the drawer behaviour explorer-like.
+      // immediately — keep the drawer behaviour explorer-like.
       if (isMobile) setSidebarOpen(false)
     },
     [setSearchParams, isMobile],
@@ -391,7 +391,7 @@ export function SpaceView() {
   function onNewAnchorComment(anchor: api.CommentAnchor) {
     setPendingAnchor(anchor)
     setShowComments(true)
-    // Don't pre-fill the textarea with the quote ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â the anchor metadata renders
+    // Don't pre-fill the textarea with the quote — the anchor metadata renders
     // the quote in the CommentRow already, double-display looked wrong.
   }
 
@@ -435,7 +435,7 @@ export function SpaceView() {
         })
         .catch(e => setErr(String(e)))
     } else {
-      // Binary file ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â viewer streams via direct URL, no content fetch needed.
+      // Binary file — viewer streams via direct URL, no content fetch needed.
       setContent('')
       setEtag(null)
     }
@@ -444,11 +444,11 @@ export function SpaceView() {
     refreshComments()
   }, [spaceID, file, refreshComments])
 
-  // uploadFiles is the single ingress point for the upload UX ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â both the
+  // uploadFiles is the single ingress point for the upload UX — both the
   // drag-drop overlay AND the explicit "Upload" button call into it.
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return
-    setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦`)
+    setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`)
     let ok = 0
     let lastPath = ''
     for (const f of files) {
@@ -489,12 +489,12 @@ export function SpaceView() {
         e.preventDefault()
         onNewFile()
       }
-      // Cmd/Ctrl+K ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â file palette
+      // Cmd/Ctrl+K — file palette
       if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setPaletteOpen(true)
       }
-      // Cmd/Ctrl+Shift+F ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â full-text search
+      // Cmd/Ctrl+Shift+F — full-text search
       if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setSearchOpen(true)
@@ -546,7 +546,7 @@ export function SpaceView() {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           ${!sidebarOpen ? 'md:border-r-0' : ''}`}
         style={{
-          // Inline width is desktop-only ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â mobile uses the static w-72 class.
+          // Inline width is desktop-only — mobile uses the static w-72 class.
           width: isMobile ? undefined : (sidebarOpen ? sidebarWidth : 0),
         }}
       >
@@ -820,7 +820,7 @@ export function SpaceView() {
               />
             ) : file ? (
               // In edit mode the editor manages its own scroll, so the wrapper
-              // must give it a definite height ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â otherwise Monaco's `height: 100%`
+              // must give it a definite height — otherwise Monaco's `height: 100%`
               // collapses to zero and the text is invisible. In read mode we
               // want the natural-flow content with bottom padding instead.
               <div
@@ -840,7 +840,7 @@ export function SpaceView() {
                   <Suspense
                     fallback={
                       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-                        Loading editorÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦
+                        Loading editor…
                       </div>
                     }
                   >
@@ -855,7 +855,7 @@ export function SpaceView() {
                         setContent(c)
                         setEtag(newEtag)
                         refreshTree()
-                        // Drop back to read mode after a successful save ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â the
+                        // Drop back to read mode after a successful save — the
                         // user can re-enter edit via the Eye/Edit toggle in
                         // the header.
                         setEditing(false)
@@ -916,7 +916,7 @@ export function SpaceView() {
               {pendingAnchor && (
                 <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/50 text-xs">
                   <div className="text-amber-900 dark:text-amber-300 font-semibold mb-1">Anchoring to selection</div>
-                  <div className="text-amber-800 dark:text-amber-400/80 italic line-clamp-2">ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ{pendingAnchor.quote}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â</div>
+                  <div className="text-amber-800 dark:text-amber-400/80 italic line-clamp-2">“{pendingAnchor.quote}”</div>
                   <button
                     onClick={() => { setPendingAnchor(null); setPendingComment('') }}
                     className="mt-1 text-amber-700 dark:text-amber-300 hover:underline"

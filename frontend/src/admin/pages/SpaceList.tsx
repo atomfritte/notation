@@ -6,7 +6,7 @@ import { logout } from '../lib/auth'
 import { ThemePalette } from '../components/ThemePalette'
 
 /**
- * SpaceList ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the workspace switcher / landing page.
+ * SpaceList — the workspace switcher / landing page.
  *
  * Layout:
  *   - sticky branded header with theme toggle + signed-in chip
@@ -18,7 +18,7 @@ import { ThemePalette } from '../components/ThemePalette'
  *   - modal form for creating new spaces
  *
  * Each card's gradient is derived from a stable string hash of the space id,
- * so the same space always shows up in the same colour ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â useful for the
+ * so the same space always shows up in the same colour — useful for the
  * "muscle memory" of finding a workspace quickly.
  */
 export function SpaceList() {
@@ -127,7 +127,7 @@ export function SpaceList() {
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search spacesÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+              placeholder="Search spaces…"
               className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-[var(--notation-border)] bg-white dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
             />
           </div>
@@ -341,7 +341,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               placeholder="my-project"
             />
             <p className="text-[11px] text-[var(--notation-fg-muted)] mt-1">
-              Lowercase aÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“z, digits, _ or -. 3ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“32 characters.
+              Lowercase a–z, digits, _ or -. 3–32 characters.
             </p>
           </div>
           <div>
@@ -371,7 +371,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               disabled={submitting || !id}
               className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40 transition-colors"
             >
-              {submitting ? 'CreatingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' : 'Create'}
+              {submitting ? 'Creating…' : 'Create'}
             </button>
           </div>
         </form>

@@ -51,7 +51,7 @@ export default function WordView({ url, path }: Props) {
           ALLOWED_ATTR: [
             'colspan', 'rowspan', 'align', 'valign',
             'href', 'rel', 'target',
-            // data: URIs only â€” see ALLOWED_URI_REGEXP below.
+            // data: URIs only — see ALLOWED_URI_REGEXP below.
             'src', 'alt', 'title',
             'id',
           ],
@@ -78,7 +78,7 @@ export default function WordView({ url, path }: Props) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm gap-2">
-        <FileText size={16} /> Converting documentâ€¦
+        <FileText size={16} /> Converting document…
       </div>
     )
   }

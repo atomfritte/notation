@@ -6,7 +6,7 @@ import { AuthShell } from './AuthShell'
 type Props = { onDone: () => void }
 
 /**
- * PasskeySetup runs right after the bootstrap claim Ã¢â‚¬â€ the admin has a session
+ * PasskeySetup runs right after the bootstrap claim — the admin has a session
  * but no credentials. We force a passkey registration here so that future
  * logins don't depend on the bootstrap token (which rotates per restart) and
  * are phishing-resistant. The admin can always add more passkeys later from
@@ -59,7 +59,7 @@ export function PasskeySetup({ onDone }: Props) {
           disabled={busy}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] font-semibold text-sm rounded-md transition-colors disabled:opacity-40"
         >
-          <Fingerprint size={16} /> {busy ? 'Waiting for deviceÃ¢â‚¬Â¦' : 'Register passkey'}
+          <Fingerprint size={16} /> {busy ? 'Waiting for device…' : 'Register passkey'}
         </button>
         {err && (
           <div className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400">
@@ -74,7 +74,7 @@ export function PasskeySetup({ onDone }: Props) {
           </li>
           <li className="flex items-center gap-2">
             <Check size={12} className="text-[color:var(--notation-accent)]" />
-            Works with Touch ID, Face ID, Windows Hello, YubiKeyÃ¢â‚¬Â¦
+            Works with Touch ID, Face ID, Windows Hello, YubiKey…
           </li>
           <li className="flex items-center gap-2">
             <Check size={12} className="text-[color:var(--notation-accent)]" />

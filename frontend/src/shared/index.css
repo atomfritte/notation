@@ -74,7 +74,7 @@
  * only visible in read mode, but be defensive).
  *
  * Colours are forced back to black-on-white because most printer drivers
- * already strip the page background ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â leaving dark mode in place would just
+ * already strip the page background — leaving dark mode in place would just
  * inflate the page count from blank backgrounds.
  */
 @media print {
@@ -217,7 +217,7 @@ mark.comment-anchor.comment-anchor-blink {
   50%      { background-color: rgba(245, 158, 11, 0.9);  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.6); }
 }
 
-/* SheetJS sheet_to_html output ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â give the raw <table> a readable look that
+/* SheetJS sheet_to_html output — give the raw <table> a readable look that
    matches the rest of the app. Borders + zebra striping + readable padding. */
 .sheetjs-table table {
   @apply border-collapse text-sm w-auto;
@@ -322,7 +322,65 @@ mark.comment-anchor.comment-anchor-blink {
 .prose blockquote p::before, .prose blockquote p::after { content: none; }
 .prose hr { border-color: rgba(127,127,127,0.15); margin-top: 2.5em; margin-bottom: 2.5em; }
 .prose img { border-radius: 6px; }
-.prose table { font-size: 0.95em; }
+
+/* --- Tables -------------------------------------------------------------
+   Tables get a panel-card treatment so they read as structured data inside
+   the prose flow: rounded outer border, uppercase muted header band,
+   subtle zebra striping that follows the theme's surfaces, and an accent-
+   tinted hover row. Wrapped in display:block + overflow-x:auto so wide
+   tables scroll horizontally on phones instead of pushing the page. */
+.prose table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  font-size: 0.9em;
+  border: 1px solid var(--notation-border);
+  border-radius: 8px;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.6em 0;
+}
+.prose table thead {
+  background-color: color-mix(in srgb, var(--notation-bg-elevated), var(--notation-border) 40%);
+}
+.prose table thead th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--notation-fg-muted);
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--notation-border);
+  white-space: nowrap;
+}
+.prose table thead th:not(:last-child) {
+  border-right: 1px solid var(--notation-border);
+}
+.prose table tbody td {
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--notation-border);
+  color: var(--notation-fg);
+  vertical-align: top;
+}
+.prose table tbody td:not(:last-child) {
+  border-right: 1px solid var(--notation-border);
+}
+.prose table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.prose table tbody tr:nth-child(even) td {
+  background-color: color-mix(in srgb, var(--notation-bg-elevated), transparent 55%);
+}
+.prose table tbody tr:hover td {
+  background-color: var(--notation-accent-10);
+}
+/* Code chips inside table cells stay legible — drop the chip background
+   so they don't double-up against the row tint. */
+.prose table tbody td code {
+  background-color: transparent !important;
+  padding: 0;
+}
 
 /* Inline code: subtle background, tighter padding. Pre blocks get a softer
    look so they don't dominate the page. */

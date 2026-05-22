@@ -13,12 +13,12 @@ type Props = { children: ReactNode }
  * mount (and whenever a 401 fires via the `notation:auth-expired` event), it
  * re-fetches /api/auth/state and dispatches to the right screen:
  *
- *   needs_claim          Ã¢â€ â€™ Claim
- *   !signed_in + passkey Ã¢â€ â€™ PasskeyLogin
- *   !signed_in + no pk   Ã¢â€ â€™ "stuck" recovery hint
- *   needs_passkey_setup  Ã¢â€ â€™ PasskeySetup
- *   signed_in + ready    Ã¢â€ â€™ render children
- *   auth_mode=authelia   Ã¢â€ â€™ bypass entirely (perimeter handles it)
+ *   needs_claim          → Claim
+ *   !signed_in + passkey → PasskeyLogin
+ *   !signed_in + no pk   → "stuck" recovery hint
+ *   needs_passkey_setup  → PasskeySetup
+ *   signed_in + ready    → render children
+ *   auth_mode=authelia   → bypass entirely (perimeter handles it)
  */
 export function AuthGate({ children }: Props) {
   const [state, setState] = useState<auth.AuthState | null>(null)
@@ -50,7 +50,7 @@ export function AuthGate({ children }: Props) {
 
   if (loading && !state) {
     return (
-      <AuthShell title="LoadingÃ¢â‚¬Â¦">
+      <AuthShell title="Loading…">
         <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
           <div className="h-full w-1/3 bg-zinc-400 dark:bg-[color:var(--notation-accent)] animate-pulse rounded" />
         </div>
@@ -102,7 +102,7 @@ export function AuthGate({ children }: Props) {
           onClick={() => void refresh()}
           className="mt-4 w-full px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md text-sm font-semibold"
         >
-          I did it Ã¢â‚¬â€ retry
+          I did it — retry
         </button>
       </AuthShell>
     )

@@ -19,7 +19,7 @@ type CreateResp = {
 type Props = { spaceID: string }
 
 /**
- * MCPPanel Ã¢â‚¬â€ sidebar tab for managing Bearer tokens that grant MCP access to
+ * MCPPanel — sidebar tab for managing Bearer tokens that grant MCP access to
  * this Space. Clicking a token (or finishing creation) opens
  * MCPIntegrationModal with paste-ready Claude Code / Cursor / HTTP snippets.
  */
@@ -150,7 +150,7 @@ export function MCPPanel({ spaceID }: Props) {
                       created {new Date(t.created_at).toLocaleString()}
                       {t.last_used && (
                         <>
-                          {' Ã‚Â· '}last used {new Date(t.last_used).toLocaleString()}
+                          {' · '}last used {new Date(t.last_used).toLocaleString()}
                         </>
                       )}
                     </div>

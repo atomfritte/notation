@@ -7,7 +7,7 @@ type Props = {
   open: boolean
   spaceID: string
   url: string
-  /** Raw token Ã¢â‚¬â€ present only immediately after creation. Existing tokens are
+  /** Raw token — present only immediately after creation. Existing tokens are
    *  hashed-only on the server, so the modal renders a placeholder instead. */
   rawToken?: string
   onClose: () => void
@@ -17,7 +17,7 @@ type Props = {
  * MCPIntegrationModal shows multi-client connection snippets for an MCP
  * endpoint. After a token is created, the modal opens with the raw token so
  * the user can copy and paste into their client config. For pre-existing
- * tokens the modal opens with <PASTE_YOUR_TOKEN> placeholders Ã¢â‚¬â€ the secret
+ * tokens the modal opens with <PASTE_YOUR_TOKEN> placeholders — the secret
  * cannot be recovered server-side.
  */
 export function MCPIntegrationModal({ open, spaceID, url, rawToken, onClose }: Props) {
@@ -92,7 +92,7 @@ curl -X POST '${url}' \\
                     Save this token now
                   </div>
                   <div className="text-amber-800 dark:text-amber-400">
-                    The token is shown once. After closing this dialog it cannot be recovered Ã¢â‚¬â€ revoke
+                    The token is shown once. After closing this dialog it cannot be recovered — revoke
                     and create a new one if lost.
                   </div>
                 </div>

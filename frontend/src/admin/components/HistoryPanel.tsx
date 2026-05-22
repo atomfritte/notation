@@ -5,7 +5,7 @@ import * as api from '../lib/api'
 type Props = { spaceID: string }
 
 /**
- * HistoryPanel â€” view per-Space git history. Lists commits (newest first),
+ * HistoryPanel — view per-Space git history. Lists commits (newest first),
  * lets the admin click a commit to expand its diff inline.
  */
 export function HistoryPanel({ spaceID }: Props) {
@@ -60,16 +60,16 @@ export function HistoryPanel({ spaceID }: Props) {
                   <div className="text-sm text-[var(--notation-fg)] truncate">{c.subject}</div>
                   <div className="text-[11px] text-zinc-500 mt-0.5 flex items-center gap-1.5">
                     <span className="font-mono">{c.hash.slice(0, 7)}</span>
-                    <span>Â·</span>
+                    <span>·</span>
                     <span className="truncate">{c.author}</span>
-                    <span>Â·</span>
+                    <span>·</span>
                     <span>{new Date(c.date).toLocaleString()}</span>
                   </div>
                 </div>
               </button>
               {openHash === c.hash && (
                 <pre className="text-[11px] font-mono px-3 py-2 bg-zinc-50 dark:bg-zinc-950/50 border-t border-[var(--notation-border)] overflow-x-auto max-h-72 overflow-y-auto whitespace-pre-wrap">
-                  {diffs[c.hash] ?? 'loadingâ€¦'}
+                  {diffs[c.hash] ?? 'loading…'}
                 </pre>
               )}
             </li>

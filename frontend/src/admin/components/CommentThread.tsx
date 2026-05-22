@@ -43,7 +43,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
     }
   }, [initialText])
 
-  // Group: parents ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ replies (sorted by creation time within each group).
+  // Group: parents → replies (sorted by creation time within each group).
   const { tops, repliesByParent } = useMemo(() => {
     const tops: CommentItem[] = []
     const repliesByParent: Record<string, CommentItem[]> = {}
@@ -124,7 +124,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
-            placeholder="Add a commentÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+            placeholder="Add a comment…"
             className="w-full bg-white dark:bg-zinc-900 border border-[var(--notation-border)] focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none transition-all"
             rows={2}
             disabled={submitting}
@@ -134,7 +134,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
             disabled={!text.trim() || submitting}
             className="self-end px-4 py-1.5 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 font-semibold text-sm rounded-md shadow-sm disabled:opacity-40 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
           >
-            {submitting ? 'PostingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' : 'Post Comment'}
+            {submitting ? 'Posting…' : 'Post Comment'}
           </button>
         </form>
       )}
@@ -213,7 +213,7 @@ function CommentRow({
           <textarea
             value={replyText}
             onChange={e => setReplyText(e.target.value)}
-            placeholder="Write a replyÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+            placeholder="Write a reply…"
             autoFocus
             rows={2}
             disabled={busy}
@@ -235,7 +235,7 @@ function CommentRow({
               disabled={!replyText.trim() || busy}
               className="px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40"
             >
-              {busy ? 'ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' : 'Reply'}
+              {busy ? '…' : 'Reply'}
             </button>
           </div>
         </form>

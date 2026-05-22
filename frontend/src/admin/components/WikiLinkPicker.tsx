@@ -24,10 +24,10 @@ type Props = {
 /**
  * WikiLinkPicker is a floating, two-stage picker for [[wiki-links]]:
  *
- *   Stage 1 Ã¢â‚¬â€ Pages: fuzzy substring search over the Space's markdown files.
+ *   Stage 1 — Pages: fuzzy substring search over the Space's markdown files.
  *             Click a page to insert `[[page]]`, or click its chevron to drop
  *             into stage 2 for that page.
- *   Stage 2 Ã¢â‚¬â€ Headings: shows the page's headings (parsed from the live editor
+ *   Stage 2 — Headings: shows the page's headings (parsed from the live editor
  *             buffer if it's the current file, otherwise fetched). Click a
  *             heading to insert `[[page#heading]]`, or "Insert without heading"
  *             to fall back to `[[page]]`.
@@ -193,7 +193,7 @@ export function WikiLinkPicker({
           ref={inputRef}
           value={expanded ? headingQ : q}
           onChange={e => (expanded ? setHeadingQ(e.target.value) : setQ(e.target.value))}
-          placeholder={expanded ? 'Filter headingsÃ¢â‚¬Â¦' : 'Search pagesÃ¢â‚¬Â¦'}
+          placeholder={expanded ? 'Filter headings…' : 'Search pages…'}
           className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
         />
         {expanded && (
@@ -201,7 +201,7 @@ export function WikiLinkPicker({
             onClick={() => setExpanded(null)}
             className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
           >
-            Ã¢â€ Â pages
+            ← pages
           </button>
         )}
       </div>
@@ -285,9 +285,9 @@ export function WikiLinkPicker({
       </ul>
 
       <div className="px-3 py-1.5 border-t border-[var(--notation-border)] flex items-center gap-3 text-[10px] text-zinc-500 bg-zinc-50 dark:bg-zinc-950/30">
-        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ â€˜Ã¢â€ â€œ</kbd> nav</span>
-        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ â€™</kbd> headings</span>
-        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ Âµ</kbd> insert</span>
+        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">↑↓</kbd> nav</span>
+        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">→</kbd> headings</span>
+        <span><kbd className="px-1 border border-[var(--notation-border)] rounded">↵</kbd> insert</span>
         <span><kbd className="px-1 border border-[var(--notation-border)] rounded">esc</kbd> close</span>
       </div>
     </div>

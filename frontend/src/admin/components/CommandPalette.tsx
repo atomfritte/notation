@@ -82,7 +82,7 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
             ref={inputRef}
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="Jump to pageÃ¢â‚¬Â¦"
+            placeholder="Jump to page…"
             className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
           />
           <kbd className="text-[10px] px-1.5 py-0.5 border border-[var(--notation-border)] rounded text-zinc-500">esc</kbd>
@@ -119,8 +119,8 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
         </ul>
         <div className="px-4 py-2 border-t border-[var(--notation-border)] flex items-center gap-3 text-[11px] text-zinc-500 bg-zinc-50 dark:bg-zinc-950/30">
           <span className="flex items-center gap-1"><ArrowRight size={11} /> select</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ â€˜Ã¢â€ â€œ</kbd> navigate</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 border border-[var(--notation-border)] rounded">Ã¢â€ Âµ</kbd> open</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 border border-[var(--notation-border)] rounded">↑↓</kbd> navigate</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 border border-[var(--notation-border)] rounded">↵</kbd> open</span>
         </div>
       </div>
     </div>
@@ -143,7 +143,7 @@ function Highlighted({ text, positions }: { text: string; positions: number[] })
 type Result = { path: string; score: number; positions: number[] }
 
 /**
- * fuzzyMatch Ã¢â‚¬â€ simple subsequence fuzzy matcher with scoring:
+ * fuzzyMatch — simple subsequence fuzzy matcher with scoring:
  *   +10 for chars that match at the start of a segment (after `/`)
  *   +5  for chars that continue a contiguous run
  *   +1  otherwise

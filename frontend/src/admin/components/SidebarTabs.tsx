@@ -22,7 +22,7 @@ type Props = {
 }
 
 /**
- * SidebarTabs â€” collapsible nav for the SpaceView sidebar.
+ * SidebarTabs — collapsible nav for the SpaceView sidebar.
  *
  * Collapsed (default) it shows just the active tab as a row with a chevron;
  * tapping the row expands the full list. Picking a different tab in the
