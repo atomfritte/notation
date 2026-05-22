@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import {
   PanelLeft, List, MessageSquare, Search, Printer, Sun, Moon, Palette,
-  Bookmark, FileText, Folder,
+  Bookmark, FileText, Folder, HelpCircle,
 } from 'lucide-react'
 import * as api from './lib/api'
 import { FileTree } from '../admin/components/FileTree'
@@ -13,6 +13,7 @@ import { Outline } from '../admin/components/Outline'
 import { CommandPalette } from '../admin/components/CommandPalette'
 import { SearchPanel } from '../admin/components/SearchPanel'
 import { ThemePalette } from '../admin/components/ThemePalette'
+import { HelpPanel } from '../admin/components/HelpPanel'
 import { initTheme } from '../admin/lib/theme'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../admin/lib/fileTypes'
 
@@ -61,6 +62,7 @@ function ShareUI() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [themeOpen, setThemeOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [sidebarTab, setSidebarTab] = useState<'files' | 'bookmarks'>('files')
 
   // Comment coordination — viewer ↔ thread
@@ -181,6 +183,13 @@ function ShareUI() {
       if (features?.search && mod && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setSearchOpen(true)
+      }
+      // `?` opens the shortcut help. Bare key — only trigger when no input
+      // element has focus so it doesn't swallow real `?` keystrokes inside
+      // the textarea editor or the search box.
+      if (!mod && !e.altKey && e.key === '?' && !isTypingTarget(e.target)) {
+        e.preventDefault()
+        setHelpOpen(true)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -407,6 +416,9 @@ function ShareUI() {
                     {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                   </HeaderBtn>
                 )}
+                <HeaderBtn title="Keyboard shortcuts (?)" onClick={() => setHelpOpen(true)}>
+                  <HelpCircle size={16} />
+                </HeaderBtn>
                 {canEdit && isTextFile(file) && (
                   <button
                     onClick={() => setEditing(v => !v)}
@@ -455,6 +467,8 @@ function ShareUI() {
                     onHoverMark={setActiveCommentId}
                     onSelectAnchor={setActiveCommentId}
                     onNewAnchorComment={canComment ? onNewAnchorComment : undefined}
+                    files={allFiles}
+                    currentFile={file}
                   />
                 ) : (
                   <FileViewer
@@ -540,8 +554,19 @@ function ShareUI() {
       {features?.theme && themeOpen && (
         <ThemePalette onClose={() => setThemeOpen(false)} />
       )}
+      <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} scope="share" />
     </div>
   )
+}
+
+// Returns true when the keydown target is a text-entry element so bare-key
+// shortcuts (like `?`) don't intercept real keystrokes inside the editor.
+function isTypingTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false
+  const tag = t.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  if (t.isContentEditable) return true
+  return false
 }
 
 function HeaderBtn({
