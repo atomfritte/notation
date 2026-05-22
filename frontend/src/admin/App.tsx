@@ -1,9 +1,14 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { SpaceList } from './pages/SpaceList'
 import { SpaceView } from './pages/SpaceView'
 import { AuthGate } from './components/AuthGate'
+import { initTheme } from './lib/theme'
 
 export function App() {
+  // Push the user's last picked accent colour into :root before the first
+  // paint so we don't flash the default lime for a frame on every load.
+  useEffect(() => { initTheme() }, [])
   return (
     <BrowserRouter>
       <AuthGate>

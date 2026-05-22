@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Moon, Sun, Trash2, FolderOpen, Sparkles, LogOut, X } from 'lucide-react'
+import { Plus, Search, Moon, Sun, Trash2, FolderOpen, Sparkles, LogOut, X, Palette } from 'lucide-react'
 import * as api from '../lib/api'
 import { logout } from '../lib/auth'
+import { ThemePalette } from '../components/ThemePalette'
 
 /**
  * SpaceList Ã¢â‚¬â€ the workspace switcher / landing page.
@@ -26,6 +27,7 @@ export function SpaceList() {
   const [err, setErr] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
+  const [themeOpen, setThemeOpen] = useState(false)
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('notation_theme') as 'light' | 'dark') || 'dark'
@@ -74,6 +76,13 @@ export function SpaceList() {
           </Link>
 
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => setThemeOpen(true)}
+              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+              title="Accent colour"
+            >
+              <Palette size={16} />
+            </button>
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
@@ -162,6 +171,8 @@ export function SpaceList() {
           }}
         />
       )}
+
+      {themeOpen && <ThemePalette onClose={() => setThemeOpen(false)} />}
     </div>
   )
 }

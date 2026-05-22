@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { Folder, FolderPlus, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files } from 'lucide-react'
+import { Folder, FolderPlus, Settings, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Share2, Moon, Sun, Edit2, Trash, BookmarkMinus, GitCommit, ShieldCheck, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
@@ -19,6 +19,7 @@ import { AuditPanel } from '../components/AuditPanel'
 import { FileViewer } from '../components/FileViewer'
 import { BacklinksPanel } from '../components/BacklinksPanel'
 import { HistoryView } from '../components/HistoryView'
+import { ThemePalette } from '../components/ThemePalette'
 
 export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
@@ -49,6 +50,7 @@ export function SpaceView() {
   const [dragOver, setDragOver] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [historyMode, setHistoryMode] = useState(false)
+  const [themeOpen, setThemeOpen] = useState(false)
   
   const [comments, setComments] = useState<api.CommentItem[]>([])
   const [showComments, setShowComments] = useState(false)
@@ -501,6 +503,7 @@ export function SpaceView() {
   return (
     <div className="flex h-screen bg-white dark:bg-[#0a0a0a] text-zinc-900 dark:text-zinc-300 font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
+      {themeOpen && <ThemePalette onClose={() => setThemeOpen(false)} />}
       
       <aside
         className={`flex-shrink-0 flex flex-col bg-zinc-50 dark:bg-[#111111] ${resizing ? '' : 'transition-[width] duration-200 ease-in-out'} border-r border-zinc-200 dark:border-zinc-800/50 relative ${sidebarOpen ? '' : 'border-r-0'}`}
@@ -735,6 +738,14 @@ export function SpaceView() {
                   <Printer size={18} />
                 </button>
               )}
+
+              <button
+                onClick={() => setThemeOpen(true)}
+                className="p-1.5 rounded-md transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
+                title="Accent colour"
+              >
+                <Palette size={18} />
+              </button>
 
               <button
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
