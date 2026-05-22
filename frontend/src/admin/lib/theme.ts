@@ -119,7 +119,10 @@ const DEFAULT_STATUS_LIGHT = {
 const NEUTRAL_DARK = {
   bg: '#0A0A0A', bgElevated: '#111111', bgAlt: '#1F1F23',
   fg: '#E4E4E7', fgMuted: '#A1A1AA', border: '#27272A',
-  chromeFg: '#FAFAFA', chromeFgMuted: '#A1A1AA', chromeBorder: '#2A2A2E',
+  // chromeBorder defaults to a sleek hairline barely above bgElevated. Set it
+  // equal to bgElevated for a fully borderless sidebar, or pick a stronger
+  // value in the theme editor.
+  chromeFg: '#FAFAFA', chromeFgMuted: '#A1A1AA', chromeBorder: '#1E1E20',
   fgOnAccent: '#0A0A0A',
   backdrop: 'rgba(0, 0, 0, 0.55)',
   ...DEFAULT_STATUS_DARK,
@@ -127,7 +130,7 @@ const NEUTRAL_DARK = {
 const NEUTRAL_LIGHT = {
   bg: '#FFFFFF', bgElevated: '#FAFAFA', bgAlt: '#F4F4F5',
   fg: '#18181B', fgMuted: '#71717A', border: '#E4E4E7',
-  chromeFg: '#18181B', chromeFgMuted: '#71717A', chromeBorder: '#E4E4E7',
+  chromeFg: '#18181B', chromeFgMuted: '#71717A', chromeBorder: '#ECECEC',
   fgOnAccent: '#FFFFFF',
   backdrop: 'rgba(0, 0, 0, 0.35)',
   ...DEFAULT_STATUS_LIGHT,
@@ -181,7 +184,8 @@ function fillPalette(partial: Partial<ModePalette>, neutral: typeof NEUTRAL_DARK
   // the palette so the theme editor can show + override the derived values.
   if (partial.chromeFg === undefined) merged.chromeFg = pickOnSurface(merged.bgElevated)
   if (partial.chromeFgMuted === undefined) merged.chromeFgMuted = mix(merged.chromeFg, merged.bgElevated, 0.45)
-  if (partial.chromeBorder === undefined) merged.chromeBorder = mix(merged.chromeFg, merged.bgElevated, 0.85)
+  // Sleeker default: barely-there hairline (92% bgElevated + 8% chromeFg).
+  if (partial.chromeBorder === undefined) merged.chromeBorder = mix(merged.chromeFg, merged.bgElevated, 0.92)
   if (partial.fgOnAccent === undefined) merged.fgOnAccent = pickOnAccent(merged.accent)
   return merged
 }
@@ -360,6 +364,28 @@ export function initTheme(): Theme {
   const t = findTheme(getActiveThemeName())
   applyTheme(t)
   return t
+}
+
+// ---- Header style preference --------------------------------------------
+//
+// The reading-pane header can either follow the chrome surface (sidebars +
+// modals — original behavior) or the content surface (flush with the page
+// body, useful when the user prefers a continuous reading area). Stored as
+// a per-user UI preference, NOT inside the theme JSON, so it survives a
+// theme switch. ThemePalette dispatches a custom event when the user
+// toggles it; components subscribe via the small hook in their own file.
+
+export type HeaderStyle = 'chrome' | 'content'
+const HEADER_STYLE_KEY = 'notation_header_style'
+export const HEADER_STYLE_EVENT = 'notation:header-style-change'
+
+export function getHeaderStyle(): HeaderStyle {
+  return localStorage.getItem(HEADER_STYLE_KEY) === 'content' ? 'content' : 'chrome'
+}
+
+export function setHeaderStyle(s: HeaderStyle): void {
+  localStorage.setItem(HEADER_STYLE_KEY, s)
+  window.dispatchEvent(new CustomEvent(HEADER_STYLE_EVENT, { detail: s }))
 }
 
 // ---- VS Code import ------------------------------------------------------
