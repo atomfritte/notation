@@ -133,17 +133,33 @@ export function MarkdownView({
     return () => cancelAnimationFrame(frame)
   }, [location.hash, content])
 
-  // Apply / refresh anchor marks whenever content or comments change.
+  // Refresh anchor marks AND search-hit marks whenever the document, the
+  // comments list, or the `?q=...` URL parameter changes. Running both in
+  // one pass guarantees a stable insertion order: we always strip both
+  // mark types first, then reapply anchors, then apply search hits — so
+  // neither type ever ends up wrapping the other.
   useEffect(() => {
     const article = articleRef.current
     if (!article) return
-    // Defer until react-markdown has flushed the DOM.
+    const params = new URLSearchParams(location.search)
+    const q = (params.get('q') ?? '').trim()
     const frame = requestAnimationFrame(() => {
+      removeSearchHits(article)
       removeAnchorMarks(article)
       if (comments && comments.length > 0) applyAnchorMarks(article, comments)
+      if (q.length >= 2) {
+        const first = applySearchHits(article, q)
+        if (first) {
+          // requestAnimationFrame nest: the marks were just inserted; let
+          // layout settle before asking the browser to scroll.
+          requestAnimationFrame(() => {
+            first.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          })
+        }
+      }
     })
     return () => cancelAnimationFrame(frame)
-  }, [content, comments])
+  }, [content, comments, location.search])
 
   // Listen for selection changes inside the article and surface the toolbar.
   useEffect(() => {
@@ -571,6 +587,73 @@ function removeAnchorMarks(article: HTMLElement) {
     parent.removeChild(m)
     parent.normalize()
   })
+}
+
+/* ---- Search highlight --------------------------------------------------- */
+
+/** Strip every <mark class="search-hit"> wrapper, leaving the inner text in
+ *  place. Mirrors removeAnchorMarks so the rendered prose returns to its
+ *  pristine state before the next round of highlighting. */
+function removeSearchHits(article: HTMLElement) {
+  const marks = article.querySelectorAll('mark.search-hit')
+  marks.forEach(m => {
+    const parent = m.parentNode
+    if (!parent) return
+    while (m.firstChild) parent.insertBefore(m.firstChild, m)
+    parent.removeChild(m)
+    parent.normalize()
+  })
+}
+
+/** Wraps every case-insensitive occurrence of `query` inside the article in
+ *  a <mark class="search-hit">. Returns the FIRST inserted mark so the caller
+ *  can scroll it into view. Matches that span multiple text nodes are not
+ *  handled — they'd require joining adjacent text nodes first, and in
+ *  practice users search for short tokens that live inside a single node. */
+function applySearchHits(article: HTMLElement, query: string): HTMLElement | null {
+  const needle = query.toLowerCase()
+  if (!needle) return null
+  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      const parent = (n as Text).parentElement
+      if (!parent) return NodeFilter.FILTER_REJECT
+      // Don't decorate the floating selection toolbar / hover bubble; they
+      // live outside `article`, but in case anything similar shows up
+      // inside, skip nodes inside our own wrappers.
+      if (parent.closest('mark.search-hit')) return NodeFilter.FILTER_REJECT
+      return NodeFilter.FILTER_ACCEPT
+    },
+  })
+
+  const texts: Text[] = []
+  let cur: Node | null = walker.nextNode()
+  while (cur) {
+    texts.push(cur as Text)
+    cur = walker.nextNode()
+  }
+
+  let firstHit: HTMLElement | null = null
+  for (const t of texts) {
+    let working: Text = t
+    // `working` is always the next un-wrapped suffix. After each match we
+    // re-scan its text from offset 0, so the loop terminates as soon as the
+    // needle no longer appears in the suffix.
+    while (true) {
+      const value = working.textContent ?? ''
+      const lower = value.toLowerCase()
+      const i = lower.indexOf(needle)
+      if (i < 0) break
+      const right = working.splitText(i)
+      const rest = right.splitText(needle.length)
+      const mark = document.createElement('mark')
+      mark.className = 'search-hit'
+      right.parentNode?.insertBefore(mark, right)
+      mark.appendChild(right)
+      if (!firstHit) firstHit = mark
+      working = rest
+    }
+  }
+  return firstHit
 }
 
 function applyAnchorMarks(article: HTMLElement, comments: CommentLite[]) {

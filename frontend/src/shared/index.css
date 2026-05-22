@@ -263,6 +263,22 @@
 }
 .prose .auto-file-link:hover::before { opacity: 1; }
 
+/* Search-result highlight. MarkdownView wraps occurrences of the search
+   query in <mark class="search-hit"> when `?q=...` is in the URL — distinct
+   styling from comment-anchor marks so the two overlays don't look the same. */
+.prose mark.search-hit {
+  background-color: color-mix(in srgb, #FACC15 65%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 0.1em;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #FACC15 80%, transparent);
+}
+.dark .prose mark.search-hit {
+  background-color: color-mix(in srgb, #FACC15 35%, transparent);
+  color: #FEF9C3;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #FACC15 60%, transparent);
+}
+
 /* Heading anchors stay clickable but the wrap doesn't override heading color */
 .prose h1 > a, .prose h2 > a, .prose h3 > a, .prose h4 > a, .prose h5 > a, .prose h6 > a {
   color: inherit;

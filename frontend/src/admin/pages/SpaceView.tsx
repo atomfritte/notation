@@ -165,6 +165,9 @@ export function SpaceView() {
     // If the URL has a hash (Outline click / wiki-link with #section), let
     // MarkdownView's anchor-scroll do its thing; don't fight it.
     if (location.hash) return
+    // Similarly, the user arrived from a search result — MarkdownView will
+    // scroll to the first match — don't yank them back to the saved offset.
+    if (searchParams.get('q')) return
     const saved = localStorage.getItem(`notation_scroll_${spaceID}__${file}`)
     const target = saved ? parseInt(saved, 10) || 0 : 0
     const frame = requestAnimationFrame(() => {
@@ -173,7 +176,7 @@ export function SpaceView() {
       }, 30)
     })
     return () => cancelAnimationFrame(frame)
-  }, [spaceID, file, content, location.hash])
+  }, [spaceID, file, content, location.hash, searchParams])
 
   // ---------- Sidebar drag-resize ----------
   // Manual implementation rather than a library — the handle is a vertical
@@ -1047,7 +1050,14 @@ export function SpaceView() {
       <SearchPanel
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
-        onSelect={(p) => selectFile(p)}
+        onSelect={(p, opts) => {
+          // Carry the query into the URL so the viewer can highlight and
+          // scroll to the first match once the file content loads.
+          const next: Record<string, string> = { file: p }
+          if (opts?.query) next.q = opts.query
+          setSearchParams(next)
+          if (isMobile) setSidebarOpen(false)
+        }}
         onSearch={(q) => api.searchSpace(spaceID, q)}
       />
       <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} scope="admin" />
