@@ -35,17 +35,17 @@ type Props = {
  * FileViewer is the read-only dispatcher for any file in the Space. The
  * extension determines the rendering path:
  *
- *   .md / .markdown        → MarkdownView (rehype pipeline + comments)
- *   .png .jpg .gif .webp … → ImageView (direct backend URL)
- *   .pdf                   → PDFView (iframe)
- *   .mp4 .webm .mov        → VideoView (native <video> with Range support)
- *   .mp3 .wav .ogg .flac   → AudioView (native <audio>)
- *   .docx                  → WordView (mammoth + DOMPurify, lazy)
- *   .xlsx .ods .csv .tsv   → SpreadsheetView (SheetJS + DOMPurify, lazy)
- *   .json .ts .py .go .yml → CodeView (highlight.js by language guess)
- *   anything else          → DownloadView (offers a download link)
+ *   .md / .markdown        â†’ MarkdownView (rehype pipeline + comments)
+ *   .png .jpg .gif .webp â€¦ â†’ ImageView (direct backend URL)
+ *   .pdf                   â†’ PDFView (iframe)
+ *   .mp4 .webm .mov        â†’ VideoView (native <video> with Range support)
+ *   .mp3 .wav .ogg .flac   â†’ AudioView (native <audio>)
+ *   .docx                  â†’ WordView (mammoth + DOMPurify, lazy)
+ *   .xlsx .ods .csv .tsv   â†’ SpreadsheetView (SheetJS + DOMPurify, lazy)
+ *   .json .ts .py .go .yml â†’ CodeView (highlight.js by language guess)
+ *   anything else          â†’ DownloadView (offers a download link)
  *
- * For binary types the caller can pass an empty `content` — the viewer
+ * For binary types the caller can pass an empty `content` â€” the viewer
  * fetches via the file URL directly.
  */
 export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
@@ -89,7 +89,7 @@ export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
 function LazyLoading() {
   return (
     <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-      Loading viewer…
+      Loading viewerâ€¦
     </div>
   )
 }
@@ -156,7 +156,7 @@ function DownloadView({ url, path }: { url: string; path: string }) {
       <a
         href={url}
         download={filename}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] font-medium text-sm rounded-md transition-colors"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] font-medium text-sm rounded-md transition-colors"
       >
         <Download size={14} /> Download
       </a>

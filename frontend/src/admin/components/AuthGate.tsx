@@ -13,12 +13,12 @@ type Props = { children: ReactNode }
  * mount (and whenever a 401 fires via the `notation:auth-expired` event), it
  * re-fetches /api/auth/state and dispatches to the right screen:
  *
- *   needs_claim          → Claim
- *   !signed_in + passkey → PasskeyLogin
- *   !signed_in + no pk   → "stuck" recovery hint
- *   needs_passkey_setup  → PasskeySetup
- *   signed_in + ready    → render children
- *   auth_mode=authelia   → bypass entirely (perimeter handles it)
+ *   needs_claim          â†’ Claim
+ *   !signed_in + passkey â†’ PasskeyLogin
+ *   !signed_in + no pk   â†’ "stuck" recovery hint
+ *   needs_passkey_setup  â†’ PasskeySetup
+ *   signed_in + ready    â†’ render children
+ *   auth_mode=authelia   â†’ bypass entirely (perimeter handles it)
  */
 export function AuthGate({ children }: Props) {
   const [state, setState] = useState<auth.AuthState | null>(null)
@@ -50,9 +50,9 @@ export function AuthGate({ children }: Props) {
 
   if (loading && !state) {
     return (
-      <AuthShell title="Loading…">
+      <AuthShell title="Loadingâ€¦">
         <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-          <div className="h-full w-1/3 bg-zinc-400 dark:bg-[#BFF355] animate-pulse rounded" />
+          <div className="h-full w-1/3 bg-zinc-400 dark:bg-[color:var(--notation-accent)] animate-pulse rounded" />
         </div>
       </AuthShell>
     )
@@ -66,7 +66,7 @@ export function AuthGate({ children }: Props) {
         </div>
         <button
           onClick={() => void refresh()}
-          className="mt-4 w-full px-4 py-2 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 rounded-md text-sm font-semibold"
+          className="mt-4 w-full px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md text-sm font-semibold"
         >
           Retry
         </button>
@@ -100,9 +100,9 @@ export function AuthGate({ children }: Props) {
         </pre>
         <button
           onClick={() => void refresh()}
-          className="mt-4 w-full px-4 py-2 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 rounded-md text-sm font-semibold"
+          className="mt-4 w-full px-4 py-2 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md text-sm font-semibold"
         >
-          I did it — retry
+          I did it â€” retry
         </button>
       </AuthShell>
     )

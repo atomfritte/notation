@@ -5,7 +5,7 @@ import * as api from '../lib/api'
 import { logout } from '../lib/auth'
 
 /**
- * SpaceList — the workspace switcher / landing page.
+ * SpaceList Ã¢â‚¬â€ the workspace switcher / landing page.
  *
  * Layout:
  *   - sticky branded header with theme toggle + signed-in chip
@@ -17,7 +17,7 @@ import { logout } from '../lib/auth'
  *   - modal form for creating new spaces
  *
  * Each card's gradient is derived from a stable string hash of the space id,
- * so the same space always shows up in the same colour — useful for the
+ * so the same space always shows up in the same colour Ã¢â‚¬â€ useful for the
  * "muscle memory" of finding a workspace quickly.
  */
 export function SpaceList() {
@@ -63,11 +63,11 @@ export function SpaceList() {
   }, [spaces, query])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-white dark:from-[#0a0a0a] dark:to-[#0d0d0d] text-zinc-900 dark:text-zinc-200 selection:bg-[#BFF355]/30">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-white dark:from-[#0a0a0a] dark:to-[#0d0d0d] text-zinc-900 dark:text-zinc-200 selection:bg-[color:var(--notation-accent-30)]">
       <header className="sticky top-0 z-30 border-b border-zinc-200 dark:border-zinc-800/50 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link to="/admin" className="flex items-center gap-2 group">
-            <div className="w-7 h-7 rounded-md bg-zinc-900 dark:bg-[#BFF355] flex items-center justify-center transition-transform group-hover:scale-105">
+            <div className="w-7 h-7 rounded-md bg-zinc-900 dark:bg-[color:var(--notation-accent)] flex items-center justify-center transition-transform group-hover:scale-105">
               <FolderOpen size={14} className="text-white dark:text-zinc-900" strokeWidth={2.5} />
             </div>
             <span className="font-bold text-base tracking-tight">notation</span>
@@ -118,13 +118,13 @@ export function SpaceList() {
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search spaces…"
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[#BFF355]/30 focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
+              placeholder="Search spacesÃ¢â‚¬Â¦"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
             />
           </div>
           <button
             onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors whitespace-nowrap"
           >
             <Plus size={15} /> New Space
           </button>
@@ -223,7 +223,7 @@ function CreateCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700/60 hover:border-zinc-900/40 dark:hover:border-[#BFF355]/40 hover:bg-zinc-50 dark:hover:bg-[#BFF355]/5 transition-colors flex flex-col items-center justify-center min-h-[12rem] text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-[#BFF355] group"
+      className="rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700/60 hover:border-zinc-900/40 dark:hover:border-[color:var(--notation-accent-40)] hover:bg-zinc-50 dark:hover:bg-[color:var(--notation-accent)]/5 transition-colors flex flex-col items-center justify-center min-h-[12rem] text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-[color:var(--notation-accent)] group"
     >
       <div className="w-10 h-10 rounded-full border-2 border-current flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
         <Plus size={20} strokeWidth={2} />
@@ -249,7 +249,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       </p>
       <button
         onClick={onCreate}
-        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
+        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
       >
         <Sparkles size={14} /> Create your first Space
       </button>
@@ -326,11 +326,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               required
               pattern="[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]"
               autoFocus
-              className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[#BFF355]/30 focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
+              className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
               placeholder="my-project"
             />
             <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">
-              Lowercase a–z, digits, _ or -. 3–32 characters.
+              Lowercase aÃ¢â‚¬â€œz, digits, _ or -. 3Ã¢â‚¬â€œ32 characters.
             </p>
           </div>
           <div>
@@ -340,7 +340,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[#BFF355]/30 focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
+              className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-zinc-300 dark:focus:border-zinc-700 transition-colors"
               placeholder="My Project"
             />
           </div>
@@ -358,9 +358,9 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <button
               type="submit"
               disabled={submitting || !id}
-              className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40 transition-colors"
+              className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40 transition-colors"
             >
-              {submitting ? 'Creating…' : 'Create'}
+              {submitting ? 'CreatingÃ¢â‚¬Â¦' : 'Create'}
             </button>
           </div>
         </form>

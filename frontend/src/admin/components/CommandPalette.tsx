@@ -82,7 +82,7 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
             ref={inputRef}
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="Jump to page…"
+            placeholder="Jump to pageâ€¦"
             className="flex-1 bg-transparent outline-none text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
           />
           <kbd className="text-[10px] px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-700 rounded text-zinc-500">esc</kbd>
@@ -107,7 +107,7 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
                   : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50')
               }
             >
-              <FileText size={14} className={i === idx ? 'text-[#BFF355]' : 'opacity-50'} />
+              <FileText size={14} className={i === idx ? 'text-[color:var(--notation-accent)]' : 'opacity-50'} />
               <Highlighted text={r.path.replace(/\.md$/i, '')} positions={r.positions} />
               {i === idx && (
                 <span className="ml-auto flex items-center gap-1 text-xs text-zinc-400">
@@ -119,8 +119,8 @@ export function CommandPalette({ open, files, onClose, onSelect }: Props) {
         </ul>
         <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-800 flex items-center gap-3 text-[11px] text-zinc-500 bg-zinc-50 dark:bg-zinc-950/30">
           <span className="flex items-center gap-1"><ArrowRight size={11} /> select</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">↑↓</kbd> navigate</span>
-          <span className="flex items-center gap-1"><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">↵</kbd> open</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">â†‘â†“</kbd> navigate</span>
+          <span className="flex items-center gap-1"><kbd className="px-1 border border-zinc-300 dark:border-zinc-700 rounded">â†µ</kbd> open</span>
         </div>
       </div>
     </div>
@@ -132,7 +132,7 @@ function Highlighted({ text, positions }: { text: string; positions: number[] })
   return (
     <span className="truncate">
       {[...text].map((ch, i) => (
-        <span key={i} className={set.has(i) ? 'text-[#BFF355] font-semibold' : ''}>
+        <span key={i} className={set.has(i) ? 'text-[color:var(--notation-accent)] font-semibold' : ''}>
           {ch}
         </span>
       ))}
@@ -143,7 +143,7 @@ function Highlighted({ text, positions }: { text: string; positions: number[] })
 type Result = { path: string; score: number; positions: number[] }
 
 /**
- * fuzzyMatch — simple subsequence fuzzy matcher with scoring:
+ * fuzzyMatch â€” simple subsequence fuzzy matcher with scoring:
  *   +10 for chars that match at the start of a segment (after `/`)
  *   +5  for chars that continue a contiguous run
  *   +1  otherwise

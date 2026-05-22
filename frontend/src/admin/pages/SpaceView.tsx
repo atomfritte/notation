@@ -124,7 +124,7 @@ export function SpaceView() {
   }, [spaceID, file, content, location.hash])
 
   // ---------- Sidebar drag-resize ----------
-  // Manual implementation rather than a library — the handle is a vertical
+  // Manual implementation rather than a library Ã¢â‚¬â€ the handle is a vertical
   // strip on the aside's right edge; mousedown registers global mousemove +
   // mouseup so the cursor keeps dragging even if it briefly leaves the
   // handle. The body cursor + select-none make the gesture feel native.
@@ -252,7 +252,7 @@ export function SpaceView() {
   const uploadInto = useCallback(async (fileList: FileList, parentDir: string) => {
     const files = Array.from(fileList)
     if (files.length === 0) return
-    setUploadStatus(`Uploading ${files.length}…`)
+    setUploadStatus(`Uploading ${files.length}Ã¢â‚¬Â¦`)
     let ok = 0
     for (const f of files) {
       const target = parentDir ? `${parentDir}/${f.name}` : f.name
@@ -366,7 +366,7 @@ export function SpaceView() {
   function onNewAnchorComment(anchor: api.CommentAnchor) {
     setPendingAnchor(anchor)
     setShowComments(true)
-    // Don't pre-fill the textarea with the quote — the anchor metadata renders
+    // Don't pre-fill the textarea with the quote Ã¢â‚¬â€ the anchor metadata renders
     // the quote in the CommentRow already, double-display looked wrong.
   }
 
@@ -410,7 +410,7 @@ export function SpaceView() {
         })
         .catch(e => setErr(String(e)))
     } else {
-      // Binary file — viewer streams via direct URL, no content fetch needed.
+      // Binary file Ã¢â‚¬â€ viewer streams via direct URL, no content fetch needed.
       setContent('')
       setEtag(null)
     }
@@ -419,11 +419,11 @@ export function SpaceView() {
     refreshComments()
   }, [spaceID, file, refreshComments])
 
-  // uploadFiles is the single ingress point for the upload UX — both the
+  // uploadFiles is the single ingress point for the upload UX Ã¢â‚¬â€ both the
   // drag-drop overlay AND the explicit "Upload" button call into it.
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return
-    setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`)
+    setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}Ã¢â‚¬Â¦`)
     let ok = 0
     let lastPath = ''
     for (const f of files) {
@@ -464,12 +464,12 @@ export function SpaceView() {
         e.preventDefault()
         onNewFile()
       }
-      // Cmd/Ctrl+K — file palette
+      // Cmd/Ctrl+K Ã¢â‚¬â€ file palette
       if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setPaletteOpen(true)
       }
-      // Cmd/Ctrl+Shift+F — full-text search
+      // Cmd/Ctrl+Shift+F Ã¢â‚¬â€ full-text search
       if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setSearchOpen(true)
@@ -499,7 +499,7 @@ export function SpaceView() {
   const allFiles = flattenTree(tree)
 
   return (
-    <div className="flex h-screen bg-white dark:bg-[#0a0a0a] text-zinc-900 dark:text-zinc-300 font-sans overflow-hidden selection:bg-[#BFF355]/30">
+    <div className="flex h-screen bg-white dark:bg-[#0a0a0a] text-zinc-900 dark:text-zinc-300 font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
       
       <aside
@@ -518,7 +518,7 @@ export function SpaceView() {
             title="Back to all Spaces"
           >
             <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200 font-medium w-full">
-              <div className="w-5 h-5 rounded bg-zinc-900 text-white dark:bg-[#BFF355]/20 dark:text-[#BFF355] flex items-center justify-center font-bold text-xs uppercase relative">
+              <div className="w-5 h-5 rounded bg-zinc-900 text-white dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase relative">
                 <span className="group-hover:opacity-0 transition-opacity">{spaceID.charAt(0)}</span>
                 <ChevronLeft size={12} className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
@@ -653,9 +653,9 @@ export function SpaceView() {
         onDrop={handleDrop}
       >
         {dragOver && (
-          <div className="absolute inset-0 z-30 bg-[#BFF355]/10 dark:bg-[#BFF355]/15 border-4 border-dashed border-[#BFF355] flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 z-30 bg-[color:var(--notation-accent-10)] dark:bg-[color:var(--notation-accent-15)] border-4 border-dashed border-[color:var(--notation-accent)] flex items-center justify-center pointer-events-none">
             <div className="bg-white dark:bg-zinc-900 rounded-lg px-6 py-4 shadow-xl flex items-center gap-3">
-              <Upload size={24} className="text-zinc-900 dark:text-[#BFF355]" />
+              <Upload size={24} className="text-zinc-900 dark:text-[color:var(--notation-accent)]" />
               <div>
                 <div className="text-zinc-900 dark:text-zinc-100 font-semibold">Drop to upload</div>
                 <div className="text-xs text-zinc-500">Files land in this Space's root</div>
@@ -664,7 +664,7 @@ export function SpaceView() {
           </div>
         )}
         {uploadStatus && (
-          <div className="absolute top-3 right-3 z-30 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 px-3 py-1.5 text-xs font-medium rounded-md shadow-lg animate-in slide-in-from-top-2 duration-200">
+          <div className="absolute top-3 right-3 z-30 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 px-3 py-1.5 text-xs font-medium rounded-md shadow-lg animate-in slide-in-from-top-2 duration-200">
             {uploadStatus}
           </div>
         )}
@@ -702,28 +702,28 @@ export function SpaceView() {
                 <Search size={18} />
               </button>
               {isMarkdownFile(file) && (
-                <button onClick={() => setShowOutline(v => !v)} className={`p-1.5 rounded-md transition-colors ${showOutline ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[#BFF355]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Outline">
+                <button onClick={() => setShowOutline(v => !v)} className={`p-1.5 rounded-md transition-colors ${showOutline ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Outline">
                   <List size={18} />
                 </button>
               )}
               <button
                 onClick={() => { setHistoryMode(v => !v); setEditing(false) }}
-                className={`p-1.5 rounded-md transition-colors ${historyMode ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[#BFF355]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}
+                className={`p-1.5 rounded-md transition-colors ${historyMode ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}
                 title="Version history"
               >
                 <History size={18} />
               </button>
               {isTextFile(file) && !historyMode && (
-                <button onClick={() => setEditing(v => !v)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-zinc-900 bg-zinc-100 dark:text-[#BFF355] dark:bg-[#BFF355]/10' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}>
+                <button onClick={() => setEditing(v => !v)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-zinc-900 bg-zinc-100 dark:text-[color:var(--notation-accent)] dark:bg-[color:var(--notation-accent-10)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`}>
                   {editing ? <Eye size={16} /> : <Edit3 size={16} />}
                 </button>
               )}
-              <button onClick={() => toggleBookmark(file)} className={`p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-zinc-900 dark:text-[#BFF355]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Favorite">
+              <button onClick={() => toggleBookmark(file)} className={`p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-zinc-900 dark:text-[color:var(--notation-accent)]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Favorite">
                 <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
               </button>
               <button onClick={() => setShowComments(!showComments)} className={`p-1.5 rounded-md transition-colors flex items-center gap-1 ${showComments ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-200' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'}`} title="Comments">
                 <MessageSquare size={18} />
-                {comments.length > 0 && <span className="text-xs font-bold text-zinc-900 dark:text-[#BFF355]">{comments.length}</span>}
+                {comments.length > 0 && <span className="text-xs font-bold text-zinc-900 dark:text-[color:var(--notation-accent)]">{comments.length}</span>}
               </button>
               
               {isMarkdownFile(file) && !editing && (
@@ -773,7 +773,7 @@ export function SpaceView() {
               />
             ) : file ? (
               // In edit mode the editor manages its own scroll, so the wrapper
-              // must give it a definite height — otherwise Monaco's `height: 100%`
+              // must give it a definite height Ã¢â‚¬â€ otherwise Monaco's `height: 100%`
               // collapses to zero and the text is invisible. In read mode we
               // want the natural-flow content with bottom padding instead.
               <div
@@ -793,7 +793,7 @@ export function SpaceView() {
                   <Suspense
                     fallback={
                       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-                        Loading editor…
+                        Loading editorÃ¢â‚¬Â¦
                       </div>
                     }
                   >
@@ -808,7 +808,7 @@ export function SpaceView() {
                         setContent(c)
                         setEtag(newEtag)
                         refreshTree()
-                        // Drop back to read mode after a successful save — the
+                        // Drop back to read mode after a successful save Ã¢â‚¬â€ the
                         // user can re-enter edit via the Eye/Edit toggle in
                         // the header.
                         setEditing(false)
@@ -844,7 +844,7 @@ export function SpaceView() {
               <div className="h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-500 p-8">
                 <FileText size={48} className="mb-4 opacity-20 dark:opacity-10" />
                 <p className="text-lg">Select a page to start writing</p>
-                <button onClick={onNewFile} className="mt-4 px-4 py-2 bg-zinc-100 text-zinc-900 dark:bg-[#BFF355]/10 dark:text-[#BFF355] hover:bg-zinc-200 dark:hover:bg-[#BFF355]/20 font-medium rounded-md transition-colors">
+                <button onClick={onNewFile} className="mt-4 px-4 py-2 bg-zinc-100 text-zinc-900 dark:bg-[color:var(--notation-accent-10)] dark:text-[color:var(--notation-accent)] hover:bg-zinc-200 dark:hover:bg-[color:var(--notation-accent-20)] font-medium rounded-md transition-colors">
                   Create Page
                 </button>
               </div>
@@ -869,7 +869,7 @@ export function SpaceView() {
               {pendingAnchor && (
                 <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/50 text-xs">
                   <div className="text-amber-900 dark:text-amber-300 font-semibold mb-1">Anchoring to selection</div>
-                  <div className="text-amber-800 dark:text-amber-400/80 italic line-clamp-2">“{pendingAnchor.quote}”</div>
+                  <div className="text-amber-800 dark:text-amber-400/80 italic line-clamp-2">Ã¢â‚¬Å“{pendingAnchor.quote}Ã¢â‚¬Â</div>
                   <button
                     onClick={() => { setPendingAnchor(null); setPendingComment('') }}
                     className="mt-1 text-amber-700 dark:text-amber-300 hover:underline"

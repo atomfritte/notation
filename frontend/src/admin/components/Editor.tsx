@@ -103,7 +103,7 @@ export default function Editor({
     const model = editor.getModel()
     if (!model) return
     const text = model.getValueInRange(sel)
-    // If the surrounding chars already match, strip — toggle semantics.
+    // If the surrounding chars already match, strip â€” toggle semantics.
     const startLine = sel.startLineNumber
     const startCol = sel.startColumn
     const endLine = sel.endLineNumber
@@ -212,7 +212,7 @@ export default function Editor({
     editorRef.current = editor
     monacoRef.current = monaco
 
-    // Disable auto-pairing — we own [[]] / ()/etc via toolbar + commands.
+    // Disable auto-pairing â€” we own [[]] / ()/etc via toolbar + commands.
     editor.updateOptions({ autoClosingBrackets: 'never', autoClosingQuotes: 'never' })
 
     // ---- commands (keyboard shortcuts) ----
@@ -239,7 +239,7 @@ export default function Editor({
     })
     editor.addAction({
       id: 'notation.wikilink',
-      label: 'Insert wiki-link…',
+      label: 'Insert wiki-linkâ€¦',
       contextMenuGroupId: 'notation',
       contextMenuOrder: 3,
       run: () => startWikiLink(),
@@ -279,7 +279,7 @@ export default function Editor({
             }),
           }
         }
-        // Heading suggestions — pull from the current buffer or fetch.
+        // Heading suggestions â€” pull from the current buffer or fetch.
         const filePart = query.slice(0, hash)
         const headingQuery = query.slice(hash + 1).toLowerCase()
         const targetPath = filePart === '' || `${filePart}.md` === pathRef.current
@@ -331,7 +331,7 @@ export default function Editor({
     const selDisp = editor.onDidChangeCursorSelection(updateSelTool)
     const scrollDisp = editor.onDidScrollChange(updateSelTool)
     const blurDisp = editor.onDidBlurEditorWidget(() => {
-      // Don't tear down the toolbar on blur — the user is likely about to
+      // Don't tear down the toolbar on blur â€” the user is likely about to
       // click one of the floating buttons, which steals focus from Monaco.
     })
 
@@ -528,10 +528,10 @@ function Toolbar({ dirty, saving, err, onSave, onAction }: ToolbarProps) {
       </ToolGroup>
       <Divider />
       <ToolGroup>
-        <ToolBtn icon={Bold} title="Bold (⌘B)" onClick={() => onAction('bold')} />
-        <ToolBtn icon={Italic} title="Italic (⌘I)" onClick={() => onAction('italic')} />
+        <ToolBtn icon={Bold} title="Bold (âŒ˜B)" onClick={() => onAction('bold')} />
+        <ToolBtn icon={Italic} title="Italic (âŒ˜I)" onClick={() => onAction('italic')} />
         <ToolBtn icon={Strikethrough} title="Strikethrough" onClick={() => onAction('strike')} />
-        <ToolBtn icon={Highlighter} title="Highlight (⌘E)" onClick={() => onAction('highlight')} />
+        <ToolBtn icon={Highlighter} title="Highlight (âŒ˜E)" onClick={() => onAction('highlight')} />
         <ToolBtn icon={Code} title="Inline code" onClick={() => onAction('code')} />
       </ToolGroup>
       <Divider />
@@ -559,10 +559,10 @@ function Toolbar({ dirty, saving, err, onSave, onAction }: ToolbarProps) {
         <button
           onClick={onSave}
           disabled={!dirty || saving}
-          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40"
-          title="Save (⌘S)"
+          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40"
+          title="Save (âŒ˜S)"
         >
-          <Save size={13} /> {saving ? 'Saving…' : 'Save'}
+          <Save size={13} /> {saving ? 'Savingâ€¦' : 'Save'}
         </button>
       </div>
     </div>

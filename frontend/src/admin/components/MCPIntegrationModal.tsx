@@ -7,7 +7,7 @@ type Props = {
   open: boolean
   spaceID: string
   url: string
-  /** Raw token — present only immediately after creation. Existing tokens are
+  /** Raw token â€” present only immediately after creation. Existing tokens are
    *  hashed-only on the server, so the modal renders a placeholder instead. */
   rawToken?: string
   onClose: () => void
@@ -17,7 +17,7 @@ type Props = {
  * MCPIntegrationModal shows multi-client connection snippets for an MCP
  * endpoint. After a token is created, the modal opens with the raw token so
  * the user can copy and paste into their client config. For pre-existing
- * tokens the modal opens with <PASTE_YOUR_TOKEN> placeholders — the secret
+ * tokens the modal opens with <PASTE_YOUR_TOKEN> placeholders â€” the secret
  * cannot be recovered server-side.
  */
 export function MCPIntegrationModal({ open, spaceID, url, rawToken, onClose }: Props) {
@@ -92,7 +92,7 @@ curl -X POST '${url}' \\
                     Save this token now
                   </div>
                   <div className="text-amber-800 dark:text-amber-400">
-                    The token is shown once. After closing this dialog it cannot be recovered — revoke
+                    The token is shown once. After closing this dialog it cannot be recovered â€” revoke
                     and create a new one if lost.
                   </div>
                 </div>
@@ -117,7 +117,7 @@ curl -X POST '${url}' \\
                   className={
                     'px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ' +
                     (tab === t
-                      ? 'border-zinc-900 dark:border-[#BFF355] text-zinc-900 dark:text-[#BFF355]'
+                      ? 'border-zinc-900 dark:border-[color:var(--notation-accent)] text-zinc-900 dark:text-[color:var(--notation-accent)]'
                       : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200')
                   }
                 >
@@ -177,7 +177,7 @@ curl -X POST '${url}' \\
         <div className="px-5 py-3 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-sm font-medium bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
+            className="px-4 py-1.5 text-sm font-medium bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
           >
             Done
           </button>

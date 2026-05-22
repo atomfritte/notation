@@ -8,7 +8,7 @@ const actionColors: Record<string, string> = {
   'read': 'text-blue-600 dark:text-blue-400',
   'write': 'text-amber-600 dark:text-amber-400',
   'delete': 'text-red-600 dark:text-red-400',
-  'comment': 'text-[#BFF355]',
+  'comment': 'text-[color:var(--notation-accent)]',
   'mcp': 'text-purple-600 dark:text-purple-400',
 }
 
@@ -20,7 +20,7 @@ function colorFor(action: string): string {
 }
 
 /**
- * AuditPanel — recent audit-log entries for the Space. Reads JSONL from
+ * AuditPanel â€” recent audit-log entries for the Space. Reads JSONL from
  * <space>/.notation/audit.log via the backend's /audit endpoint, newest first.
  */
 export function AuditPanel({ spaceID }: Props) {
@@ -63,7 +63,7 @@ export function AuditPanel({ spaceID }: Props) {
             <li
               key={i}
               className="text-xs px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 rounded-md transition-colors"
-              title={[e.actor, e.action, e.path, e.ip, e.ua].filter(Boolean).join(' · ')}
+              title={[e.actor, e.action, e.path, e.ip, e.ua].filter(Boolean).join(' Â· ')}
             >
               <div className="flex items-center gap-2">
                 <span className={`font-semibold ${colorFor(e.action)}`}>{e.action}</span>
@@ -71,9 +71,9 @@ export function AuditPanel({ spaceID }: Props) {
               </div>
               <div className="text-[10px] text-zinc-500 mt-0.5 truncate">
                 <span className="font-mono">{e.actor}</span>
-                <span className="mx-1">·</span>
+                <span className="mx-1">Â·</span>
                 <span>{new Date(e.ts).toLocaleString()}</span>
-                {e.err && <span className="text-red-500 ml-2">⚠ {e.err}</span>}
+                {e.err && <span className="text-red-500 ml-2">âš  {e.err}</span>}
               </div>
             </li>
           ))}

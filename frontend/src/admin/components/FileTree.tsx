@@ -6,7 +6,7 @@ import type { Entry } from '../lib/api'
  * MIME label for internal drag-and-drop within the FileTree. A drag whose
  * dataTransfer.types contains this string is a tree-internal move (one row
  * being dragged onto a directory). External browser drags (image files,
- * downloads, …) won't carry it, so they're routed to the upload path
+ * downloads, Ã¢â‚¬Â¦) won't carry it, so they're routed to the upload path
  * instead.
  */
 const INTERNAL_DRAG_TYPE = 'application/x-notation-path'
@@ -27,14 +27,14 @@ type Props = {
 }
 
 /**
- * FileTree — Windows-Explorer-style file & folder navigator.
+ * FileTree Ã¢â‚¬â€ Windows-Explorer-style file & folder navigator.
  *
  * Features:
  *   - Click row to open file; click chevron OR row to toggle dir
- *   - Right-click any row → onContextMenu(e, path, isDir)
- *   - Right-click empty area → onBackgroundContextMenu(e)
- *   - Drag a file/folder onto another directory → onMove
- *   - Drop browser files onto a directory → onExternalDrop
+ *   - Right-click any row Ã¢â€ â€™ onContextMenu(e, path, isDir)
+ *   - Right-click empty area Ã¢â€ â€™ onBackgroundContextMenu(e)
+ *   - Drag a file/folder onto another directory Ã¢â€ â€™ onMove
+ *   - Drop browser files onto a directory Ã¢â€ â€™ onExternalDrop
  *   - Visual highlight on the active drop target
  *
  * Drag-and-drop semantics: the dragged row sets a small JSON payload on
@@ -82,7 +82,7 @@ export function FileTree({
         }}
         className="text-sm text-zinc-500 dark:text-zinc-400 px-3 py-6 italic text-center hover:bg-zinc-100/50 dark:hover:bg-zinc-800/20 rounded-md mx-2"
       >
-        No pages — right-click or drop files here.
+        No pages Ã¢â‚¬â€ right-click or drop files here.
       </div>
     )
   }
@@ -98,7 +98,7 @@ export function FileTree({
       className="text-sm select-none"
       onContextMenu={isRoot ? (e) => {
         // Only fire background-context-menu when the click really hit the
-        // <ul>/<li> chrome — row buttons stopPropagation in their own
+        // <ul>/<li> chrome Ã¢â‚¬â€ row buttons stopPropagation in their own
         // onContextMenu handlers, so this catches strictly the empty space.
         if (e.target === e.currentTarget) onBackgroundContextMenu?.(e)
       } : undefined}
@@ -182,7 +182,7 @@ function FileRow({
         style={{ paddingLeft: depth * 12 + 28 }}
         title={entry.path}
       >
-        <FileText size={14} className={isActive ? 'text-[#BFF355]' : 'opacity-70'} />
+        <FileText size={14} className={isActive ? 'text-[color:var(--notation-accent)]' : 'opacity-70'} />
         <span className="truncate">{entry.name.replace(/\.md$/i, '')}</span>
       </button>
     </li>
@@ -261,7 +261,7 @@ function DirRow({
       <div
         className={`flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer transition-colors ${
           isDropTarget
-            ? 'bg-[#BFF355]/15 ring-1 ring-[#BFF355]/40 text-zinc-900 dark:text-[#BFF355]'
+            ? 'bg-[color:var(--notation-accent-15)] ring-1 ring-[color:var(--notation-accent-40)] text-zinc-900 dark:text-[color:var(--notation-accent)]'
             : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-300'
         }`}
         style={{ paddingLeft: depth * 12 + 8 }}

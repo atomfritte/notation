@@ -43,7 +43,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
     }
   }, [initialText])
 
-  // Group: parents → replies (sorted by creation time within each group).
+  // Group: parents Ã¢â€ â€™ replies (sorted by creation time within each group).
   const { tops, repliesByParent } = useMemo(() => {
     const tops: CommentItem[] = []
     const repliesByParent: Record<string, CommentItem[]> = {}
@@ -83,7 +83,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
       <h3 className="font-semibold text-sm mb-3 text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
         Comments
         {comments.length > 0 && (
-          <span className="bg-zinc-100 dark:bg-zinc-800 text-lime-600 dark:text-[#BFF355] px-2 py-0.5 rounded-full text-xs font-bold">
+          <span className="bg-zinc-100 dark:bg-zinc-800 text-lime-600 dark:text-[color:var(--notation-accent)] px-2 py-0.5 rounded-full text-xs font-bold">
             {comments.length}
           </span>
         )}
@@ -124,17 +124,17 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, activeID, 
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
-            placeholder="Add a comment…"
-            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:border-lime-500 dark:focus:border-[#BFF355] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[#BFF355] outline-none rounded-md p-2 text-sm text-zinc-900 dark:text-zinc-100 resize-none transition-all"
+            placeholder="Add a commentÃ¢â‚¬Â¦"
+            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-zinc-900 dark:text-zinc-100 resize-none transition-all"
             rows={2}
             disabled={submitting}
           />
           <button
             type="submit"
             disabled={!text.trim() || submitting}
-            className="self-end px-4 py-1.5 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 font-semibold text-sm rounded-md shadow-sm disabled:opacity-40 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
+            className="self-end px-4 py-1.5 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 font-semibold text-sm rounded-md shadow-sm disabled:opacity-40 hover:bg-zinc-800 dark:hover:bg-[#a6d944] transition-colors"
           >
-            {submitting ? 'Posting…' : 'Post Comment'}
+            {submitting ? 'PostingÃ¢â‚¬Â¦' : 'Post Comment'}
           </button>
         </form>
       )}
@@ -183,7 +183,7 @@ function CommentRow({
       className={
         'rounded-md border text-sm transition-all ' +
         (active
-          ? 'border-[#BFF355] bg-[#BFF355]/5 dark:bg-[#BFF355]/10 shadow-sm'
+          ? 'border-[color:var(--notation-accent)] bg-[color:var(--notation-accent)]/5 dark:bg-[color:var(--notation-accent-10)] shadow-sm'
           : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900') +
         (compact ? ' p-2' : ' p-3')
       }
@@ -213,11 +213,11 @@ function CommentRow({
           <textarea
             value={replyText}
             onChange={e => setReplyText(e.target.value)}
-            placeholder="Write a reply…"
+            placeholder="Write a replyÃ¢â‚¬Â¦"
             autoFocus
             rows={2}
             disabled={busy}
-            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-lime-500 dark:focus:border-[#BFF355] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[#BFF355] outline-none rounded-md p-2 text-sm text-zinc-900 dark:text-zinc-100 resize-none"
+            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-zinc-900 dark:text-zinc-100 resize-none"
           />
           <div className="flex gap-1.5 justify-end">
             <button
@@ -233,9 +233,9 @@ function CommentRow({
             <button
               type="submit"
               disabled={!replyText.trim() || busy}
-              className="px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40"
+              className="px-3 py-1 text-xs font-semibold bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944] disabled:opacity-40"
             >
-              {busy ? '…' : 'Reply'}
+              {busy ? 'Ã¢â‚¬Â¦' : 'Reply'}
             </button>
           </div>
         </form>

@@ -19,7 +19,7 @@ type CreateResp = {
 type Props = { spaceID: string }
 
 /**
- * MCPPanel — sidebar tab for managing Bearer tokens that grant MCP access to
+ * MCPPanel â€” sidebar tab for managing Bearer tokens that grant MCP access to
  * this Space. Clicking a token (or finishing creation) opens
  * MCPIntegrationModal with paste-ready Claude Code / Cursor / HTTP snippets.
  */
@@ -94,7 +94,7 @@ export function MCPPanel({ spaceID }: Props) {
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors mb-3"
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-[#a6d944] rounded-md transition-colors mb-3"
           >
             <Plus size={12} /> New token
           </button>
@@ -112,7 +112,7 @@ export function MCPPanel({ spaceID }: Props) {
             <div className="flex gap-1">
               <button
                 type="submit"
-                className="flex-1 px-2 py-1 bg-zinc-900 text-white dark:bg-[#BFF355] dark:text-zinc-950 text-xs font-medium rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944]"
+                className="flex-1 px-2 py-1 bg-zinc-900 text-white dark:bg-[color:var(--notation-accent)] dark:text-zinc-950 text-xs font-medium rounded-md hover:bg-zinc-800 dark:hover:bg-[#a6d944]"
               >
                 Create
               </button>
@@ -150,7 +150,7 @@ export function MCPPanel({ spaceID }: Props) {
                       created {new Date(t.created_at).toLocaleString()}
                       {t.last_used && (
                         <>
-                          {' · '}last used {new Date(t.last_used).toLocaleString()}
+                          {' Â· '}last used {new Date(t.last_used).toLocaleString()}
                         </>
                       )}
                     </div>

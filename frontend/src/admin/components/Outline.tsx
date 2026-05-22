@@ -76,7 +76,7 @@ export function Outline({ content }: Props) {
               className={
                 'block w-full text-left px-2 py-1 rounded-md truncate transition-colors ' +
                 (active === h.id
-                  ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-[#BFF355] font-medium border-l-2 border-zinc-900 dark:border-[#BFF355] -ml-0.5 pl-[6px]'
+                  ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-[color:var(--notation-accent)] font-medium border-l-2 border-zinc-900 dark:border-[color:var(--notation-accent)] -ml-0.5 pl-[6px]'
                   : 'text-zinc-600 hover:bg-zinc-100/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200')
               }
               style={{ paddingLeft: (h.level - minLevel) * 12 + 8 }}
@@ -91,12 +91,12 @@ export function Outline({ content }: Props) {
   )
 }
 
-// Use github-slugger directly — the same library rehype-slug uses to assign
+// Use github-slugger directly â€” the same library rehype-slug uses to assign
 // ids in the rendered DOM. Our previous home-grown algorithm stripped any
 // non-ASCII character (Unicode letters like umlauts vanished entirely) and
 // could disagree with rehype-slug on duplicates, which is why H2 entries
 // with German / non-latin titles silently failed to scroll: the Outline
-// computed `bersicht`, but the DOM had `übersicht`. Pin both sides to the
+// computed `bersicht`, but the DOM had `Ã¼bersicht`. Pin both sides to the
 // exact same algorithm.
 function extractHeadings(md: string): Heading[] {
   const stripped = md.replace(/```[\s\S]*?```/g, '').replace(/~~~[\s\S]*?~~~/g, '')

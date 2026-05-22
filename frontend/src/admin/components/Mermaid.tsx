@@ -4,7 +4,7 @@ type Props = { chart: string; theme: 'light' | 'dark' }
 
 /**
  * Mermaid renders ```mermaid blocks as SVG. The library is loaded lazily so the
- * initial bundle stays slim — users who never view a Mermaid diagram never pay
+ * initial bundle stays slim â€” users who never view a Mermaid diagram never pay
  * the ~500KB cost. Each instance gets a unique id to allow multiple diagrams
  * per page; re-renders on chart or theme change.
  */
@@ -23,7 +23,7 @@ export function Mermaid({ chart, theme }: Props) {
         securityLevel: 'strict', // disallow click handlers in diagrams
         themeVariables:
           theme === 'dark'
-            ? { primaryColor: '#BFF355', primaryTextColor: '#0a0a0a' }
+            ? { primaryColor: 'var(--notation-accent)', primaryTextColor: '#0a0a0a' }
             : { primaryColor: '#0a0a0a', primaryTextColor: '#ffffff' },
       })
       const id = 'mermaid-' + Math.random().toString(36).slice(2, 11)

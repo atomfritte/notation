@@ -2,6 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- Theme variables -----------------------------------------------------
+ *
+ * `--notation-accent` and its alpha siblings are the single source of truth
+ * for the brand accent colour. Tailwind's `@apply` directive can't compile
+ * the opacity-modifier syntax on top of an arbitrary `var()` value, so we
+ * pre-bake the common alpha steps as siblings and reference them directly:
+ *   bg-[color:var(--notation-accent-10)]  // 10% alpha
+ *   bg-[color:var(--notation-accent-30)]  // 30% alpha
+ *   text-[color:var(--notation-accent)]   // 100%
+ *
+ * ThemePalette overrides every variable when the user switches / creates a
+ * theme, so all consumers re-render in the new accent automatically.
+ */
+:root {
+  --notation-accent: #BFF355;
+  --notation-accent-10: #BFF3551A;
+  --notation-accent-15: #BFF35526;
+  --notation-accent-20: #BFF35533;
+  --notation-accent-30: #BFF3554D;
+  --notation-accent-40: #BFF35566;
+  --notation-accent-50: #BFF35580;
+}
+
 /* ---- Print stylesheet ----------------------------------------------------
  *
  * When the user hits Cmd/Ctrl-P (or the Print button in the page header) we
@@ -11,7 +34,7 @@
  * only visible in read mode, but be defensive).
  *
  * Colours are forced back to black-on-white because most printer drivers
- * already strip the page background — leaving dark mode in place would just
+ * already strip the page background Ã¢â‚¬â€ leaving dark mode in place would just
  * inflate the page count from blank backgrounds.
  */
 @media print {
@@ -94,11 +117,11 @@
 /* wiki-link styling: a soft dotted underline distinguishes intra-space links from external ones */
 .prose .wiki-link {
   text-decoration: none;
-  @apply border-b border-dashed border-lime-600 text-lime-600 dark:border-[#BFF355] dark:text-[#BFF355];
+  @apply border-b border-dashed border-lime-600 text-lime-600 dark:border-[color:var(--notation-accent)] dark:text-[color:var(--notation-accent)];
   transition: all 0.2s ease-in-out;
 }
 .prose .wiki-link:hover { 
-  @apply bg-lime-600/10 dark:bg-[#BFF355]/10 border-solid;
+  @apply bg-lime-600/10 dark:bg-[color:var(--notation-accent-10)] border-solid;
 }
 
 /* Heading anchors stay clickable but the wrap doesn't override heading color */
@@ -108,12 +131,12 @@
   transition: color 0.2s;
 }
 .prose h1 > a:hover, .prose h2 > a:hover, .prose h3 > a:hover, .prose h4 > a:hover {
-  @apply text-lime-600 dark:text-[#BFF355];
+  @apply text-lime-600 dark:text-[color:var(--notation-accent)];
 }
 
 /* Highlight / Bookmark passages */
 mark {
-  @apply bg-lime-200 text-zinc-900 dark:bg-[#BFF355]/30 dark:text-[#BFF355] rounded-sm px-1 py-0.5;
+  @apply bg-lime-200 text-zinc-900 dark:bg-[color:var(--notation-accent-30)] dark:text-[color:var(--notation-accent)] rounded-sm px-1 py-0.5;
 }
 
 /* Comment anchors: subtler than the yellow highlight `<mark>` style; the
@@ -152,7 +175,7 @@ mark.comment-anchor.comment-anchor-blink {
   50%      { background-color: rgba(245, 158, 11, 0.9);  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.6); }
 }
 
-/* SheetJS sheet_to_html output — give the raw <table> a readable look that
+/* SheetJS sheet_to_html output Ã¢â‚¬â€ give the raw <table> a readable look that
    matches the rest of the app. Borders + zebra striping + readable padding. */
 .sheetjs-table table {
   @apply border-collapse text-sm w-auto;
@@ -292,13 +315,13 @@ mark.comment-anchor.comment-anchor-blink {
   @apply prose-invert;
   --tw-prose-body: theme('colors.zinc.400');
   --tw-prose-headings: theme('colors.zinc.100');
-  --tw-prose-links: #BFF355;
+  --tw-prose-links: var(--notation-accent);
   --tw-prose-bold: theme('colors.zinc.100');
   --tw-prose-counters: theme('colors.zinc.500');
   --tw-prose-bullets: theme('colors.zinc.500');
   --tw-prose-hr: theme('colors.zinc.700');
   --tw-prose-quotes: theme('colors.zinc.300');
-  --tw-prose-quote-borders: #BFF355;
+  --tw-prose-quote-borders: var(--notation-accent);
   --tw-prose-captions: theme('colors.zinc.500');
   --tw-prose-code: theme('colors.zinc.300');
   --tw-prose-pre-code: theme('colors.zinc.300');

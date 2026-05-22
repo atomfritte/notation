@@ -10,7 +10,7 @@ type Props = {
 }
 
 /**
- * SearchPanel — full-text search modal across all files in the Space.
+ * SearchPanel Ã¢â‚¬â€ full-text search modal across all files in the Space.
  * Triggered by Cmd+Shift+F. Hits the backend's /search endpoint which uses
  * the in-memory grep helper (case-insensitive substring across all .* files
  * matching the optional glob).
@@ -82,10 +82,10 @@ export function SearchPanel({ open, spaceID, onClose, onSelect }: Props) {
             onKeyDown={e => {
               if (e.key === 'Escape') onClose()
             }}
-            placeholder="Search across all pages…"
+            placeholder="Search across all pagesÃ¢â‚¬Â¦"
             className="flex-1 bg-transparent outline-none text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
           />
-          {loading && <span className="text-xs text-zinc-400">searching…</span>}
+          {loading && <span className="text-xs text-zinc-400">searchingÃ¢â‚¬Â¦</span>}
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
             <X size={16} />
           </button>
@@ -154,7 +154,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((p, k) =>
         p.hit ? (
-          <mark key={k} className="bg-[#BFF355]/30 text-zinc-900 dark:text-[#BFF355] rounded px-0.5">
+          <mark key={k} className="bg-[color:var(--notation-accent-30)] text-zinc-900 dark:text-[color:var(--notation-accent)] rounded px-0.5">
             {p.s}
           </mark>
         ) : (
