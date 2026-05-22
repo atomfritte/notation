@@ -160,6 +160,66 @@ export const snapshot = (id: string, message: string) =>
     body: JSON.stringify({ message }),
   })
 
+// ---- Magic-link shares ---------------------------------------------------
+
+export type SharePermission = 'read' | 'comment' | 'edit'
+export type Share = {
+  id: string
+  permission: SharePermission
+  label: string
+  created_at: string
+  expires_at?: string
+  created_by: string
+  last_used?: string
+}
+export type ShareCreated = { share: Share; token: string; url: string }
+
+export const listShares = (id: string) =>
+  fetchJSON<Share[]>(`/api/admin/spaces/${encodeURIComponent(id)}/shares`)
+
+export const createShare = (
+  id: string,
+  body: { permission: SharePermission; label?: string; expires_in?: string },
+) =>
+  fetchJSON<ShareCreated>(`/api/admin/spaces/${encodeURIComponent(id)}/shares`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+export const deleteShare = (id: string, shareID: string) =>
+  fetchJSON<void>(
+    `/api/admin/spaces/${encodeURIComponent(id)}/shares/${encodeURIComponent(shareID)}`,
+    { method: 'DELETE' },
+  )
+
+// ---- MCP tokens ----------------------------------------------------------
+
+export type MCPToken = {
+  id: string
+  label: string
+  created_at: string
+  created_by: string
+  last_used?: string
+}
+export type MCPTokenCreated = { token: MCPToken; raw: string; url: string }
+
+export const listMCPTokens = (id: string) =>
+  fetchJSON<MCPToken[]>(`/api/admin/spaces/${encodeURIComponent(id)}/mcp-tokens`)
+
+export const createMCPToken = (id: string, label: string) =>
+  fetchJSON<MCPTokenCreated>(`/api/admin/spaces/${encodeURIComponent(id)}/mcp-tokens`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  })
+
+export const deleteMCPToken = (id: string, tokenID: string) =>
+  fetchJSON<void>(
+    `/api/admin/spaces/${encodeURIComponent(id)}/mcp-tokens/${encodeURIComponent(tokenID)}`,
+    { method: 'DELETE' },
+  )
+
 export type CommentAnchor = {
   quote: string
   prefix: string

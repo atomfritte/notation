@@ -1,20 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Plug, Plus } from 'lucide-react'
 import { MCPIntegrationModal } from './MCPIntegrationModal'
-
-type MCPToken = {
-  id: string
-  label: string
-  created_at: string
-  created_by: string
-  last_used?: string
-}
-
-type CreateResp = {
-  token: MCPToken
-  raw: string
-  url: string
-}
+import * as api from '../lib/api'
 
 type Props = { spaceID: string }
 
@@ -22,9 +9,13 @@ type Props = { spaceID: string }
  * MCPPanel — sidebar tab for managing Bearer tokens that grant MCP access to
  * this Space. Clicking a token (or finishing creation) opens
  * MCPIntegrationModal with paste-ready Claude Code / Cursor / HTTP snippets.
+ *
+ * Every state-changing call routes through api.* so the X-CSRF-Token header
+ * gets attached — raw fetch() bypasses the attachCSRF wrapper and the
+ * backend rejects the request with "csrf token mismatch".
  */
 export function MCPPanel({ spaceID }: Props) {
-  const [tokens, setTokens] = useState<MCPToken[]>([])
+  const [tokens, setTokens] = useState<api.MCPToken[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [label, setLabel] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -36,13 +27,7 @@ export function MCPPanel({ spaceID }: Props) {
   const inferredURL = `${window.location.origin}/mcp/${spaceID}`
 
   const refresh = useCallback(() => {
-    fetch(`/api/admin/spaces/${encodeURIComponent(spaceID)}/mcp-tokens`)
-      .then(async r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json() as Promise<MCPToken[]>
-      })
-      .then(setTokens)
-      .catch(e => setErr(String(e)))
+    api.listMCPTokens(spaceID).then(setTokens).catch(e => setErr(String(e)))
   }, [spaceID])
 
   useEffect(refresh, [refresh])
@@ -51,16 +36,7 @@ export function MCPPanel({ spaceID }: Props) {
     e.preventDefault()
     setErr(null)
     try {
-      const r = await fetch(`/api/admin/spaces/${encodeURIComponent(spaceID)}/mcp-tokens`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label }),
-      })
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}))
-        throw new Error(j.error || `HTTP ${r.status}`)
-      }
-      const data: CreateResp = await r.json()
+      const data = await api.createMCPToken(spaceID, label)
       setLabel('')
       setShowForm(false)
       refresh()
@@ -73,12 +49,12 @@ export function MCPPanel({ spaceID }: Props) {
   async function onDelete(id: string, ev: React.MouseEvent) {
     ev.stopPropagation()
     if (!window.confirm(`Revoke MCP token ${id}?`)) return
-    const r = await fetch(
-      `/api/admin/spaces/${encodeURIComponent(spaceID)}/mcp-tokens/${encodeURIComponent(id)}`,
-      { method: 'DELETE' },
-    )
-    if (r.ok) refresh()
-    else setErr(`HTTP ${r.status}`)
+    try {
+      await api.deleteMCPToken(spaceID, id)
+      refresh()
+    } catch (e) {
+      setErr(String(e))
+    }
   }
 
   return (

@@ -1,41 +1,27 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import * as api from '../lib/api'
 
-type Permission = 'read' | 'comment' | 'edit'
-
-type Share = {
-  id: string
-  permission: Permission
-  label: string
-  created_at: string
-  expires_at?: string
-  created_by: string
-  last_used?: string
-}
-
-type CreateResult = {
-  share: Share
-  token: string
-  url: string
-}
+type Permission = api.SharePermission
 
 type Props = { spaceID: string }
 
+/**
+ * SharePanel — listing + creation + revocation of Magic-Link shares for the
+ * current Space. Every state-changing call goes through the api.* helpers
+ * so the X-CSRF-Token header (read from /api/auth/state into module-local
+ * storage in lib/auth.ts) gets attached automatically. Raw fetch() would
+ * bypass that and the backend's requireCSRF middleware would 403 us.
+ */
 export function SharePanel({ spaceID }: Props) {
-  const [shares, setShares] = useState<Share[]>([])
+  const [shares, setShares] = useState<api.Share[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [perm, setPerm] = useState<Permission>('read')
   const [label, setLabel] = useState('')
   const [expiresIn, setExpiresIn] = useState('')
-  const [created, setCreated] = useState<CreateResult | null>(null)
+  const [created, setCreated] = useState<api.ShareCreated | null>(null)
 
   const refresh = useCallback(() => {
-    fetch(`/api/admin/spaces/${encodeURIComponent(spaceID)}/shares`)
-      .then(async r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json() as Promise<Share[]>
-      })
-      .then(setShares)
-      .catch(e => setErr(String(e)))
+    api.listShares(spaceID).then(setShares).catch(e => setErr(String(e)))
   }, [spaceID])
 
   useEffect(refresh, [refresh])
@@ -45,20 +31,11 @@ export function SharePanel({ spaceID }: Props) {
     setErr(null)
     setCreated(null)
     try {
-      const r = await fetch(`/api/admin/spaces/${encodeURIComponent(spaceID)}/shares`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          permission: perm,
-          label,
-          expires_in: expiresIn || undefined,
-        }),
+      const data = await api.createShare(spaceID, {
+        permission: perm,
+        label,
+        expires_in: expiresIn || undefined,
       })
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}))
-        throw new Error(j.error || `HTTP ${r.status}`)
-      }
-      const data: CreateResult = await r.json()
       setCreated(data)
       setLabel('')
       setExpiresIn('')
@@ -70,12 +47,12 @@ export function SharePanel({ spaceID }: Props) {
 
   async function onDelete(id: string) {
     if (!window.confirm(`Revoke share ${id}?`)) return
-    const r = await fetch(
-      `/api/admin/spaces/${encodeURIComponent(spaceID)}/shares/${encodeURIComponent(id)}`,
-      { method: 'DELETE' },
-    )
-    if (r.ok) refresh()
-    else setErr(`HTTP ${r.status}`)
+    try {
+      await api.deleteShare(spaceID, id)
+      refresh()
+    } catch (e) {
+      setErr(String(e))
+    }
   }
 
   function copy(text: string) {
