@@ -195,7 +195,32 @@ function alphaSiblings(hex: string): Record<string, string> {
   return out
 }
 
+/** WCAG-style relative luminance. Returns 0 (black) to 1 (white). */
+function luminance(hex: string): number {
+  const r = parseInt(hex.slice(1, 3), 16) / 255
+  const g = parseInt(hex.slice(3, 5), 16) / 255
+  const b = parseInt(hex.slice(5, 7), 16) / 255
+  const lin = (v: number) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+}
+
+/** Mix two hex colours by `ratio` (0 = all `a`, 1 = all `b`). Result hex. */
+function mix(a: string, b: string, ratio: number): string {
+  const pa = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16))
+  const pb = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16))
+  return '#' + pa.map((v, i) =>
+    Math.round(v * (1 - ratio) + pb[i] * ratio).toString(16).padStart(2, '0').toUpperCase(),
+  ).join('')
+}
+
 function paletteToVars(p: ModePalette): Record<string, string> {
+  // Auto-derive a "text on elevated surface" colour so that elements painted
+  // on bg-elevated (sidebar, header, modals, outline panel) stay legible
+  // even when the user picks a sidebar bg that's far away from their main
+  // text colour — e.g. dark sidebar in an otherwise light theme. WCAG
+  // relative luminance threshold picks black or white; the muted + border
+  // variants are mixed back toward the surface for subtlety.
+  const onElev = luminance(p.bgElevated) > 0.45 ? '#0A0A0A' : '#FAFAFA'
   return {
     '--notation-accent': p.accent,
     '--notation-bg': p.bg,
@@ -203,6 +228,9 @@ function paletteToVars(p: ModePalette): Record<string, string> {
     '--notation-fg': p.fg,
     '--notation-fg-muted': p.fgMuted,
     '--notation-border': p.border,
+    '--notation-fg-on-elevated': onElev,
+    '--notation-fg-on-elevated-muted': mix(onElev, p.bgElevated, 0.45),
+    '--notation-border-on-elevated': mix(onElev, p.bgElevated, 0.85),
     ...alphaSiblings(p.accent),
   }
 }

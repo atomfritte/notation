@@ -34,6 +34,11 @@
   --notation-fg: #18181B;
   --notation-fg-muted: #71717A;
   --notation-border: #E4E4E7;
+  /* Auto-derived "text on elevated surface" defaults — overwritten by
+     applyTheme. See `.surface-elevated` below for how these reach the DOM. */
+  --notation-fg-on-elevated: #18181B;
+  --notation-fg-on-elevated-muted: #71717A;
+  --notation-border-on-elevated: #E4E4E7;
   /* Code-block bg derived from the theme — pulled a bit darker than the
      elevated surface so hljs syntax colours (especially the pastel string
      greens / blues) have enough contrast to read. color-mix is supported
@@ -58,6 +63,9 @@
   --notation-fg: #E4E4E7;
   --notation-fg-muted: #A1A1AA;
   --notation-border: #27272A;
+  --notation-fg-on-elevated: #FAFAFA;
+  --notation-fg-on-elevated-muted: #A1A1AA;
+  --notation-border-on-elevated: #27272A;
   /* In dark mode the bg is already near-black, so use the page bg as the
      base and pull 35% blacker — that gives a true near-black code block
      with strong contrast against pastel hljs colours, even when the theme
@@ -137,10 +145,26 @@
        .dark scope — so the same class paints both modes correctly. */
     @apply h-full bg-[var(--notation-bg)] text-zinc-800 dark:text-zinc-300 transition-colors duration-200;
   }
-  body { 
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; 
+}
+
+/* Anything painted on `--notation-bg-elevated` (sidebar, header, modals,
+   outline panel, comments panel, …) should opt into this class. It
+   re-binds the three foreground / border tokens to their "on elevated"
+   variants, which `applyTheme` derives via WCAG luminance: dark bgElevated
+   → light text + subtle dark border, light bgElevated → the opposite.
+   Children read `var(--notation-fg)` etc. as before, so existing Tailwind
+   classes inside the surface keep working — they just resolve to the
+   contrast-correct token automatically. */
+.surface-elevated {
+  --notation-fg: var(--notation-fg-on-elevated);
+  --notation-fg-muted: var(--notation-fg-on-elevated-muted);
+  --notation-border: var(--notation-border-on-elevated);
+}
+
+@layer base {
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;

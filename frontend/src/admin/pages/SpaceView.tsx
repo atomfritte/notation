@@ -564,7 +564,7 @@ export function SpaceView() {
       )}
 
       <aside
-        className={`flex flex-col bg-[var(--notation-bg-elevated)] border-r border-[var(--notation-border)]
+        className={`surface-elevated flex flex-col bg-[var(--notation-bg-elevated)] border-r border-[var(--notation-border)]
           fixed inset-y-0 left-0 z-40 w-72
           md:static md:z-auto md:w-auto md:flex-shrink-0
           ${resizing ? '' : 'transition-transform md:transition-[width] duration-200 ease-in-out'}
@@ -742,7 +742,7 @@ export function SpaceView() {
             {uploadStatus}
           </div>
         )}
-        <header className="h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 bg-[color:var(--notation-bg-elevated)]/90 backdrop-blur-sm">
+        <header className="surface-elevated h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 bg-[color:var(--notation-bg-elevated)]/90 backdrop-blur-sm">
           <div className="flex items-center gap-2 overflow-hidden">
             {/* Single always-visible toggle for the left sidebar. The previous
                 "hover to reveal" close button was undiscoverable; one explicit
@@ -941,14 +941,14 @@ export function SpaceView() {
           </div>
 
           {showOutline && file && !editing && isMarkdownFile(file) && (
-            <div className="w-[240px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-4 duration-200 overflow-y-auto">
+            <div className="surface-elevated w-[240px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-4 duration-200 overflow-y-auto">
               <Outline content={content} />
               <BacklinksPanel spaceID={spaceID} path={file} onSelect={selectFile} />
             </div>
           )}
 
           {showComments && file && (
-            <div id="comments-panel" className="w-[320px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
+            <div id="comments-panel" className="surface-elevated w-[320px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
               <div className="p-3 border-b border-[var(--notation-border)] flex justify-between items-center bg-[var(--notation-bg-elevated)]">
                  <h3 className="font-semibold text-sm text-[var(--notation-fg)] flex items-center gap-2">
                     <MessageSquare size={16} /> Comments
