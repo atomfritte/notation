@@ -11,6 +11,7 @@ import rehypeHighlight from 'rehype-highlight'
 import { MessageSquare } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
+import { buildAutoFileLink } from '../lib/remarkAutoFileLink'
 import { Mermaid } from './Mermaid'
 import 'katex/dist/katex.min.css'
 // Load the light-mode hljs palette globally; dark-mode overrides live in
@@ -72,6 +73,12 @@ type Props = {
   /** Called when the user selects text in the viewer and clicks the "Comment"
    *  toolbar. Receives a text-quote selector payload. */
   onNewAnchorComment?: (anchor: AnchorPayload) => void
+  /** All paths in the Space — when present, prose mentions of any of these
+   *  filenames get a small `[File]` link badge appended next to them. */
+  files?: string[]
+  /** Path of the file currently being rendered — used by the auto-link plugin
+   *  to disambiguate same-basename matches by preferring the same directory. */
+  currentFile?: string
 }
 
 export function MarkdownView({
@@ -82,10 +89,19 @@ export function MarkdownView({
   onHoverMark,
   onSelectAnchor,
   onNewAnchorComment,
+  files,
+  currentFile,
 }: Props) {
   const location = useLocation()
   const scrollRef = useRef<HTMLDivElement>(null)
   const articleRef = useRef<HTMLElement>(null)
+  // Rebuild the auto-link plugin only when the underlying inputs change —
+  // its regex + index can be expensive for large Spaces, and we don't want
+  // to recompute on every keystroke-triggered re-render of the viewer.
+  const autoFileLinkPlugin = useMemo(() => {
+    if (!files || files.length === 0) return null
+    return buildAutoFileLink({ files, currentFile })
+  }, [files, currentFile])
   const [tool, setTool] = useState<{ x: number; y: number; anchor: AnchorPayload } | null>(null)
   const [hoverTip, setHoverTip] = useState<
     { x: number; y: number; comment: CommentLite } | null
@@ -253,7 +269,12 @@ export function MarkdownView({
     <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
       <article ref={articleRef} className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-4 md:p-8">
         <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]}
+          remarkPlugins={[
+            remarkGfm,
+            remarkMath,
+            remarkWikiLink,
+            ...(autoFileLinkPlugin ? [autoFileLinkPlugin] : []),
+          ]}
           rehypePlugins={[
             // Order matters: raw parses HTML into the AST, then sanitize
             // strips unsafe elements before downstream plugins see them.

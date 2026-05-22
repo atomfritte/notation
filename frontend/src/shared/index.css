@@ -227,6 +227,42 @@
   border-bottom-style: solid;
 }
 
+/* Auto-file-link: tiny pill the viewer injects next to prose mentions of
+   files that live elsewhere in the Space. The badge sits inline with the
+   sentence — small, muted by default, and lights up on hover. The `File`
+   text is set in the plugin (remarkAutoFileLink.ts). */
+.prose .auto-file-link {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0.2em;
+  padding: 0 0.4em;
+  font-size: 0.7em;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+  color: var(--notation-fg-muted);
+  background-color: var(--notation-bg-alt);
+  border: 1px solid var(--notation-border);
+  border-radius: 4px;
+  vertical-align: 0.1em;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.prose .auto-file-link::before {
+  content: "↗";
+  margin-right: 0.25em;
+  font-weight: 400;
+  font-size: 0.85em;
+  opacity: 0.6;
+}
+.prose .auto-file-link:hover {
+  color: var(--notation-accent);
+  background-color: var(--notation-accent-10);
+  border-color: var(--notation-accent-30);
+}
+.prose .auto-file-link:hover::before { opacity: 1; }
+
 /* Heading anchors stay clickable but the wrap doesn't override heading color */
 .prose h1 > a, .prose h2 > a, .prose h3 > a, .prose h4 > a, .prose h5 > a, .prose h6 > a {
   color: inherit;

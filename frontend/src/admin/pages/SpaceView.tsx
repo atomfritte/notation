@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette } from 'lucide-react'
+import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
@@ -20,9 +20,24 @@ import { FileViewer } from '../components/FileViewer'
 import { BacklinksPanel } from '../components/BacklinksPanel'
 import { HistoryView } from '../components/HistoryView'
 import { ThemePalette } from '../components/ThemePalette'
+import { HelpPanel } from '../components/HelpPanel'
 import { getHeaderStyle, HEADER_STYLE_EVENT, type HeaderStyle } from '../lib/theme'
 import { SidebarTabs, type SidebarTabKey } from '../components/SidebarTabs'
 import { AllCommentsPanel } from '../components/AllCommentsPanel'
+
+// Returns true when the keydown target is an element where the user is
+// composing text — keeps single-key shortcuts like "?" from intercepting
+// real keystrokes inside the editor / a comment textarea / a search box.
+function isTypingTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false
+  const tag = t.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  if (t.isContentEditable) return true
+  // Monaco renders its caret inside .monaco-editor; treat any descendant as
+  // a typing context so editor shortcuts win the conflict.
+  if (t.closest('.monaco-editor')) return true
+  return false
+}
 
 export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
@@ -73,6 +88,7 @@ export function SpaceView() {
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [historyMode, setHistoryMode] = useState(false)
   const [themeOpen, setThemeOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   // Mirror the header-style preference into local state so the header
   // re-renders when ThemePalette toggles it. The dispatched custom event
   // carries the new value as detail.
@@ -534,6 +550,12 @@ export function SpaceView() {
         e.preventDefault()
         setSearchOpen(true)
       }
+      // `?` opens the shortcut help. Guarded so it doesn't fire while typing
+      // inside the editor, comment textarea, or any other text-input element.
+      if (!mod && !e.altKey && e.key === '?' && !isTypingTarget(e.target)) {
+        e.preventDefault()
+        setHelpOpen(true)
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -545,18 +567,23 @@ export function SpaceView() {
   const displayTitle = file.split('/').pop()?.replace(/\.md$/i, '') || ''
   const pathParts = file ? file.split('/') : []
 
-  const flattenTree = (entries: api.Entry[]): string[] => {
+  // Markdown-only list drives the "Jump to page" palette + the wiki-link
+  // picker — both are page-oriented and would only confuse users by listing
+  // images / PDFs. The full list (below) feeds the auto-link plugin so any
+  // file in the Space gets a sidecar `[File]` badge when mentioned in prose.
+  const flattenTree = (entries: api.Entry[], onlyMd = true): string[] => {
     let result: string[] = []
     for (const e of entries) {
       if (e.is_dir && e.children) {
-        result = result.concat(flattenTree(e.children))
-      } else if (!e.is_dir && e.name.endsWith('.md')) {
-        result.push(e.path)
+        result = result.concat(flattenTree(e.children, onlyMd))
+      } else if (!e.is_dir) {
+        if (!onlyMd || e.name.endsWith('.md')) result.push(e.path)
       }
     }
     return result
   }
   const allFiles = flattenTree(tree)
+  const allFilesAny = flattenTree(tree, false)
 
   return (
     <div className="flex h-screen bg-[var(--notation-bg)] text-[var(--notation-fg)] font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
@@ -840,6 +867,15 @@ export function SpaceView() {
               </button>
 
               <button
+                onClick={() => setHelpOpen(true)}
+                className="p-1.5 rounded-md transition-colors text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]"
+                title="Keyboard shortcuts (?)"
+                aria-label="Keyboard shortcuts"
+              >
+                <HelpCircle size={18} />
+              </button>
+
+              <button
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                 className="p-1.5 rounded-md transition-colors text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]"
                 title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
@@ -936,6 +972,8 @@ export function SpaceView() {
                           setActiveCommentId(id)
                         }}
                         onNewAnchorComment={onNewAnchorComment}
+                        files={allFilesAny}
+                        currentFile={file}
                       />
                     ) : (
                       <FileViewer spaceID={spaceID} path={file} content={content} theme={theme} />
@@ -1012,6 +1050,7 @@ export function SpaceView() {
         onSelect={(p) => selectFile(p)}
         onSearch={(q) => api.searchSpace(spaceID, q)}
       />
+      <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} scope="admin" />
     </div>
   )
 }
