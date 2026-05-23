@@ -39,8 +39,9 @@ var inlineSafeMimes = map[string]bool{
 	"image/webp": true,
 	"image/avif": true,
 	"image/bmp":  true,
-	// PDFs render in a browser plugin (or built-in viewer); CSP frame-
-	// ancestors 'none' prevents embedding our pages in other origins.
+	// PDFs render inline in the built-in browser viewer; the SPA embeds
+	// them via a same-origin <iframe> (CSP frame-ancestors 'self' allows
+	// our own pages to frame them, while refusing cross-origin framing).
 	"application/pdf": true,
 	// Audio (browser media decoder)
 	"audio/mpeg": true,
