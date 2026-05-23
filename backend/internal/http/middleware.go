@@ -52,6 +52,12 @@ func redactSensitive(p, sharePrefix, mcpPrefix string) string {
 // run without `'unsafe-eval'`. `style-src 'unsafe-inline'` is required by
 // Tailwind / Mermaid / many React libs that inject inline styles. If we
 // ever drop those, tighten this further.
+//
+// `frame-ancestors 'self'` (not 'none') lets the SPA embed its own
+// same-origin resources — the PDF viewer renders uploads in an <iframe>
+// pointing at the file endpoint. Cross-origin framing is still refused, so
+// clickjacking protection is intact. `X-Frame-Options: SAMEORIGIN` mirrors
+// this for legacy browsers that ignore frame-ancestors.
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self' 'wasm-unsafe-eval'; " +
 	"style-src 'self' 'unsafe-inline'; " +
@@ -60,7 +66,8 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"connect-src 'self'; " +
 	"media-src 'self' blob:; " +
 	"worker-src 'self' blob:; " +
-	"frame-ancestors 'none'; " +
+	"frame-src 'self'; " +
+	"frame-ancestors 'self'; " +
 	"base-uri 'self'; " +
 	"form-action 'self'; " +
 	"object-src 'none'"
@@ -70,7 +77,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Frame-Options", "SAMEORIGIN")
 		h.Set("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
 		h.Set("Content-Security-Policy", contentSecurityPolicy)
 		next.ServeHTTP(w, r)

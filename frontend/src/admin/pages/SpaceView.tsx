@@ -79,6 +79,7 @@ export function SpaceView() {
     localStorage.setItem('notation_sidebar_width', String(sidebarWidth))
   }, [sidebarWidth])
   const mainScrollRef = useRef<HTMLDivElement>(null)
+  const sidebarScrollRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
   const [sidebarTab, setSidebarTab] = useState<SidebarTabKey>('files')
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -205,6 +206,55 @@ export function SpaceView() {
     document.body.style.userSelect = 'none'
   }
 
+  // ---------- Drag auto-scroll for the file tree ----------
+  // HTML5 drag-and-drop never scrolls the container on its own, so a folder
+  // below the fold can't be reached as a drop target. We watch the pointer
+  // during any drag and, when it nears the top/bottom edge of the sidebar's
+  // scroll area, nudge scrollTop via a rAF loop. The loop keeps running while
+  // the cursor is held still at the edge — `dragover` alone wouldn't fire
+  // then, so plain event-driven scrolling would stall.
+  useEffect(() => {
+    const EDGE = 48        // px from edge where scrolling kicks in
+    const MAX_SPEED = 16   // px per frame at the very edge
+    let pointerY = 0
+    let dragging = false
+    let raf = 0
+
+    function step() {
+      const el = sidebarScrollRef.current
+      if (!dragging || !el) { raf = 0; return }
+      const rect = el.getBoundingClientRect()
+      let dy = 0
+      if (pointerY < rect.top + EDGE) {
+        dy = -MAX_SPEED * Math.min(1, (rect.top + EDGE - pointerY) / EDGE)
+      } else if (pointerY > rect.bottom - EDGE) {
+        dy = MAX_SPEED * Math.min(1, (pointerY - (rect.bottom - EDGE)) / EDGE)
+      }
+      if (dy !== 0) el.scrollTop += dy
+      raf = requestAnimationFrame(step)
+    }
+    function onDragOver(e: DragEvent) {
+      pointerY = e.clientY
+      if (!dragging) {
+        dragging = true
+        if (!raf) raf = requestAnimationFrame(step)
+      }
+    }
+    function stop() {
+      dragging = false
+      if (raf) { cancelAnimationFrame(raf); raf = 0 }
+    }
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('drop', stop)
+    window.addEventListener('dragend', stop)
+    return () => {
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('drop', stop)
+      window.removeEventListener('dragend', stop)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [])
+
   // --- Callbacks (Declared first to avoid use-before-declaration) ---
 
   const refreshTree = useCallback(() => {
@@ -323,6 +373,16 @@ export function SpaceView() {
     refreshTree()
   }, [spaceID, refreshTree])
 
+  // Hidden input reused by the "Upload here" context-menu action. The target
+  // directory is stashed on a ref (not state) so the picker opens against the
+  // exact folder that was right-clicked, with no re-render in between.
+  const folderUploadInputRef = useRef<HTMLInputElement>(null)
+  const folderUploadDirRef = useRef<string>('')
+  const promptUploadInto = useCallback((dir: string) => {
+    folderUploadDirRef.current = dir
+    folderUploadInputRef.current?.click()
+  }, [])
+
   // ---------- Context-menu builders ----------
 
   const handleFileContextMenu = useCallback((e: React.MouseEvent, path: string, isDir: boolean) => {
@@ -332,6 +392,7 @@ export function SpaceView() {
       ? [
           { label: 'New page in here',   icon: <FilePlus size={14} />,   onClick: () => createFileIn(path) },
           { label: 'New folder in here', icon: <FolderPlus size={14} />, onClick: () => createFolderIn(path) },
+          { label: 'Upload here',        icon: <Upload size={14} />,     onClick: () => promptUploadInto(path) },
           { label: 'Rename',             icon: <Edit2 size={14} />,      onClick: () => renamePath(path) },
           { label: 'Copy path',          icon: <Copy size={14} />,       onClick: () => copyPathToClipboard(path) },
           { label: 'Delete folder',      icon: <Trash size={14} />, danger: true, onClick: () => deletePath(path, true) },
@@ -345,7 +406,7 @@ export function SpaceView() {
           { label: 'Delete',             icon: <Trash size={14} />, danger: true, onClick: () => deletePath(path, false) },
         ]
     setCtxMenu({ x: e.clientX, y: e.clientY, items })
-  }, [setSearchParams, createFileIn, createFolderIn, renamePath, duplicatePath, copyPathToClipboard, deletePath])
+  }, [setSearchParams, createFileIn, createFolderIn, promptUploadInto, renamePath, duplicatePath, copyPathToClipboard, deletePath])
 
   const handleTreeBackgroundContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -356,9 +417,10 @@ export function SpaceView() {
       items: [
         { label: 'New page',   icon: <FilePlus size={14} />,   onClick: () => createFileIn('') },
         { label: 'New folder', icon: <FolderPlus size={14} />, onClick: () => createFolderIn('') },
+        { label: 'Upload here', icon: <Upload size={14} />,    onClick: () => promptUploadInto('') },
       ],
     })
-  }, [createFileIn, createFolderIn])
+  }, [createFileIn, createFolderIn, promptUploadInto])
 
   const handleBookmarkContextMenu = useCallback((e: React.MouseEvent, path: string) => {
     e.preventDefault()
@@ -656,7 +718,7 @@ export function SpaceView() {
             {sidebarTab === 'audit' && 'Activity'}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-2 pb-4 no-scrollbar">
+          <div ref={sidebarScrollRef} className="flex-1 overflow-y-auto px-2 pb-4 no-scrollbar">
             {sidebarTab === 'files' && (
               <FileTree
                 entries={tree}
@@ -715,6 +777,13 @@ export function SpaceView() {
               <Plus size={16} /> New Page
             </button>
             <button
+              onClick={() => createFolderIn('')}
+              title="New top-level folder"
+              className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
+            >
+              <FolderPlus size={16} />
+            </button>
+            <button
               onClick={() => uploadInputRef.current?.click()}
               title="Upload files (or drag-drop anywhere)"
               className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
@@ -728,6 +797,17 @@ export function SpaceView() {
               className="hidden"
               onChange={async e => {
                 await uploadFiles(Array.from(e.target.files ?? []))
+                e.target.value = ''
+              }}
+            />
+            <input
+              ref={folderUploadInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={async e => {
+                const files = e.target.files
+                if (files && files.length > 0) await uploadInto(files, folderUploadDirRef.current)
                 e.target.value = ''
               }}
             />
