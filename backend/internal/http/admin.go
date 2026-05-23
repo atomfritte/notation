@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/yoogie27/notation/internal/auth"
 	"github.com/yoogie27/notation/internal/config"
@@ -121,6 +123,29 @@ func (h *adminHandlers) getTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, entries)
+}
+
+// exportSpace streams the whole Space as a ZIP download. The space is
+// validated before any bytes go out so a missing/invalid id returns a clean
+// 404/400; once WriteZip starts streaming we can only log a mid-walk error.
+func (h *adminHandlers) exportSpace(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+escapeFilename(id)+`.zip"`)
+	if err := h.store.WriteZip(id, w); err != nil {
+		// Status/headers are already flushed by the first archive write, so we
+		// can't change the response code — log so the truncated download is
+		// diagnosable server-side.
+		slog.Default().Error("api internal error",
+			"action", "spaces.export", "space", id, "error", err.Error(),
+			"req_id", chimw.GetReqID(r.Context()))
+	}
 }
 
 func (h *adminHandlers) getFile(w http.ResponseWriter, r *http.Request) {

@@ -131,6 +131,31 @@ export const writeFileBinary = async (id: string, path: string, blob: Blob): Pro
 export const fileURL = (id: string, path: string) =>
   `/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`
 
+/** Direct URL for the whole-Space ZIP export (attachment download). */
+export const exportURL = (id: string) =>
+  `/api/admin/spaces/${encodeURIComponent(id)}/export`
+
+// Trigger a browser download via a synthetic <a download>. Works for any
+// same-origin file even when the endpoint serves it inline (PDF/image), since
+// the download attribute overrides the inline Content-Disposition. The session
+// cookie rides along automatically on the GET.
+function triggerDownload(href: string, filename: string) {
+  const a = document.createElement('a')
+  a.href = href
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+/** Download a single file from the Space. */
+export const downloadFile = (id: string, path: string) =>
+  triggerDownload(fileURL(id, path), path.split('/').pop() || 'download')
+
+/** Download the whole Space as a ZIP archive. */
+export const downloadSpaceZip = (id: string) =>
+  triggerDownload(exportURL(id), `${id}.zip`)
+
 export const deleteFile = (id: string, path: string) =>
   fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`, {
     method: 'DELETE',

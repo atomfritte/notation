@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle } from 'lucide-react'
+import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
@@ -400,13 +400,14 @@ export function SpaceView() {
       : [
           { label: 'Open',               icon: <FileText size={14} />,   onClick: () => setSearchParams({ file: path }) },
           { label: 'Open in new tab',    icon: <ExternalLink size={14} />, onClick: () => window.open(`${window.location.pathname}?file=${encodeURIComponent(path)}`, '_blank', 'noopener') },
+          { label: 'Download',           icon: <Download size={14} />,   onClick: () => api.downloadFile(spaceID, path) },
           { label: 'Rename',             icon: <Edit2 size={14} />,      onClick: () => renamePath(path) },
           { label: 'Duplicate',          icon: <Files size={14} />,      onClick: () => duplicatePath(path) },
           { label: 'Copy path',          icon: <Copy size={14} />,       onClick: () => copyPathToClipboard(path) },
           { label: 'Delete',             icon: <Trash size={14} />, danger: true, onClick: () => deletePath(path, false) },
         ]
     setCtxMenu({ x: e.clientX, y: e.clientY, items })
-  }, [setSearchParams, createFileIn, createFolderIn, promptUploadInto, renamePath, duplicatePath, copyPathToClipboard, deletePath])
+  }, [spaceID, setSearchParams, createFileIn, createFolderIn, promptUploadInto, renamePath, duplicatePath, copyPathToClipboard, deletePath])
 
   const handleTreeBackgroundContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -418,9 +419,10 @@ export function SpaceView() {
         { label: 'New page',   icon: <FilePlus size={14} />,   onClick: () => createFileIn('') },
         { label: 'New folder', icon: <FolderPlus size={14} />, onClick: () => createFolderIn('') },
         { label: 'Upload here', icon: <Upload size={14} />,    onClick: () => promptUploadInto('') },
+        { label: 'Download all (ZIP)', icon: <Archive size={14} />, onClick: () => api.downloadSpaceZip(spaceID) },
       ],
     })
-  }, [createFileIn, createFolderIn, promptUploadInto])
+  }, [spaceID, createFileIn, createFolderIn, promptUploadInto])
 
   const handleBookmarkContextMenu = useCallback((e: React.MouseEvent, path: string) => {
     e.preventDefault()
@@ -790,6 +792,13 @@ export function SpaceView() {
             >
               <Upload size={16} />
             </button>
+            <button
+              onClick={() => api.downloadSpaceZip(spaceID)}
+              title="Download whole Space as ZIP"
+              className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
+            >
+              <Archive size={16} />
+            </button>
             <input
               ref={uploadInputRef}
               type="file"
@@ -1000,12 +1009,12 @@ export function SpaceView() {
               // want the natural-flow content with bottom padding instead.
               <div
                 className={
-                  editing
+                  editing || !isMarkdownFile(file)
                     ? 'absolute inset-0 flex flex-col animate-in fade-in duration-300'
                     : 'pb-32 animate-in fade-in duration-300'
                 }
               >
-                {!editing && !content.startsWith('# ') && (
+                {!editing && isMarkdownFile(file) && !content.startsWith('# ') && (
                    <div className="max-w-3xl mx-auto px-8 pt-12 pb-4">
                       <h1 className="text-4xl font-bold text-[var(--notation-fg)] tracking-tight">{displayTitle}</h1>
                    </div>
@@ -1042,7 +1051,7 @@ export function SpaceView() {
                     />
                   </Suspense>
                 ) : (
-                  <div className={isMarkdownFile(file) && content.startsWith('# ') ? 'pt-8' : 'pt-0'}>
+                  <div className={isMarkdownFile(file) ? (content.startsWith('# ') ? 'pt-8' : 'pt-0') : 'flex-1 flex flex-col min-h-0'}>
                     {isMarkdownFile(file) ? (
                       <MarkdownView
                         content={content}
