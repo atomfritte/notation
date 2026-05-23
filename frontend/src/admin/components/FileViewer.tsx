@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
-import { Download, FileQuestion } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Download, FileQuestion, Maximize2, Minimize2 } from 'lucide-react'
 import * as api from '../lib/api'
 import {
   isMarkdownFile,
@@ -107,12 +107,42 @@ function ImageView({ url, path }: { url: string; path: string }) {
 }
 
 function PDFView({ url, path }: { url: string; path: string }) {
+  // Fullscreen toggles the wrapper (toolbar + iframe), so the controls stay
+  // reachable while the PDF fills the screen. We track the actual fullscreen
+  // element rather than a local boolean so the Esc-key exit (browser-driven)
+  // keeps the button icon in sync.
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [isFull, setIsFull] = useState(false)
+  useEffect(() => {
+    const onChange = () => setIsFull(document.fullscreenElement === wrapRef.current)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void wrapRef.current?.requestFullscreen()
+  }
+
+  const filename = path.split('/').pop() ?? path
+  const btn = 'p-1.5 rounded-md transition-colors text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'
+
   return (
-    <iframe
-      src={url}
-      title={path}
-      className="flex-1 w-full border-0 bg-[var(--notation-bg-alt)] bg-[var(--notation-bg-elevated)]"
-    />
+    <div ref={wrapRef} className="flex-1 flex flex-col min-h-0 bg-[var(--notation-bg-elevated)]">
+      <div className="flex items-center justify-end gap-1 px-2 py-1 border-b border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex-shrink-0">
+        <a href={url} download={filename} className={btn} title="Download PDF">
+          <Download size={16} />
+        </a>
+        <button onClick={toggleFullscreen} className={btn} title={isFull ? 'Exit fullscreen (Esc)' : 'Fullscreen'}>
+          {isFull ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+        </button>
+      </div>
+      <iframe
+        src={url}
+        title={path}
+        className="flex-1 w-full border-0 bg-[var(--notation-bg-alt)] bg-[var(--notation-bg-elevated)]"
+      />
+    </div>
   )
 }
 

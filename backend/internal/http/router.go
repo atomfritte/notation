@@ -139,6 +139,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 			sr.Get("/", ahdmin.getSpace)
 			sr.Delete("/", ahdmin.deleteSpace)
 			sr.Get("/tree", ahdmin.getTree)
+			sr.Get("/export", ahdmin.exportSpace)
 			sr.Post("/mkdir", ahdmin.mkdir)
 			sr.Get("/file/*", ahdmin.getFile)
 			sr.Put("/file/*", ahdmin.putFile)
