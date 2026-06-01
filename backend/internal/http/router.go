@@ -62,6 +62,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 			api.Get("/{token}/tree", sh.getTree)
 			api.Get("/{token}/file/*", sh.getFile)
 			api.Put("/{token}/file/*", sh.putFile)
+			api.Get("/{token}/all-comments", sh.listAllComments)
 			api.Get("/{token}/comments/*", sh.listComments)
 			api.Post("/{token}/comments/*", sh.postComment)
 			api.Get("/{token}/search", sh.searchSpace)

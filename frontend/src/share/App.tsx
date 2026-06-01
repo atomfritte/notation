@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import {
   PanelLeft, List, MessageSquare, Search, Printer, Sun, Moon, Palette,
-  Bookmark, FileText, Folder, HelpCircle,
+  Bookmark, FileText, Folder, HelpCircle, Menu, X, Check,
 } from 'lucide-react'
 import * as api from './lib/api'
+import { ShareCommentsPanel } from './ShareCommentsPanel'
 import { FileTree } from '../admin/components/FileTree'
 import { FileViewer } from '../admin/components/FileViewer'
 import { MarkdownView, stripMdExt } from '../admin/components/MarkdownView'
@@ -25,6 +26,9 @@ function ShareUI() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [comments, setComments] = useState<api.Comment[]>([])
+  // Every comment in the Space — powers the sidebar "Comments" tab + its badge
+  // (only fetched for shares that allow commenting).
+  const [allComments, setAllComments] = useState<api.Comment[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const file = searchParams.get('file') ?? ''
@@ -33,6 +37,8 @@ function ShareUI() {
   // enabled — show the bare minimum (file tree + viewer) and reveal the
   // rich affordances as soon as we know.
   const features = info?.features
+  const canEdit = info?.permission === 'edit'
+  const canComment = info?.permission === 'comment' || info?.permission === 'edit'
 
   // Theme: we still seed from prefers-color-scheme but only allow the user
   // to override it when features.theme is on. initTheme() repaints the
@@ -97,7 +103,22 @@ function ShareUI() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [themeOpen, setThemeOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [sidebarTab, setSidebarTab] = useState<'files' | 'bookmarks'>('files')
+  const [sidebarTab, setSidebarTab] = useState<'files' | 'bookmarks' | 'comments'>('files')
+
+  // Responsive header: when the action icons can't fit, collapse them into a
+  // single overflow ("hamburger") menu. We watch the header's width and switch
+  // once the icons would need more room than is available.
+  const headerRef = useRef<HTMLElement>(null)
+  const [headerWidth, setHeaderWidth] = useState(0)
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) setHeaderWidth(e.contentRect.width)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [file])
 
   // Comment coordination — viewer ↔ thread
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
@@ -154,6 +175,12 @@ function ShareUI() {
     if (!file) { setComments([]); return }
     api.listComments(file).then(setComments).catch(() => setComments([]))
   }, [file])
+
+  const refreshAllComments = useCallback(() => {
+    if (!canComment) { setAllComments([]); return }
+    api.listAllComments().then(setAllComments).catch(() => setAllComments([]))
+  }, [canComment])
+  useEffect(() => { refreshAllComments() }, [refreshAllComments])
 
   useEffect(() => {
     // Each navigation is a fresh attempt — drop any stale error from the
@@ -283,6 +310,7 @@ function ShareUI() {
     const wasAnchored = !!anchor && !opts?.parentID
     setPendingAnchor(null)
     refreshComments()
+    refreshAllComments()
     if (wasAnchored && openedBySelectionRef.current) setShowComments(false)
     if (wasAnchored) openedBySelectionRef.current = false
   }
@@ -306,8 +334,40 @@ function ShareUI() {
   }
   if (!info) return <div className="p-8 text-[var(--notation-fg-muted)]">loading…</div>
 
-  const canEdit = info.permission === 'edit'
-  const canComment = info.permission === 'comment' || info.permission === 'edit'
+  // Sidebar tabs a guest gets: Pages always, plus Comments (if they can
+  // comment) and Bookmarks (if enabled) — with live badge counts, like admin.
+  const sidebarTabs: { key: 'files' | 'comments' | 'bookmarks'; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { key: 'files', label: 'Pages', icon: <Folder size={13} /> },
+  ]
+  if (canComment) sidebarTabs.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={13} />, badge: allComments.length })
+  if (features?.bookmarks) sidebarTabs.push({ key: 'bookmarks', label: 'Bookmarks', icon: <Bookmark size={13} />, badge: bookmarks.length })
+
+  // Open a page from the Comments tab, focusing the clicked comment.
+  const openComment = (path: string, commentID?: string) => {
+    select(path)
+    if (commentID) {
+      setActiveCommentId(commentID)
+      if (canComment) { openedBySelectionRef.current = false; setShowComments(true) }
+    }
+  }
+
+  // The header's icon actions — a single list that drives both the inline
+  // buttons and the overflow menu, so they never drift apart.
+  const headerActions: HeaderAction[] = []
+  if (features?.search) headerActions.push({ key: 'search', label: 'Search', icon: <Search size={16} />, onClick: () => setSearchOpen(true) })
+  if (features?.outline && !isMobile && isMarkdownFile(file)) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={16} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
+  if (canComment) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={16} />, active: showComments, badge: comments.length, onClick: () => { openedBySelectionRef.current = false; setShowComments(v => !v) } })
+  if (features?.bookmarks) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove bookmark' : 'Bookmark this page', icon: <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />, active: !!isBookmarked, onClick: () => toggleBookmark(file) })
+  if (features?.print && isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={16} />, onClick: () => window.print() })
+  if (features?.theme) headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={16} />, onClick: () => setThemeOpen(true) })
+  if (features?.theme) headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
+  headerActions.push({ key: 'help', label: 'Keyboard shortcuts', icon: <HelpCircle size={16} />, onClick: () => setHelpOpen(true) })
+
+  // Collapse to the hamburger when the icons (~34px each) would crowd the title
+  // or the Edit button. Before the first measurement, fall back to isMobile.
+  const editVisible = canEdit && isTextFile(file)
+  const reservedW = 40 /* sidebar toggle */ + 72 /* title min */ + (editVisible ? 76 : 0)
+  const compactHeader = headerWidth === 0 ? isMobile : headerActions.length * 34 > headerWidth - reservedW
 
   return (
     <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
@@ -357,37 +417,32 @@ function ShareUI() {
           </p>
         </div>
 
-        {/* Tab row only appears when bookmarks are on — otherwise the
-            sidebar is files-only. */}
-        {features?.bookmarks && (
+        {/* Tab row appears once there's more than just Pages (comments and/or
+            bookmarks), giving guests the same Pages / Comments / Bookmarks
+            navigation the admin has, with badges. */}
+        {sidebarTabs.length > 1 && (
           <div className="px-3 mt-3 flex gap-1">
-            <button
-              onClick={() => setSidebarTab('files')}
-              className={
-                'flex-1 px-2 py-1.5 text-xs font-medium rounded-md flex items-center justify-center gap-1.5 transition-colors ' +
-                (sidebarTab === 'files'
-                  ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]'
-                  : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)]')
-              }
-            >
-              <Folder size={13} /> Pages
-            </button>
-            <button
-              onClick={() => setSidebarTab('bookmarks')}
-              className={
-                'flex-1 px-2 py-1.5 text-xs font-medium rounded-md flex items-center justify-center gap-1.5 transition-colors ' +
-                (sidebarTab === 'bookmarks'
-                  ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]'
-                  : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)]')
-              }
-            >
-              <Bookmark size={13} /> Bookmarks
-              {bookmarks.length > 0 && (
-                <span className="text-[9px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full">
-                  {bookmarks.length}
-                </span>
-              )}
-            </button>
+            {sidebarTabs.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setSidebarTab(t.key)}
+                className={
+                  'flex-1 min-w-0 px-2 py-1.5 text-xs font-medium rounded-md flex items-center justify-center gap-1.5 transition-colors ' +
+                  (sidebarTab === t.key
+                    ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]'
+                    : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)]')
+                }
+                title={t.label}
+              >
+                {t.icon}
+                <span className="truncate">{t.label}</span>
+                {t.badge ? (
+                  <span className="text-[9px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full flex-shrink-0">
+                    {t.badge}
+                  </span>
+                ) : null}
+              </button>
+            ))}
           </div>
         )}
 
@@ -398,6 +453,13 @@ function ShareUI() {
               current={file}
               onSelect={select}
               collapseStorageKey={`notation_share_tree_collapsed_${info.space.id}`}
+            />
+          )}
+          {canComment && sidebarTab === 'comments' && (
+            <ShareCommentsPanel
+              comments={allComments}
+              currentFile={file}
+              onSelect={openComment}
             />
           )}
           {features?.bookmarks && sidebarTab === 'bookmarks' && (
@@ -446,7 +508,7 @@ function ShareUI() {
       <main className="flex-1 flex flex-col min-w-0">
         {file ? (
           <>
-            <header className="surface-elevated h-12 flex justify-between items-center px-4 border-b border-[var(--notation-border)] flex-shrink-0 text-sm gap-2 bg-[color:var(--notation-bg-elevated)]/90 backdrop-blur-sm">
+            <header ref={headerRef} className="surface-elevated h-12 flex justify-between items-center px-4 border-b border-[var(--notation-border)] flex-shrink-0 text-sm gap-2 bg-[color:var(--notation-bg-elevated)]/90 backdrop-blur-sm">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <button
                   onClick={() => setSidebarOpen(v => !v)}
@@ -458,64 +520,11 @@ function ShareUI() {
                 <span className="text-[var(--notation-fg-muted)] truncate" title={stripMdExt(file)}>{stripMdExt(file)}</span>
               </div>
 
-              <div className="flex items-center gap-1">
-                {features?.search && (
-                  <HeaderBtn title="Search (⌘⇧F)" onClick={() => setSearchOpen(true)}>
-                    <Search size={16} />
-                  </HeaderBtn>
-                )}
-                {features?.outline && !isMobile && isMarkdownFile(file) && (
-                  <HeaderBtn
-                    title="Outline"
-                    active={showOutline}
-                    onClick={() => setShowOutline(v => !v)}
-                  >
-                    <List size={16} />
-                  </HeaderBtn>
-                )}
-                {canComment && (
-                  <HeaderBtn
-                    title="Comments"
-                    active={showComments}
-                    onClick={() => { openedBySelectionRef.current = false; setShowComments(v => !v) }}
-                  >
-                    <MessageSquare size={16} />
-                    {comments.length > 0 && (
-                      <span className="ml-1 text-[10px] font-bold">{comments.length}</span>
-                    )}
-                  </HeaderBtn>
-                )}
-                {features?.bookmarks && (
-                  <HeaderBtn
-                    title={isBookmarked ? 'Remove bookmark' : 'Bookmark this page'}
-                    active={!!isBookmarked}
-                    onClick={() => toggleBookmark(file)}
-                  >
-                    <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />
-                  </HeaderBtn>
-                )}
-                {features?.print && isMarkdownFile(file) && !editing && (
-                  <HeaderBtn title="Print this page" onClick={() => window.print()}>
-                    <Printer size={16} />
-                  </HeaderBtn>
-                )}
-                {features?.theme && (
-                  <HeaderBtn title="Accent colour" onClick={() => setThemeOpen(true)}>
-                    <Palette size={16} />
-                  </HeaderBtn>
-                )}
-                {features?.theme && (
-                  <HeaderBtn
-                    title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
-                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                  >
-                    {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                  </HeaderBtn>
-                )}
-                <HeaderBtn title="Keyboard shortcuts (?)" onClick={() => setHelpOpen(true)}>
-                  <HelpCircle size={16} />
-                </HeaderBtn>
-                {canEdit && isTextFile(file) && (
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {compactHeader
+                  ? <HeaderOverflowMenu actions={headerActions} />
+                  : headerActions.map(a => <HeaderActionBtn key={a.key} action={a} />)}
+                {editVisible && (
                   <button
                     onClick={() => setEditing(v => !v)}
                     className={
@@ -582,6 +591,18 @@ function ShareUI() {
                     id="share-comments-panel"
                     className="border-t border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] max-h-80 overflow-y-auto no-print"
                   >
+                    <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 border-b border-[var(--notation-border)] bg-[var(--notation-bg-elevated)]">
+                      <span className="text-sm font-semibold text-[var(--notation-fg)] flex items-center gap-2">
+                        <MessageSquare size={14} /> Comments
+                      </span>
+                      <button
+                        onClick={() => { setShowComments(false); openedBySelectionRef.current = false; setPendingAnchor(null); setPendingComment('') }}
+                        className="text-xs text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] flex items-center gap-1 px-1.5 py-0.5 rounded-md hover:bg-[var(--notation-border)]"
+                        aria-label="Close comments"
+                      >
+                        <X size={14} /> Cancel
+                      </button>
+                    </div>
                     {pendingAnchor && (
                       <div className="px-4 pt-3 text-xs">
                         <div className="text-[var(--notation-warning)] dark:text-[var(--notation-warning)] font-semibold mb-1">Anchoring to selection</div>
@@ -704,6 +725,76 @@ function HeaderBtn({
     >
       {children}
     </button>
+  )
+}
+
+type HeaderAction = {
+  key: string
+  label: string
+  icon: React.ReactNode
+  onClick: () => void
+  active?: boolean
+  badge?: number
+}
+
+// A single header action rendered inline (icon + optional count badge).
+function HeaderActionBtn({ action }: { action: HeaderAction }) {
+  return (
+    <HeaderBtn title={action.label} active={action.active} onClick={action.onClick}>
+      {action.icon}
+      {action.badge ? <span className="ml-1 text-[10px] font-bold">{action.badge}</span> : null}
+    </HeaderBtn>
+  )
+}
+
+// Hamburger menu that holds every header action when they don't fit inline.
+function HeaderOverflowMenu({ actions }: { actions: HeaderAction[] }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey) }
+  }, [open])
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        title="More"
+        aria-label="More actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="p-1.5 rounded-md transition-colors flex items-center text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-border)]"
+      >
+        <Menu size={18} />
+      </button>
+      {open && (
+        <div role="menu" className="surface-elevated absolute right-0 top-full mt-1 min-w-[210px] bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-md shadow-xl py-1 z-50">
+          {actions.map(a => (
+            <button
+              key={a.key}
+              role="menuitem"
+              onClick={() => { a.onClick(); setOpen(false) }}
+              className={
+                'w-full flex items-center gap-2.5 px-3 py-1.5 text-sm transition-colors hover:bg-[var(--notation-border)] ' +
+                (a.active ? 'text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg)]')
+              }
+            >
+              <span className="flex-shrink-0 flex items-center">{a.icon}</span>
+              <span className="flex-1 text-left truncate">{a.label}</span>
+              {a.badge ? (
+                <span className="text-[10px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full">{a.badge}</span>
+              ) : a.active ? (
+                <Check size={14} className="text-[color:var(--notation-accent)] flex-shrink-0" />
+              ) : null}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

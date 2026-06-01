@@ -107,6 +107,14 @@ export async function listComments(path: string): Promise<Comment[]> {
   return r.json()
 }
 
+/** Every comment in the Space (for the sidebar "Comments" tab). Gated
+ *  server-side on comment permission; read-only shares get a 403. */
+export async function listAllComments(): Promise<Comment[]> {
+  const r = await fetch(`${API}/all-comments`)
+  if (!r.ok) throw await asError(r)
+  return r.json()
+}
+
 export async function postComment(
   path: string,
   text: string,

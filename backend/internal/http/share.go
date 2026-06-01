@@ -226,6 +226,31 @@ func (h *shareHandlers) postComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, c)
 }
 
+// listAllComments returns every comment in the Space so a share guest can
+// browse them grouped by page (the sidebar "Comments" tab), mirroring the
+// admin all-comments view. Gated on comment permission — a read-only share
+// doesn't expose the comment overview.
+func (h *shareHandlers) listAllComments(w http.ResponseWriter, r *http.Request) {
+	spaceID, sh, err := h.resolve(r)
+	if err != nil {
+		writeShareError(w, err)
+		return
+	}
+	if !sh.Permission.AllowsComment() {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	list, err := h.comments.ListAll(spaceID)
+	if err != nil {
+		writeInternal(w, r, "share.comments.list_all", err)
+		return
+	}
+	if list == nil {
+		list = []share.Comment{}
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
 func (h *shareHandlers) listComments(w http.ResponseWriter, r *http.Request) {
 	spaceID, sh, err := h.resolve(r)
 	if err != nil {
