@@ -48,8 +48,9 @@ export function isMarkdownFile(path: string): boolean { return MARKDOWN_EXTS.has
  *   1. Readme-style names at root, in priority order
  *   2. Same names anywhere in the subtree (depth ≤ 3)
  *   3. Any markdown file we can find
+ *   4. Any file at all (so binary-only Spaces still land on content)
  *
- * Returns null only if the Space is completely empty of markdown.
+ * Returns null only if the Space is completely empty.
  */
 type EntryLike = { name: string; path: string; is_dir: boolean; children?: EntryLike[] }
 const README_PATTERNS = [
@@ -81,19 +82,22 @@ export function findDefaultFile(tree: EntryLike[]): EntryLike | null {
   }
   const nested = scan(tree, 1)
   if (nested) return nested
-  function firstMd(entries: EntryLike[]): EntryLike | null {
+  function firstMatch(entries: EntryLike[], pred: (e: EntryLike) => boolean): EntryLike | null {
     for (const e of entries) {
-      if (!e.is_dir && isMarkdownFile(e.name)) return e
+      if (!e.is_dir && pred(e)) return e
     }
     for (const e of entries) {
       if (e.is_dir && e.children) {
-        const m = firstMd(e.children)
+        const m = firstMatch(e.children, pred)
         if (m) return m
       }
     }
     return null
   }
-  return firstMd(tree)
+  // Prefer the first markdown page; if the Space has none (e.g. a share that's
+  // purely PDFs/images), fall back to the first file of any type so the visitor
+  // lands on content instead of an empty "select a file" screen.
+  return firstMatch(tree, e => isMarkdownFile(e.name)) ?? firstMatch(tree, () => true)
 }
 
 export function isImageFile(path: string): boolean    { return IMAGE_EXTS.has(ext(path)) }

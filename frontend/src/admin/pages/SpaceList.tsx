@@ -140,7 +140,7 @@ export function SpaceList() {
         </div>
 
         {err && (
-          <div className="mb-6 p-3 rounded-md bg-[var(--notation-danger)] dark:bg-[var(--notation-danger)]/30 text-[var(--notation-danger)] dark:text-[var(--notation-danger)] text-sm border border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/30 flex items-start justify-between gap-3">
+          <div className="mb-6 p-3 rounded-md bg-[var(--notation-danger)]/10 dark:bg-[var(--notation-danger)]/30 text-[var(--notation-danger)] dark:text-[var(--notation-danger)] text-sm border border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/30 flex items-start justify-between gap-3">
             <span>{err}</span>
             <button onClick={() => setErr(null)} className="text-[var(--notation-danger)] hover:text-[var(--notation-danger)]">
               <X size={14} />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import {
   PanelLeft, List, MessageSquare, Search, Printer, Sun, Moon, Palette,
@@ -7,7 +7,7 @@ import {
 import * as api from './lib/api'
 import { FileTree } from '../admin/components/FileTree'
 import { FileViewer } from '../admin/components/FileViewer'
-import { MarkdownView } from '../admin/components/MarkdownView'
+import { MarkdownView, stripMdExt } from '../admin/components/MarkdownView'
 import { CommentThread } from '../admin/components/CommentThread'
 import { Outline } from '../admin/components/Outline'
 import { CommandPalette } from '../admin/components/CommandPalette'
@@ -55,10 +55,44 @@ function ShareUI() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
     typeof window === 'undefined' ? true : !window.matchMedia('(max-width: 767px)').matches,
   )
+  // Desktop sidebar is drag-resizable; the chosen width is remembered in the
+  // browser so a returning reader keeps their layout. Mobile uses the fixed
+  // drawer width (w-72) and ignores this.
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem('notation_share_sidebar_width') || '', 10)
+    return Number.isFinite(v) && v >= 180 && v <= 600 ? v : 256
+  })
+  const [resizing, setResizing] = useState(false)
+  useEffect(() => {
+    localStorage.setItem('notation_share_sidebar_width', String(sidebarWidth))
+  }, [sidebarWidth])
+  function startResize(e: React.MouseEvent) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = sidebarWidth
+    setResizing(true)
+    function move(ev: MouseEvent) {
+      setSidebarWidth(Math.max(180, Math.min(600, startW + (ev.clientX - startX))))
+    }
+    function up() {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      setResizing(false)
+    }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
 
   // Right-side panel toggles, modals, etc.
   const [showOutline, setShowOutline] = useState(false)
-  const [showComments, setShowComments] = useState(true)
+  // Comments start collapsed so a first-time visitor lands on the content, not
+  // a half-screen comment drawer they may not know how to dismiss. The header
+  // toggle (and selecting text → Comment) opens it on demand.
+  const [showComments, setShowComments] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [themeOpen, setThemeOpen] = useState(false)
@@ -69,6 +103,10 @@ function ShareUI() {
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
   const [pendingAnchor, setPendingAnchor] = useState<api.CommentAnchor | null>(null)
   const [pendingComment, setPendingComment] = useState<string>('')
+  // True only while the comment panel is open *because* the user selected text
+  // and clicked "Comment" — lets us auto-retract it after posting without
+  // closing a panel the user deliberately opened from the header.
+  const openedBySelectionRef = useRef(false)
 
   // Bookmarks (per-share-token) — kept client-only, never round-trips.
   const tokenKey = api.TOKEN
@@ -118,22 +156,32 @@ function ShareUI() {
   }, [file])
 
   useEffect(() => {
+    // Each navigation is a fresh attempt — drop any stale error from the
+    // previous file so a one-off 404 doesn't stick in the footer forever, and
+    // always return to read mode (don't carry one file's edit buffer onto the
+    // next, and don't show a textarea over a binary file).
+    setErr(null)
+    setEditing(false)
     if (!file) {
       setContent('')
       setEditBuffer('')
-      setEditing(false)
       return
     }
+    let cancelled = false
     if (isTextFile(file)) {
       api.readFile(file).then(c => {
+        if (cancelled) return
         setContent(c)
         setEditBuffer(c)
-      }).catch(e => setErr(String(e)))
+      }).catch(e => { if (!cancelled) setErr(String(e)) })
     } else {
       setContent('')
       setEditBuffer('')
     }
     refreshComments()
+    // Guard against out-of-order responses when navigating quickly: a late
+    // resolve from the previous file must not clobber the current one.
+    return () => { cancelled = true }
   }, [file, refreshComments])
 
   useEffect(() => {
@@ -147,10 +195,21 @@ function ShareUI() {
     return () => window.clearTimeout(t)
   }, [activeCommentId])
 
+  const dirty = editing && editBuffer !== content
   const select = useCallback((p: string) => {
+    if (editing && editBuffer !== content && !window.confirm('Discard unsaved changes?')) return
     setSearchParams({ file: p })
     if (isMobile) setSidebarOpen(false)
-  }, [setSearchParams, isMobile])
+  }, [setSearchParams, isMobile, editing, editBuffer, content])
+
+  // Warn before a tab close / reload would drop unsaved edits (edit-permission
+  // guests). In-app navigation is guarded by `select` above.
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   // Build a flat file list for the command palette. Walks the tree once
   // per render of `tree` and filters to markdown / text leaf nodes.
@@ -165,6 +224,9 @@ function ShareUI() {
     walk(tree)
     return out
   }, [tree])
+
+  // Ordered markdown-only list (menu order) for prev/next page navigation.
+  const navFiles = useMemo(() => allFiles.filter(isMarkdownFile), [allFiles])
 
   // Global keyboard shortcuts — only register the gated ones when the
   // matching feature is on, otherwise the shortcut is dead (intentional).
@@ -215,10 +277,24 @@ function ShareUI() {
     if (!file) return
     const anchor = opts?.anchor ?? (opts?.parentID ? undefined : pendingAnchor ?? undefined)
     await api.postComment(file, text, { parentID: opts?.parentID, anchor })
+    // An anchored top-level comment created from a text selection: once it's
+    // sent, retract the panel again so the reader returns to the content — but
+    // only if the panel was opened *by* that selection, not deliberately.
+    const wasAnchored = !!anchor && !opts?.parentID
     setPendingAnchor(null)
     refreshComments()
+    if (wasAnchored && openedBySelectionRef.current) setShowComments(false)
+    if (wasAnchored) openedBySelectionRef.current = false
   }
-  function onNewAnchorComment(anchor: api.CommentAnchor) { setPendingAnchor(anchor) }
+  // Selecting text and clicking "Comment" reveals the (default-collapsed)
+  // comment panel and pre-anchors the new comment to the selection.
+  function onNewAnchorComment(anchor: api.CommentAnchor) {
+    setShowComments(prev => {
+      if (!prev) openedBySelectionRef.current = true
+      return true
+    })
+    setPendingAnchor(anchor)
+  }
 
   if (err && !info) {
     return (
@@ -234,7 +310,7 @@ function ShareUI() {
   const canComment = info.permission === 'comment' || info.permission === 'edit'
 
   return (
-    <div className="flex h-screen bg-[var(--notation-bg)] text-[var(--notation-fg)] overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
+    <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {isMobile && sidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-[var(--notation-backdrop)] backdrop-blur-sm md:hidden"
@@ -244,13 +320,19 @@ function ShareUI() {
       )}
       <aside
         className={
-          'surface-elevated flex flex-col bg-[var(--notation-bg-elevated)] border-r border-[var(--notation-border)] ' +
+          'surface-elevated flex flex-col bg-[var(--notation-bg-elevated)] border-r border-[var(--notation-border)] overflow-hidden ' +
           'fixed inset-y-0 left-0 z-40 w-72 ' +
-          'md:static md:z-auto md:w-64 md:flex-shrink-0 ' +
-          'transition-transform md:transition-none duration-200 ease-in-out ' +
-          (sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0')
+          'md:relative md:z-auto md:w-auto md:flex-shrink-0 ' +
+          (resizing ? '' : 'transition-transform md:transition-[width] duration-200 ease-in-out') + ' ' +
+          (sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0') + ' ' +
+          (!sidebarOpen ? 'md:border-r-0' : '')
         }
+        style={{ width: isMobile ? undefined : (sidebarOpen ? sidebarWidth : 0) }}
       >
+        <div
+          className="h-full flex flex-col w-72 md:w-auto"
+          style={{ width: isMobile ? undefined : sidebarWidth }}
+        >
         <div className="p-4 border-b border-[var(--notation-border)]">
           <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium">
             <div className="w-5 h-5 rounded bg-[var(--notation-bg-alt)] text-white dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase">
@@ -329,6 +411,7 @@ function ShareUI() {
                   <li key={b}>
                     <button
                       onClick={() => select(b)}
+                      title={b.replace(/\.md$/i, '')}
                       className={
                         'w-full flex items-center gap-2 text-left py-1.5 px-2 rounded-md text-xs transition-colors ' +
                         (file === b
@@ -345,6 +428,19 @@ function ShareUI() {
             )
           )}
         </div>
+        </div>
+
+        {/* Drag handle — desktop only. Lives on the aside's right edge; the
+            aside is md:relative so this anchors to it. Width is persisted. */}
+        {sidebarOpen && !isMobile && (
+          <div
+            onMouseDown={startResize}
+            className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize group z-20 hidden md:block"
+            title="Drag to resize"
+          >
+            <div className="h-full w-px ml-auto bg-transparent group-hover:bg-[var(--notation-bg-alt)] transition-colors" />
+          </div>
+        )}
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0">
@@ -359,7 +455,7 @@ function ShareUI() {
                 >
                   <PanelLeft size={18} />
                 </button>
-                <span className="text-[var(--notation-fg-muted)] truncate">{file.replace(/\.md$/i, '')}</span>
+                <span className="text-[var(--notation-fg-muted)] truncate" title={stripMdExt(file)}>{stripMdExt(file)}</span>
               </div>
 
               <div className="flex items-center gap-1">
@@ -368,7 +464,7 @@ function ShareUI() {
                     <Search size={16} />
                   </HeaderBtn>
                 )}
-                {features?.outline && isMarkdownFile(file) && (
+                {features?.outline && !isMobile && isMarkdownFile(file) && (
                   <HeaderBtn
                     title="Outline"
                     active={showOutline}
@@ -381,7 +477,7 @@ function ShareUI() {
                   <HeaderBtn
                     title="Comments"
                     active={showComments}
-                    onClick={() => setShowComments(v => !v)}
+                    onClick={() => { openedBySelectionRef.current = false; setShowComments(v => !v) }}
                   >
                     <MessageSquare size={16} />
                     {comments.length > 0 && (
@@ -469,6 +565,8 @@ function ShareUI() {
                     onNewAnchorComment={canComment ? onNewAnchorComment : undefined}
                     files={allFiles}
                     currentFile={file}
+                    navFiles={navFiles}
+                    onNavigate={select}
                   />
                 ) : (
                   <FileViewer
@@ -510,11 +608,20 @@ function ShareUI() {
                   </div>
                 )}
                 {err && info && (
-                  <div className="p-2 text-[var(--notation-danger)] dark:text-[var(--notation-danger)] text-sm border-t border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/50">{err}</div>
+                  <div className="p-2 pl-3 text-[var(--notation-danger)] dark:text-[var(--notation-danger)] text-sm border-t border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/50 flex justify-between items-center gap-3">
+                    <span className="min-w-0 truncate">{err}</span>
+                    <button
+                      onClick={() => setErr(null)}
+                      className="flex-shrink-0 px-1.5 leading-none text-lg hover:opacity-70"
+                      aria-label="Dismiss error"
+                    >
+                      &times;
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {features?.outline && showOutline && isMarkdownFile(file) && !editing && (
+              {features?.outline && !isMobile && showOutline && isMarkdownFile(file) && !editing && (
                 <aside className="surface-elevated w-[240px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex-shrink-0 overflow-y-auto no-print">
                   <Outline content={content} />
                 </aside>
@@ -523,12 +630,14 @@ function ShareUI() {
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-[var(--notation-fg-muted)] gap-4 p-8 text-center">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] text-sm"
-            >
-              <PanelLeft size={16} /> Open file list
-            </button>
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] text-sm"
+              >
+                <PanelLeft size={16} /> Open file list
+              </button>
+            )}
             <span>Select a file from the tree.</span>
           </div>
         )}

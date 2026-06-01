@@ -10,6 +10,10 @@ import tailwindcss from '@tailwindcss/vite'
  */
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Some browser-targeted deps (mammoth, SheetJS) still reference Node's
+  // `global`, which Vite doesn't define — without this they throw
+  // "Cannot read properties of undefined (reading 'global')" when lazy-loaded.
+  define: { global: 'globalThis' },
   base: '/s/',
   build: {
     outDir: '../backend/web/dist',
