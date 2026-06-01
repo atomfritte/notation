@@ -184,6 +184,14 @@
   body {
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
+  /* Tailwind v4's preflight removes the UA focus outline; without a
+     replacement, keyboard users get no visible focus. Restore a themed ring,
+     but only for keyboard focus (:focus-visible) so mouse clicks stay clean. */
+  :where(a, button, input, textarea, select, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid var(--notation-accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
   /* Scrollbars follow the active theme. The 2px border around the thumb
      uses the underlying surface as its fill so the thumb appears to float
      on top of whatever it's scrolling. Inside .surface-elevated the
@@ -226,6 +234,14 @@
   background-color: var(--notation-accent-10);
   border-bottom-style: solid;
 }
+/* A wiki/relative link whose target doesn't exist in the Space. Rendered as
+   inert text (no navigation) so a stale reference never lands on a 404. */
+.prose .wiki-link-broken {
+  border-bottom: 1px dashed var(--notation-fg-muted);
+  color: var(--notation-fg-muted);
+  cursor: help;
+  opacity: 0.8;
+}
 
 /* Auto-file-link: tiny pill the viewer injects next to prose mentions of
    files that live elsewhere in the Space. The badge sits inline with the
@@ -262,6 +278,53 @@
   border-color: var(--notation-accent-30);
 }
 .prose .auto-file-link:hover::before { opacity: 1; }
+
+/* Prev / next page navigation rendered at the foot of a markdown page. Two
+   cards that flow left (previous) and right (next), matching the reading
+   width of the article above. */
+.page-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--notation-border);
+}
+.page-nav-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  border: 1px solid var(--notation-border);
+  border-radius: 0.5rem;
+  background: var(--notation-bg-elevated);
+  transition: border-color 0.15s, background-color 0.15s, transform 0.15s;
+}
+.page-nav-btn:hover {
+  border-color: var(--notation-accent-40);
+  background: var(--notation-accent-10);
+}
+.page-nav-btn-next { text-align: right; align-items: flex-end; }
+.page-nav-dir {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--notation-fg-muted);
+}
+.page-nav-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--notation-fg);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-nav-btn:hover .page-nav-title { color: var(--notation-accent); }
 
 /* Search-result highlight. MarkdownView wraps occurrences of the search
    query in <mark class="search-hit"> when `?q=...` is in the URL — distinct

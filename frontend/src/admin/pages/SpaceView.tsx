@@ -1,10 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
-import { MarkdownView } from '../components/MarkdownView'
+import { MarkdownView, stripMdExt } from '../components/MarkdownView'
 // Monaco is heavy (~3MB). Load it only when the user actually starts editing.
 const Editor = lazy(() => import('../components/Editor'))
 import { SharePanel } from '../components/SharePanel'
@@ -540,18 +540,23 @@ export function SpaceView() {
   useEffect(refreshTree, [refreshTree])
 
   useEffect(() => {
+    // Fresh attempt per navigation — clear any stale error so a one-off 404
+    // (e.g. a stale link) doesn't pin itself to the top of every later page.
+    setErr(null)
     if (!spaceID || !file) {
       setContent('')
       setEtag(null)
       return
     }
+    let cancelled = false
     if (isTextFile(file)) {
       api.readFile(spaceID, file)
         .then(res => {
+          if (cancelled) return
           setContent(res.content)
           setEtag(res.etag)
         })
-        .catch(e => setErr(String(e)))
+        .catch(e => { if (!cancelled) setErr(String(e)) })
     } else {
       // Binary file — viewer streams via direct URL, no content fetch needed.
       setContent('')
@@ -560,6 +565,8 @@ export function SpaceView() {
     setEditing(false)
     setHistoryMode(false)
     refreshComments()
+    // A late response from the previous file must not clobber the current one.
+    return () => { cancelled = true }
   }, [spaceID, file, refreshComments])
 
   // uploadFiles is the single ingress point for the upload UX — both the
@@ -628,32 +635,21 @@ export function SpaceView() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [setSidebarOpen])
 
+  // Markdown-only list drives the "Jump to page" palette, wiki-link picker, and
+  // prev/next nav; the full list feeds the auto-link plugin + link resolution.
+  // Memoised so MarkdownView's per-file caches aren't rebuilt on every render
+  // (hover, comment toggles, etc. would otherwise thrash them).
+  const allFiles = useMemo(() => flattenTreeFiles(tree, true), [tree])
+  const allFilesAny = useMemo(() => flattenTreeFiles(tree, false), [tree])
+
   if (!spaceID) return <p className="p-8 text-[var(--notation-fg-muted)]">missing workspace</p>
 
   const isBookmarked = bookmarks.includes(file)
-  const displayTitle = file.split('/').pop()?.replace(/\.md$/i, '') || ''
+  const displayTitle = stripMdExt(file.split('/').pop() || '')
   const pathParts = file ? file.split('/') : []
 
-  // Markdown-only list drives the "Jump to page" palette + the wiki-link
-  // picker — both are page-oriented and would only confuse users by listing
-  // images / PDFs. The full list (below) feeds the auto-link plugin so any
-  // file in the Space gets a sidecar `[File]` badge when mentioned in prose.
-  const flattenTree = (entries: api.Entry[], onlyMd = true): string[] => {
-    let result: string[] = []
-    for (const e of entries) {
-      if (e.is_dir && e.children) {
-        result = result.concat(flattenTree(e.children, onlyMd))
-      } else if (!e.is_dir) {
-        if (!onlyMd || e.name.endsWith('.md')) result.push(e.path)
-      }
-    }
-    return result
-  }
-  const allFiles = flattenTree(tree)
-  const allFilesAny = flattenTree(tree, false)
-
   return (
-    <div className="flex h-screen bg-[var(--notation-bg)] text-[var(--notation-fg)] font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
+    <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
       {themeOpen && <ThemePalette onClose={() => setThemeOpen(false)} />}
       
@@ -896,16 +892,37 @@ export function SpaceView() {
             </button>
 
             {file && (
-              <div className="flex items-center text-sm text-[var(--notation-fg-muted)]">
-                <Link to="/admin" className="hover:text-[var(--notation-fg)] hover:underline truncate max-w-[100px]" title="Back to all Spaces">{spaceID}</Link>
-                {pathParts.map((part, i) => (
-                  <span key={i} className="flex items-center">
-                    <span className="mx-1.5 text-[var(--notation-fg-muted)] text-[var(--notation-fg-muted)]">/</span>
-                    <span className={`${i === pathParts.length - 1 ? 'text-[var(--notation-fg)] font-medium' : 'hover:text-[var(--notation-fg)] hover:underline cursor-pointer'} truncate max-w-[150px]`}>
-                      {part.replace(/\.md$/i, '')}
+              <div className="flex items-center text-sm text-[var(--notation-fg-muted)] min-w-0">
+                <Link to="/admin" className="hover:text-[var(--notation-fg)] hover:underline truncate max-w-[100px] flex-shrink-0" title="Back to all Spaces">{spaceID}</Link>
+                {pathParts.map((part, i) => {
+                  const isLast = i === pathParts.length - 1
+                  const label = stripMdExt(part)
+                  // A folder segment jumps to the first page inside it; the last
+                  // segment is the open page itself (no-op).
+                  const folderPrefix = pathParts.slice(0, i + 1).join('/') + '/'
+                  const firstInFolder = isLast ? null : allFiles.find(p => p.startsWith(folderPrefix))
+                  return (
+                    <span key={i} className="flex items-center min-w-0">
+                      <span className="mx-1.5 text-[var(--notation-fg-muted)] flex-shrink-0">/</span>
+                      {firstInFolder ? (
+                        <button
+                          onClick={() => selectFile(firstInFolder)}
+                          title={label}
+                          className="hover:text-[var(--notation-fg)] hover:underline cursor-pointer truncate max-w-[150px]"
+                        >
+                          {label}
+                        </button>
+                      ) : (
+                        <span
+                          title={label}
+                          className={`${isLast ? 'text-[var(--notation-fg)] font-medium' : ''} truncate max-w-[150px]`}
+                        >
+                          {label}
+                        </span>
+                      )}
                     </span>
-                  </span>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -980,7 +997,7 @@ export function SpaceView() {
 
         <div className="flex-1 flex overflow-hidden">
           <div ref={mainScrollRef} className="flex-1 overflow-y-auto relative no-scrollbar">
-            {err && <div className="absolute top-0 left-0 right-0 p-3 bg-[var(--notation-danger)] dark:bg-[var(--notation-danger)]/50 text-[var(--notation-danger)] dark:text-[var(--notation-danger)] text-sm border-b border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/50 z-20 flex justify-between items-center">
+            {err && <div className="absolute top-0 left-0 right-0 p-3 bg-[var(--notation-danger)]/10 dark:bg-[var(--notation-danger)]/50 text-[var(--notation-danger)] dark:text-[var(--notation-danger)] text-sm border-b border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/50 z-20 flex justify-between items-center">
                {err}
                <button onClick={() => setErr(null)} className="text-[var(--notation-danger)] hover:text-[var(--notation-danger)] dark:hover:text-[var(--notation-danger)]">&times;</button>
             </div>}
@@ -1066,6 +1083,8 @@ export function SpaceView() {
                         onNewAnchorComment={onNewAnchorComment}
                         files={allFilesAny}
                         currentFile={file}
+                        navFiles={allFiles}
+                        onNavigate={selectFile}
                       />
                     ) : (
                       <FileViewer spaceID={spaceID} path={file} content={content} theme={theme} />
@@ -1152,4 +1171,19 @@ export function SpaceView() {
       <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} scope="admin" />
     </div>
   )
+}
+
+// Depth-first flatten of the tree into a flat path list, in the same order the
+// FileTree renders (so prev/next nav matches the visual menu). onlyMd keeps it
+// to markdown pages; false includes every file.
+function flattenTreeFiles(entries: api.Entry[], onlyMd: boolean): string[] {
+  const result: string[] = []
+  for (const e of entries) {
+    if (e.is_dir && e.children) {
+      result.push(...flattenTreeFiles(e.children, onlyMd))
+    } else if (!e.is_dir) {
+      if (!onlyMd || e.name.endsWith('.md')) result.push(e.path)
+    }
+  }
+  return result
 }

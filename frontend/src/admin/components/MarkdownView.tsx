@@ -74,11 +74,19 @@ type Props = {
    *  toolbar. Receives a text-quote selector payload. */
   onNewAnchorComment?: (anchor: AnchorPayload) => void
   /** All paths in the Space — when present, prose mentions of any of these
-   *  filenames get a small `[File]` link badge appended next to them. */
+   *  filenames get a small `[File]` link badge appended next to them. Also
+   *  powers link resolution: relative / wiki-link targets are matched against
+   *  this list so a link to a file in another folder resolves instead of 404ing. */
   files?: string[]
   /** Path of the file currently being rendered — used by the auto-link plugin
    *  to disambiguate same-basename matches by preferring the same directory. */
   currentFile?: string
+  /** Ordered list of navigable pages (markdown, in menu order). When present
+   *  alongside onNavigate, renders prev/next page links at the end of the
+   *  article and enables left/right swipe navigation on touch devices. */
+  navFiles?: string[]
+  /** Navigate to another page (prev/next links + swipe). */
+  onNavigate?: (path: string) => void
 }
 
 export function MarkdownView({
@@ -91,10 +99,74 @@ export function MarkdownView({
   onNewAnchorComment,
   files,
   currentFile,
+  navFiles,
+  onNavigate,
 }: Props) {
   const location = useLocation()
   const scrollRef = useRef<HTMLDivElement>(null)
   const articleRef = useRef<HTMLElement>(null)
+
+  // ---- Link resolution ----------------------------------------------------
+  // Wiki-links (`[[Page]]`) and relative markdown links (`[x](page.md)`) carry
+  // a bare target that may live in a different folder than the current file.
+  // Without resolving it against the real file list the resulting `?file=` URL
+  // 404s. We build a lookup (exact paths + basename buckets) and resolve every
+  // intra-Space link to an actual path before handing it to the router.
+  const fileIndex = useMemo(() => {
+    const set = new Set<string>()
+    const byBase = new Map<string, string[]>()
+    for (const f of files ?? []) {
+      if (!f) continue
+      set.add(f)
+      const base = f.slice(f.lastIndexOf('/') + 1).toLowerCase()
+      const bucket = byBase.get(base)
+      if (bucket) bucket.push(f)
+      else byBase.set(base, [f])
+    }
+    return { set, byBase }
+  }, [files])
+  const currentDir = useMemo(() => {
+    if (!currentFile) return ''
+    const i = currentFile.lastIndexOf('/')
+    return i >= 0 ? currentFile.slice(0, i) : ''
+  }, [currentFile])
+
+  // preferDir=true → markdown-relative semantics (resolve against the current
+  // folder first); false → wiki-link / vault semantics (exact + basename first).
+  // Returns the best-guess path plus whether it actually exists in the Space, so
+  // the caller can render a dead link inert instead of producing a 404.
+  function resolveTarget(rawIn: string, preferDir: boolean): { path: string; exists: boolean } {
+    if (!rawIn) return { path: rawIn, exists: false }
+    // Authors may percent-encode spaces etc. (`My%20Note.md`); decode so it
+    // matches the plain paths in the index.
+    let raw = rawIn
+    try { raw = decodeURIComponent(rawIn) } catch { /* leave as-is on bad escape */ }
+    const rel = normJoin(currentDir, raw)
+    const root = raw.replace(/^\.?\/+/, '')
+    const tries = preferDir ? [rel, raw, root] : [raw, root, rel]
+    for (const t of tries) if (fileIndex.set.has(t)) return { path: t, exists: true }
+    const base = raw.slice(raw.lastIndexOf('/') + 1).toLowerCase()
+    const matches = fileIndex.byBase.get(base)
+    if (matches && matches.length === 1) return { path: matches[0], exists: true }
+    if (matches && matches.length > 1) {
+      const sameDir = matches.find(p => p.slice(0, Math.max(0, p.lastIndexOf('/'))) === currentDir)
+      if (sameDir) return { path: sameDir, exists: true }
+      return { path: [...matches].sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))[0], exists: true }
+    }
+    return { path: /^\.\.?\//.test(raw) ? rel : (preferDir ? rel : root), exists: false }
+  }
+  const haveFileList = (files?.length ?? 0) > 0
+
+  // ---- Prev / next page navigation ---------------------------------------
+  const navInfo = useMemo(() => {
+    if (!navFiles || !currentFile || !onNavigate) return null
+    const idx = navFiles.indexOf(currentFile)
+    if (idx < 0) return null
+    return {
+      prev: idx > 0 ? navFiles[idx - 1] : null,
+      next: idx < navFiles.length - 1 ? navFiles[idx + 1] : null,
+    }
+  }, [navFiles, currentFile, onNavigate])
   // Rebuild the auto-link plugin only when the underlying inputs change —
   // its regex + index can be expensive for large Spaces, and we don't want
   // to recompute on every keystroke-triggered re-render of the viewer.
@@ -184,8 +256,10 @@ export function MarkdownView({
       const container = scrollRef.current?.getBoundingClientRect()
       if (!container) return
       const anchor = buildAnchor(articleRef.current, range, quote)
+      // Clamp x so the toolbar never spills past the right edge of the viewer.
+      const x = Math.min(rect.right - container.left, container.width - 110)
       setTool({
-        x: rect.right - container.left,
+        x: Math.max(8, x),
         y: rect.bottom - container.top + 6,
         anchor,
       })
@@ -244,13 +318,24 @@ export function MarkdownView({
         onSelectAnchor?.(m.dataset.commentId)
       }
     }
+    // Keyboard parity: Enter/Space on a focused anchor opens its thread.
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Enter' && e.key !== ' ') return
+      const m = (e.target as HTMLElement)?.closest?.('mark.comment-anchor') as HTMLElement | null
+      if (m?.dataset.commentId) {
+        e.preventDefault()
+        onSelectAnchor?.(m.dataset.commentId)
+      }
+    }
     article.addEventListener('mouseover', onMouseOver)
     article.addEventListener('mouseout', onMouseOut)
     article.addEventListener('click', onClick)
+    article.addEventListener('keydown', onKeyDown)
     return () => {
       article.removeEventListener('mouseover', onMouseOver)
       article.removeEventListener('mouseout', onMouseOut)
       article.removeEventListener('click', onClick)
+      article.removeEventListener('keydown', onKeyDown)
     }
   }, [onHoverMark, onSelectAnchor])
 
@@ -281,9 +366,50 @@ export function MarkdownView({
     return () => cancelAnimationFrame(frame)
   }, [activeCommentID])
 
-  return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
-      <article ref={articleRef} className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-4 md:p-8">
+  // Horizontal swipe (touch only) flips to the prev/next page. Guards keep it
+  // from firing on vertical scrolls, on sideways scrolls inside wide code
+  // blocks / tables, on the OS back/forward edge gesture, or when the swipe was
+  // actually a drag-to-select.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !onNavigate || !navInfo) return
+    const EDGE = 28 // px reserved at each screen edge for the browser's own swipe
+    let startX = 0, startY = 0, t0 = 0, tracking = false
+    function onStart(e: TouchEvent) {
+      if (e.touches.length !== 1) { tracking = false; return }
+      const t = e.touches[0]
+      // Don't hijack a gesture that begins inside a horizontally-scrollable
+      // child (a wide table or code block the reader is panning).
+      if (startsInHorizontalScroller(t.target as Node | null, el)) { tracking = false; return }
+      if (t.clientX < EDGE || t.clientX > window.innerWidth - EDGE) { tracking = false; return }
+      startX = t.clientX; startY = t.clientY; t0 = Date.now(); tracking = true
+    }
+    function onEnd(e: TouchEvent) {
+      if (!tracking) return
+      tracking = false
+      const t = e.changedTouches[0]
+      const dx = t.clientX - startX
+      const dy = t.clientY - startY
+      if (Date.now() - t0 > 600) return
+      if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return
+      // A drag that selected text was a comment gesture, not a page flip.
+      const sel = window.getSelection()
+      if (sel && !sel.isCollapsed && sel.toString().trim()) return
+      if (dx < 0 && navInfo!.next) onNavigate!(navInfo!.next)
+      else if (dx > 0 && navInfo!.prev) onNavigate!(navInfo!.prev)
+    }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchend', onEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchend', onEnd)
+    }
+  }, [onNavigate, navInfo])
+
+  // The unified parse re-runs on every render of <ReactMarkdown>; memoise the
+  // element so hover / active-comment / selection state changes (which re-render
+  // this component constantly) don't re-parse the whole document each time.
+  const renderedMarkdown = useMemo(() => (
         <ReactMarkdown
           remarkPlugins={[
             remarkGfm,
@@ -335,7 +461,18 @@ export function MarkdownView({
                 )
               }
               if (href.startsWith('?')) {
+                // Wiki-links + `?file=` links — resolve the file param against
+                // the real tree (vault semantics) so a target in another folder
+                // doesn't 404.
                 const url = new URL(href, 'http://_/')
+                const f = url.searchParams.get('file')
+                if (f) {
+                  const r = resolveTarget(f, false)
+                  // Known-missing target: render inert so the reader isn't sent
+                  // to a guaranteed 404. Only when we have a tree to check against.
+                  if (haveFileList && !r.exists) return <BrokenLink>{children}</BrokenLink>
+                  url.searchParams.set('file', r.path)
+                }
                 return (
                   <Link to={{ pathname: location.pathname, search: url.search, hash: url.hash }} className={className}>
                     {children}
@@ -349,13 +486,16 @@ export function MarkdownView({
                   </Link>
                 )
               }
-              const cleaned = href.replace(/^\.\//, '')
-              const [path, anchor] = cleaned.split('#')
+              const [rawPath, anchor] = href.split('#')
+              // Relative markdown link — resolve against the current folder
+              // first, then fall back to basename match across the Space.
+              const r = resolveTarget(rawPath, true)
+              if (haveFileList && !r.exists) return <BrokenLink>{children}</BrokenLink>
               return (
                 <Link
                   to={{
                     pathname: location.pathname,
-                    search: `?file=${encodeURIComponent(path)}`,
+                    search: `?file=${encodeURIComponent(r.path)}`,
                     hash: anchor ? '#' + anchor : '',
                   }}
                   className={className}
@@ -387,7 +527,30 @@ export function MarkdownView({
         >
           {content}
         </ReactMarkdown>
+  ), [content, theme, autoFileLinkPlugin, fileIndex, currentDir, haveFileList, location.pathname, location.search])
+
+  return (
+    <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
+      <article ref={articleRef} className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-4 md:p-8">
+        {renderedMarkdown}
       </article>
+
+      {navInfo && (navInfo.prev || navInfo.next) && onNavigate && (
+        <nav className="page-nav max-w-3xl mx-auto px-4 md:px-8 pb-16 no-print">
+          {navInfo.prev ? (
+            <button onClick={() => onNavigate(navInfo.prev!)} className="page-nav-btn group" title={navInfo.prev}>
+              <span className="page-nav-dir">← Previous</span>
+              <span className="page-nav-title">{pageLabel(navInfo.prev)}</span>
+            </button>
+          ) : <span className="flex-1" />}
+          {navInfo.next ? (
+            <button onClick={() => onNavigate(navInfo.next!)} className="page-nav-btn page-nav-btn-next group" title={navInfo.next}>
+              <span className="page-nav-dir">Next →</span>
+              <span className="page-nav-title">{pageLabel(navInfo.next)}</span>
+            </button>
+          ) : <span className="flex-1" />}
+        </nav>
+      )}
 
       {tool && onNewAnchorComment && (
         <div
@@ -434,6 +597,53 @@ export function MarkdownView({
         </div>
       )}
     </div>
+  )
+}
+
+// Walk up from the touch target to the scroll root; true if any ancestor is
+// actually horizontally scrollable (wide table / code block), so a sideways
+// drag there pans the child instead of flipping the page.
+function startsInHorizontalScroller(node: Node | null, root: HTMLElement | null): boolean {
+  let el = node instanceof HTMLElement ? node : node?.parentElement ?? null
+  while (el && el !== root) {
+    if (el.scrollWidth > el.clientWidth + 2) {
+      const ox = getComputedStyle(el).overflowX
+      if (ox === 'auto' || ox === 'scroll') return true
+    }
+    el = el.parentElement
+  }
+  return false
+}
+
+// Join a base directory with a (possibly `./` / `../`-laden) relative target
+// and collapse the navigation segments, yielding a clean Space-relative path.
+function normJoin(dir: string, rel: string): string {
+  const parts = dir ? dir.split('/') : []
+  for (const seg of rel.split('/')) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') { parts.pop(); continue }
+    parts.push(seg)
+  }
+  return parts.join('/')
+}
+
+// Display label for a page link: basename without the markdown extension.
+function pageLabel(path: string): string {
+  return stripMdExt(path.slice(path.lastIndexOf('/') + 1))
+}
+
+// Strip a trailing markdown extension (.md / .mdx / .markdown) for display.
+export function stripMdExt(name: string): string {
+  return name.replace(/\.(md|mdx|markdown)$/i, '')
+}
+
+// A link whose target doesn't exist in the Space — rendered as styled,
+// non-navigating text so a stale `[[wiki]]` ref never lands on a 404.
+function BrokenLink({ children }: { children: ReactNode }) {
+  return (
+    <span className="wiki-link-broken" title="Page not found in this Space">
+      {children}
+    </span>
   )
 }
 
@@ -722,12 +932,22 @@ function rangeForOffsets(root: HTMLElement, start: number, end: number): Range |
   return r
 }
 
+// Make a comment-anchor mark focusable + semantic so keyboard / screen-reader
+// users can reach it (Enter/Space opens its thread — see the interaction effect).
+function newAnchorMark(commentID: string): HTMLElement {
+  const m = document.createElement('mark')
+  m.className = 'comment-anchor'
+  m.dataset.commentId = commentID
+  m.tabIndex = 0
+  m.setAttribute('role', 'button')
+  m.setAttribute('aria-label', 'Open comment on this passage')
+  return m
+}
+
 function wrapRangeWithMark(range: Range, commentID: string) {
   // Easy case: range within a single text node → surroundContents works cleanly.
   if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
-    const m = document.createElement('mark')
-    m.className = 'comment-anchor'
-    m.dataset.commentId = commentID
+    const m = newAnchorMark(commentID)
     try {
       range.surroundContents(m)
     } catch {
@@ -760,10 +980,7 @@ function wrapRangeWithMark(range: Range, commentID: string) {
       } else {
         sub.setEnd(n, (n.textContent ?? '').length)
       }
-      const m = document.createElement('mark')
-      m.className = 'comment-anchor'
-      m.dataset.commentId = commentID
-      sub.surroundContents(m)
+      sub.surroundContents(newAnchorMark(commentID))
     } catch {
       /* skip slivers we can't wrap */
     }

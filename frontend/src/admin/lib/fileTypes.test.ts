@@ -78,7 +78,13 @@ describe('findDefaultFile', () => {
     expect(findDefaultFile(tree)?.name).toBe('notes.md')
   })
 
-  it('returns null when the tree has no markdown at all', () => {
-    expect(findDefaultFile([f('image.png'), f('data.csv')])).toBeNull()
+  it('falls back to the first file of any type when the tree has no markdown', () => {
+    // A purely-binary Space (e.g. a PDF/image share) should still land the
+    // visitor on content rather than an empty "select a file" screen.
+    expect(findDefaultFile([f('image.png'), f('data.csv')])?.name).toBe('image.png')
+  })
+
+  it('returns null only when the tree is completely empty', () => {
+    expect(findDefaultFile([])).toBeNull()
   })
 })
