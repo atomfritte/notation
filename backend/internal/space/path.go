@@ -52,9 +52,18 @@ func SafeJoin(root, userPath string) (string, error) {
 		}
 	}
 	abs := filepath.Join(root, filepath.FromSlash(p))
-	rootAbs, err := filepath.Abs(root)
+	// Resolve symlinks in the root so both sides of the insideRoot comparison
+	// live in the same namespace. Without this, hosting the data dir under a
+	// symlinked path (e.g. /data -> /mnt/vol/data) makes EvalSymlinks(abs)
+	// resolve below /mnt/... while rootAbs stays /data/... — and every single
+	// file op gets rejected as an escape. Fall back to Abs when root doesn't
+	// exist yet (e.g. a freshly-created Space before its files dir is made).
+	rootAbs, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return "", err
+		rootAbs, err = filepath.Abs(root)
+		if err != nil {
+			return "", err
+		}
 	}
 	// If the target or any existing ancestor resolves outside root through a
 	// symlink, reject. Non-existent targets are fine — we check the deepest

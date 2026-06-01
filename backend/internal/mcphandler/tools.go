@@ -1,10 +1,12 @@
 package mcphandler
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
+	"regexp"
 	"strings"
 
 	"github.com/yoogie27/notation/internal/gitrepo"
@@ -44,6 +46,19 @@ func (s *Server) toolDefs() []toolDef {
 			InputSchema: schemaObject(
 				requiredProp("path", "string", "Path to the file."),
 				requiredProp("content", "string", "Initial content."),
+			),
+		},
+		{
+			Name:        "replace_in_file",
+			Description: "Find-and-replace inside a single text file (sed-style), without rewriting the whole file. Literal match by default; set regex=true for Go (RE2) regular expressions with $1/${name} capture refs in the replacement. RE2 has no catastrophic backtracking, so patterns are safe. Returns the number of replacements and only writes (and commits) when there's at least one match — a no-match call changes nothing. Refuses binary files.",
+			InputSchema: schemaObject(
+				requiredProp("path", "string", "Path to the file."),
+				requiredProp("find", "string", "Text to search for (literal, or a Go regex when regex=true)."),
+				requiredProp("replace", "string", "Replacement text. With regex=true, $1 / ${name} expand capture groups; literal mode inserts it verbatim. May be empty to delete matches."),
+				prop("regex", "boolean", "Treat `find` as a Go (RE2) regex. Default false (literal)."),
+				prop("case_sensitive", "boolean", "Default true."),
+				prop("count", "number", "Max replacements (from the start). 0 or omitted = replace all."),
+				prop("dry_run", "boolean", "If true, report how many matches would change without writing. Default false."),
 			),
 		},
 		{
@@ -226,6 +241,71 @@ func (s *Server) dispatchTool(_ context.Context, spaceID, tokenID, name string, 
 		s.auditCall(spaceID, tokenID, "mcp.create_file", pathArg, nil)
 		return textResult("created " + pathArg), nil
 
+	case "replace_in_file":
+		if pathArg == "" {
+			return errResult("path required"), nil
+		}
+		find := stringArg(args, "find")
+		if find == "" {
+			return errResult("find required"), nil
+		}
+		replacement := stringArg(args, "replace")
+		useRegex := boolArg(args, "regex")
+		caseSensitive := true
+		if _, ok := args["case_sensitive"]; ok {
+			caseSensitive = boolArg(args, "case_sensitive")
+		}
+		limit := intArg(args, "count", 0)
+		dryRun := boolArg(args, "dry_run")
+
+		// Guard the pattern size — RE2 is linear-time (no ReDoS), but an
+		// enormous pattern is still pointless and a cheap thing to bound.
+		if len(find) > 4096 {
+			return errResult("find pattern too long (max 4096 chars)"), nil
+		}
+
+		// Build an RE2 matcher. Literal mode quotes the needle so regex
+		// metacharacters in `find` are matched verbatim; the only difference
+		// from regex mode is that the replacement is inserted literally rather
+		// than expanding $-references.
+		pat := find
+		if !useRegex {
+			pat = regexp.QuoteMeta(find)
+		}
+		if !caseSensitive {
+			pat = "(?i)" + pat
+		}
+		re, err := regexp.Compile(pat)
+		if err != nil {
+			return errResult("invalid regex: " + err.Error()), nil
+		}
+
+		data, err := s.store.ReadFile(spaceID, pathArg)
+		if err != nil {
+			s.auditCall(spaceID, tokenID, "mcp.replace_in_file", pathArg, err)
+			return errResult(err.Error()), nil
+		}
+		// Never rewrite a binary blob — a stray match would corrupt it.
+		if bytes.IndexByte(data, 0) >= 0 {
+			return errResult("refusing to edit a binary file"), nil
+		}
+
+		out, n := replaceN(re, string(data), replacement, !useRegex, limit)
+		if n == 0 {
+			s.auditCall(spaceID, tokenID, "mcp.replace_in_file", pathArg, nil)
+			return textResult("0 replacements — no match for `" + find + "` in " + pathArg), nil
+		}
+		if dryRun {
+			return textResult(fmt.Sprintf("dry run: %d replacement(s) would be made in %s", n, pathArg)), nil
+		}
+		if _, err := s.store.WriteFile(spaceID, pathArg, strings.NewReader(out), s.cfg.MaxUploadBytes); err != nil {
+			s.auditCall(spaceID, tokenID, "mcp.replace_in_file", pathArg, err)
+			return errResult(err.Error()), nil
+		}
+		s.scheduleCommit(spaceID, tokenID)
+		s.auditCall(spaceID, tokenID, "mcp.replace_in_file", pathArg, nil)
+		return textResult(fmt.Sprintf("replaced %d occurrence(s) in %s", n, pathArg)), nil
+
 	case "delete_file":
 		if pathArg == "" {
 			return errResult("path required"), nil
@@ -341,6 +421,36 @@ func (s *Server) dispatchTool(_ context.Context, spaceID, tokenID, name string, 
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownTool, name)
 	}
+}
+
+// replaceN rewrites up to `limit` matches of re in src (limit <= 0 means all).
+// When literal is true the replacement is inserted verbatim; otherwise it's
+// expanded as a regex template ($1, ${name}). Returns the new string and the
+// number of replacements actually made. RE2's linear-time guarantee means this
+// can't be driven into catastrophic backtracking.
+func replaceN(re *regexp.Regexp, src, repl string, literal bool, limit int) (string, int) {
+	matches := re.FindAllStringSubmatchIndex(src, -1)
+	if len(matches) == 0 {
+		return src, 0
+	}
+	var b strings.Builder
+	last := 0
+	n := 0
+	for _, m := range matches {
+		if limit > 0 && n >= limit {
+			break
+		}
+		b.WriteString(src[last:m[0]])
+		if literal {
+			b.WriteString(repl)
+		} else {
+			b.Write(re.ExpandString(nil, repl, src, m))
+		}
+		last = m[1]
+		n++
+	}
+	b.WriteString(src[last:])
+	return b.String(), n
 }
 
 func (s *Server) scheduleCommit(spaceID, tokenID string) {

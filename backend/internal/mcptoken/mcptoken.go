@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/yoogie27/notation/internal/space"
 )
 
 type Token struct {
@@ -66,6 +68,14 @@ func (s *Store) path(spaceID string) string {
 }
 
 func (s *Store) load(spaceID string) ([]Token, error) {
+	// Self-protect: never build a token-file path from an unvalidated id.
+	// path() joins spaceID into the spaces dir, so a traversal id like
+	// "../other" would otherwise read another location. Every public method
+	// funnels through load(), so one guard here covers them all. (The MCP HTTP
+	// handler also validates, but the store must not depend on that.)
+	if !space.ValidID(spaceID) {
+		return nil, ErrNotFound
+	}
 	data, err := os.ReadFile(s.path(spaceID))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -133,7 +143,9 @@ func (s *Store) Create(spaceID, label, createdBy string) (CreateResult, error) {
 	}
 	raw := generateToken()
 	t := Token{
-		ID:        "mcp_" + raw[:8],
+		// ID is independent of the token — it appears in audit logs as the
+		// MCP actor ("mcp:<id>"), so it must not embed token bytes.
+		ID:        "mcp_" + randID(6),
 		Hash:      hashToken(raw),
 		Label:     label,
 		CreatedAt: time.Now().UTC(),
@@ -218,4 +230,14 @@ func generateToken() string {
 func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+// randID returns n bytes of crypto-random hex for record IDs that must not
+// carry any bytes of the secret token.
+func randID(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
+	return hex.EncodeToString(b)
 }

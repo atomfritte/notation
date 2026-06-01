@@ -36,7 +36,14 @@ type Deps struct {
 func NewRouter(d Deps) (http.Handler, error) {
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
+	// RealIP rewrites RemoteAddr from X-Forwarded-For / X-Real-IP. Only honor
+	// those headers when we're actually behind a trusted proxy — otherwise a
+	// direct client could spoof its IP to poison the audit log and dodge the
+	// per-IP rate limiter. With TrustProxy off, RemoteAddr stays the real
+	// socket peer (and share.ClientIP agrees).
+	if d.Cfg.TrustProxy {
+		r.Use(chimw.RealIP)
+	}
 	r.Use(requestLogger(d.Log, d.Cfg))
 	r.Use(chimw.Recoverer)
 	r.Use(securityHeaders)

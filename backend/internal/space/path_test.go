@@ -71,3 +71,19 @@ func TestSafeJoin_ResultStaysInRoot(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// SafeJoin must work when the data root is reached through a symlink (e.g.
+// /data -> /mnt/vol/data) — otherwise every file op is rejected as an escape.
+func TestSafeJoin_RootViaSymlink(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	if _, err := SafeJoin(link, "notes/today.md"); err != nil {
+		t.Errorf("in-root path through symlinked root should be accepted, got %v", err)
+	}
+	if _, err := SafeJoin(link, "../escape"); err == nil {
+		t.Error("escape through symlinked root should still be rejected")
+	}
+}
