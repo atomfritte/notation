@@ -58,23 +58,14 @@ func redactSensitive(p, sharePrefix, mcpPrefix string) string {
 // pointing at the file endpoint. Cross-origin framing is still refused, so
 // clickjacking protection is intact. `X-Frame-Options: SAMEORIGIN` mirrors
 // this for legacy browsers that ignore frame-ancestors.
-// neuralVoiceHosts are the only cross-origin endpoints the app talks to, and
-// only to DOWNLOAD the on-device neural read-aloud voice (one-time, then
-// cached): the Piper model from HuggingFace (which redirects large files to its
-// LFS/Xet CDNs), the ONNX runtime from cdnjs, and the phonemizer WASM from
-// jsDelivr. Synthesis runs entirely in the browser — no page text is ever sent
-// to these hosts. They are connect-src only, so they cannot frame, script, or
-// receive form data. (Self-hosters wanting zero outbound calls can proxy these
-// through the backend; left as a follow-up.)
-const neuralVoiceHosts = "https://huggingface.co https://*.huggingface.co https://*.hf.co " +
-	"https://cdnjs.cloudflare.com https://cdn.jsdelivr.net"
-
+// Read-aloud now synthesises on the server (same-origin /tts), so the CSP needs
+// no third-party hosts — everything the app talks to is 'self'.
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self' 'wasm-unsafe-eval'; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: blob:; " +
 	"font-src 'self' data:; " +
-	"connect-src 'self' " + neuralVoiceHosts + "; " +
+	"connect-src 'self'; " +
 	"media-src 'self' blob:; " +
 	"worker-src 'self' blob:; " +
 	"frame-src 'self'; " +

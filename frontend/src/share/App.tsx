@@ -48,6 +48,13 @@ function ShareUI() {
   const isForm = !!formEntry?.form
   const [formData, setFormData] = useState<api.FormData | null>(null)
   const [readAloud, setReadAloud] = useState(false)
+  const [ttsVoices, setTtsVoices] = useState<api.ServerVoice[] | undefined>(undefined)
+  useEffect(() => {
+    let cancelled = false
+    api.ttsInfo().then(r => { if (!cancelled) setTtsVoices(r.available ? r.voices : []) }).catch(() => { if (!cancelled) setTtsVoices([]) })
+    return () => { cancelled = true }
+  }, [])
+  const ttsURL = useCallback((voiceId: string, text: string) => api.ttsURL(voiceId, text), [])
 
   // Theme: we still seed from prefers-color-scheme but only allow the user
   // to override it when features.theme is on. initTheme() repaints the
@@ -732,6 +739,8 @@ function ShareUI() {
           onNavigate={select}
           storageKey={`notation_readpos_${api.TOKEN}`}
           onClose={() => setReadAloud(false)}
+          serverVoices={ttsVoices}
+          ttsURL={ttsURL}
         />
       )}
     </div>

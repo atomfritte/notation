@@ -15,6 +15,7 @@ import (
 	"github.com/yoogie27/notation/internal/gitrepo"
 	"github.com/yoogie27/notation/internal/share"
 	"github.com/yoogie27/notation/internal/space"
+	"github.com/yoogie27/notation/internal/tts"
 )
 
 type shareHandlers struct {
@@ -24,6 +25,7 @@ type shareHandlers struct {
 	audit    *share.AuditLog
 	comments *share.CommentStore
 	git      *gitrepo.Manager
+	tts      *tts.Synth
 }
 
 func (h *shareHandlers) resolve(r *http.Request) (string, share.Share, error) {

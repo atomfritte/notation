@@ -37,6 +37,15 @@ type Config struct {
 	RPID            string
 	SessionLifetime time.Duration
 	TrustProxy      bool
+
+	// Server-side TTS (Piper). Paths default to the container layout; the
+	// feature simply disables itself if the binaries/models aren't present.
+	TTSPiperBin   string
+	TTSModelDir   string
+	TTSEspeakData string
+	TTSOpusEnc    string
+	TTSBitrate    int
+	TTSCacheMB    int64
 }
 
 func Load() (*Config, error) {
@@ -56,6 +65,12 @@ func Load() (*Config, error) {
 		RPID:              getEnv("NOTATION_RP_ID", ""),
 		SessionLifetime:   time.Duration(getEnvInt64("NOTATION_SESSION_LIFETIME_HOURS", 720)) * time.Hour,
 		TrustProxy:        getEnv("NOTATION_TRUST_PROXY", "") == "1",
+		TTSPiperBin:       getEnv("NOTATION_TTS_PIPER_BIN", "/opt/piper/piper"),
+		TTSModelDir:       getEnv("NOTATION_TTS_MODEL_DIR", "/opt/piper/models"),
+		TTSEspeakData:     getEnv("NOTATION_TTS_ESPEAK_DATA", "/opt/piper/espeak-ng-data"),
+		TTSOpusEnc:        getEnv("NOTATION_TTS_OPUSENC", "opusenc"),
+		TTSBitrate:        int(getEnvInt64("NOTATION_TTS_BITRATE", 32)),
+		TTSCacheMB:        getEnvInt64("NOTATION_TTS_CACHE_MB", 512),
 	}
 	if !strings.HasPrefix(cfg.SharePath, "/") || cfg.SharePath == "/" {
 		return nil, fmt.Errorf("NOTATION_SHARE_PATH must be a non-root absolute path, got %q", cfg.SharePath)
@@ -103,6 +118,11 @@ func (c *Config) CookieSecure() bool {
 
 func (c *Config) SpacesDir() string {
 	return filepath.Join(c.DataDir, "spaces")
+}
+
+// TTSCacheDir is where synthesised audio clips are cached on disk.
+func (c *Config) TTSCacheDir() string {
+	return filepath.Join(c.DataDir, "tts-cache")
 }
 
 func (c *Config) AssetsPath() string {

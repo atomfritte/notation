@@ -19,6 +19,7 @@ import (
 	"github.com/yoogie27/notation/internal/mcptoken"
 	"github.com/yoogie27/notation/internal/share"
 	"github.com/yoogie27/notation/internal/space"
+	"github.com/yoogie27/notation/internal/tts"
 )
 
 func main() {
@@ -68,6 +69,25 @@ func main() {
 	mcpStore := mcptoken.NewStore(cfg.SpacesDir())
 	mcpSrv := mcphandler.New(cfg, store, gitMgr, mcpStore, auditLog)
 
+	synth := tts.New(tts.Config{
+		PiperBin:      cfg.TTSPiperBin,
+		ModelDir:      cfg.TTSModelDir,
+		EspeakData:    cfg.TTSEspeakData,
+		OpusEnc:       cfg.TTSOpusEnc,
+		Bitrate:       cfg.TTSBitrate,
+		CacheDir:      cfg.TTSCacheDir(),
+		CacheMaxBytes: cfg.TTSCacheMB << 20,
+	})
+	if synth.Available() {
+		ids := make([]string, 0)
+		for _, v := range synth.Voices() {
+			ids = append(ids, v.ID)
+		}
+		logger.Info("server TTS enabled", "voices", ids)
+	} else {
+		logger.Info("server TTS disabled (piper/opusenc/models not found)")
+	}
+
 	handler, err := httpserver.NewRouter(httpserver.Deps{
 		Cfg:           cfg,
 		Log:           logger,
@@ -81,6 +101,7 @@ func main() {
 		MCPTokens:     mcpStore,
 		MCP:           mcpSrv,
 		AuthStore:     authStore,
+		TTS:           synth,
 		SessionSecret: secret,
 	})
 	if err != nil {
