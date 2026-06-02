@@ -195,6 +195,22 @@ docker build -t notation:local .
 docker run -d --name notation -p 8080:8080 -v $PWD/data:/data notation:local
 ```
 
+### Updating (Compose)
+
+For the `docker-compose.yml` deployment (app + optional Kokoro voice sidecar),
+`scripts/update.sh` recompiles and restarts the containers from source:
+
+```bash
+./scripts/update.sh              # git pull, rebuild image(s), recreate containers
+./scripts/update.sh notation     # only the app (skip the kokoro sidecar)
+./scripts/update.sh --no-cache   # force a clean rebuild
+./scripts/update.sh --no-pull    # rebuild the current checkout
+```
+
+The frontend and Go binary are compiled inside the Dockerfile, so a rebuild is a
+full recompile. Your data volume and the downloaded Kokoro model
+(`./kokoro-models`) are left untouched.
+
 ---
 
 ## Configuration
