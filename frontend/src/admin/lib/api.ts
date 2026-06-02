@@ -172,7 +172,7 @@ export const uploadFormImage = async (id: string, folder: string, blob: Blob): P
 }
 
 export const readFile = async (id: string, path: string): Promise<{content: string, etag: string | null}> => {
-  const r = await fetch(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`)
+  const r = await fetch(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`, { credentials: 'same-origin' })
   if (!r.ok) throw await asError(r)
   const etag = r.headers.get('ETag')
   const content = await r.text()
