@@ -65,12 +65,20 @@ export function SpaceList() {
   }, [spaces, query])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-white dark:from-[#0a0a0a] dark:to-[#0d0d0d] text-[var(--notation-fg)] selection:bg-[color:var(--notation-accent-30)]">
+    <div className="relative isolate min-h-screen bg-[var(--notation-bg)] text-[var(--notation-fg)] selection:bg-[color:var(--notation-accent-30)]">
+      {/* Soft brand glow behind the header — adds depth to the otherwise-flat
+          dark canvas; barely-there in light. -z-10 keeps it under the content
+          (the root's `isolate` scopes the stacking context). */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[460px] opacity-50 dark:opacity-100"
+        style={{ background: 'radial-gradient(75% 100% at 50% 0%, var(--notation-accent-10), transparent 72%)' }}
+      />
       <header className="sticky top-0 z-30 border-b border-[var(--notation-border)] bg-[var(--notation-bg-elevated)]/70 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link to="/admin" className="flex items-center gap-2 group">
             <div className="w-7 h-7 rounded-md bg-[var(--notation-bg-alt)] dark:bg-[color:var(--notation-accent)] flex items-center justify-center transition-transform group-hover:scale-105">
-              <FolderOpen size={14} className="text-[var(--notation-fg)] dark:text-[var(--notation-fg)]" strokeWidth={2.5} />
+              <FolderOpen size={14} className="text-[var(--notation-fg)] dark:text-[var(--notation-fg-on-accent)]" strokeWidth={2.5} />
             </div>
             <span className="font-bold text-base tracking-tight">notation</span>
           </Link>
@@ -128,12 +136,12 @@ export function SpaceList() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search spaces…"
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-alt)]/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] focus:outline-none focus:ring-2 focus:ring-[color:var(--notation-accent-30)] focus:border-[color:var(--notation-accent-40)] transition-colors"
             />
           </div>
           <button
             onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 transition-colors whitespace-nowrap"
           >
             <Plus size={15} /> New Space
           </button>
@@ -204,19 +212,20 @@ function SpaceCard({ space, onDelete }: { space: api.Meta; onDelete: () => void 
     <div className="group relative">
       <Link
         to={`/admin/spaces/${encodeURIComponent(space.id)}`}
-        className="block rounded-xl border border-[var(--notation-border)]/60 bg-[var(--notation-bg-alt)]/40 overflow-hidden hover:border-[var(--notation-border)] dark:hover:border-[var(--notation-border)] hover:shadow-lg dark:hover:shadow-black/20 hover:-translate-y-0.5 transition-all duration-200"
+        className="block rounded-xl border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] overflow-hidden shadow-sm hover:border-[color:var(--notation-accent-40)] hover:shadow-xl hover:shadow-black/5 dark:hover:shadow-black/40 hover:-translate-y-0.5 transition-all duration-200"
       >
         <div
           className="h-20 flex items-center justify-center relative"
           style={{
-            background: `linear-gradient(135deg, hsl(${hue}, 70%, 55%) 0%, hsl(${hue2}, 70%, 45%) 100%)`,
+            background: `linear-gradient(135deg, hsl(${hue}, 64%, 52%) 0%, hsl(${hue2}, 70%, 40%) 100%)`,
           }}
         >
-          <span className="text-3xl font-bold text-white drop-shadow-sm select-none">
+          <span className="text-3xl font-bold text-white drop-shadow-md select-none relative z-10">
             {initial}
           </span>
-          {/* subtle vignette */}
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-black/10 pointer-events-none" />
+          {/* Top highlight + grounded bottom scrim so the colour reads as a
+              surface (not a flat block) and the letter stays legible. */}
+          <div className="absolute inset-0 bg-gradient-to-b from-white/15 via-transparent to-black/30 pointer-events-none" />
         </div>
         <div className="p-4">
           <div className="font-semibold text-[var(--notation-fg)] truncate">
@@ -250,7 +259,7 @@ function CreateCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-xl border-2 border-dashed border-[var(--notation-border)]/60 hover:border-[var(--notation-border)]/40 dark:hover:border-[color:var(--notation-accent-40)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[color:var(--notation-accent)]/5 transition-colors flex flex-col items-center justify-center min-h-[12rem] text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] dark:hover:text-[color:var(--notation-accent)] group"
+      className="rounded-xl border-2 border-dashed border-[var(--notation-border)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors flex flex-col items-center justify-center min-h-[12rem] text-[var(--notation-fg-muted)] hover:text-[color:var(--notation-accent)] group"
     >
       <div className="w-10 h-10 rounded-full border-2 border-current flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
         <Plus size={20} strokeWidth={2} />
@@ -276,7 +285,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       </p>
       <button
         onClick={onCreate}
-        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] transition-colors"
+        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 transition-colors"
       >
         <Sparkles size={14} /> Create your first Space
       </button>
@@ -385,7 +394,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <button
               type="submit"
               disabled={submitting || !id}
-              className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] disabled:opacity-40 transition-colors"
+              className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 disabled:opacity-40 transition-colors"
             >
               {submitting ? 'Creating…' : 'Create'}
             </button>
