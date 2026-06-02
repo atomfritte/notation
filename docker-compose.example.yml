@@ -45,18 +45,19 @@ services:
     networks: [proxy, internal]
 
   # Optional: higher-quality German read-aloud voice (Kokoro, CPU-only, ONNX).
-  # Supply a German Kokoro model in ./kokoro-models (see tts-sidecar/README.md).
-  # Remove this service + the NOTATION_TTS_KOKORO_URL above to use Piper only.
+  # Model auto-downloads into ./kokoro-models on first start (reused if present;
+  # see tts-sidecar/README.md). Remove this service + the NOTATION_TTS_KOKORO_URL
+  # above to use Piper only.
   kokoro:
     build: ./tts-sidecar
     container_name: notation-kokoro
     restart: unless-stopped
     volumes:
-      - ./kokoro-models:/models:ro
+      - ./kokoro-models:/models
     networks: [internal]
 
 networks:
   proxy:
     external: true
-  internal:
-    internal: true
+  # Not internal:true — the sidecar needs egress for the one-time model download.
+  internal: {}

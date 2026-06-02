@@ -1,0 +1,58 @@
+# notation + optional Kokoro TTS sidecar.
+#
+# Configure via .env (see .env.example) — the defaults below already match a
+# Caddy (caddy-docker-proxy) deployment, so .env is optional. The sidecar gives
+# a higher-quality German read-aloud voice; it's auto-wired (shared network →
+# the app finds it at http://kokoro:8080) and its model auto-downloads on first
+# start into ./kokoro-models (gitignored, reused if already present). To run
+# without it, set NOTATION_TTS_KOKORO_URL= (empty) and drop the kokoro service.
+services:
+  notation:
+    build: .
+    image: notation
+    container_name: notation
+    restart: unless-stopped
+    environment:
+      NOTATION_RP_ID: "${NOTATION_RP_ID:-notes.example.com}"
+      NOTATION_TRUST_PROXY: "${NOTATION_TRUST_PROXY:-1}"
+      # Sidecar reachable by service name on the shared 'tts' network.
+      NOTATION_TTS_KOKORO_URL: "${NOTATION_TTS_KOKORO_URL-http://kokoro:8080}"
+      NOTATION_TTS_KOKORO_VOICES: "${NOTATION_TTS_KOKORO_VOICES:-de_DE-martin-kokoro}"
+    volumes:
+      - "${NOTATION_DATA:-/opt/notation_data}:/data"
+    labels:
+      caddy: "${NOTATION_DOMAIN:-notes.example.com}"
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+    networks: [proxy, tts]
+
+  # Optional: higher-quality German voice (Kokoro, CPU-only, ONNX — no GPU).
+  # On a plain network so it has egress for the one-time model download but is
+  # NOT exposed via Caddy. Remove this service (and unset the KOKORO env above)
+  # to use Piper only.
+  kokoro:
+    build: ./tts-sidecar
+    image: notation-kokoro
+    container_name: notation-kokoro
+    restart: unless-stopped
+    environment:
+      KOKORO_HF_REPO: "${KOKORO_HF_REPO:-Godelaune/Kokoro-82M-ONNX-German-Martin}"
+      KOKORO_VOICE: "${KOKORO_VOICE:-martin}"
+      KOKORO_LANG: "${KOKORO_LANG:-de}"
+    volumes:
+      # Model persists on the host (gitignored); auto-downloaded on first start.
+      - "./kokoro-models:/models"
+    networks: [tts]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health').getcode()==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+
+networks:
+  # Your existing Caddy / reverse-proxy network (created outside this compose).
+  proxy:
+    external: true
+    name: "${PROXY_NETWORK:-proxy_network}"
+  # App ↔ sidecar (private, but has egress so the sidecar can fetch its model).
+  tts: {}

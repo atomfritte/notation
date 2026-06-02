@@ -15,6 +15,9 @@ backend/web/dist/*
 # Runtime data
 /data
 
+# Kokoro TTS model (auto-downloaded on first start; large — keep it local)
+/kokoro-models
+
 # Environment
 .env
 .env.*
@@ -27,3 +30,6 @@ backend/web/dist/*
 
 # Logs
 *.log
+
+# Python
+__pycache__/
