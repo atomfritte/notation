@@ -32,7 +32,7 @@ RUN cd backend \
 FROM alpine:3.23 AS piper
 ARG TARGETARCH
 ARG PIPER_VERSION=2023.11.14-2
-ARG TTS_VOICES="de_DE-thorsten-high en_US-lessac-medium"
+ARG TTS_VOICES="de_DE-thorsten-high de_DE-thorsten_emotional-medium en_US-lessac-medium en_US-ryan-high"
 RUN apk add --no-cache curl tar
 WORKDIR /opt
 RUN set -eux; \
