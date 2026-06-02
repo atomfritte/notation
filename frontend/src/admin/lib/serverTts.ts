@@ -16,7 +16,7 @@ export type ServerVoice = { id: string; label: string; lang: string }
 // boundary) so it degrades to a slightly-shortened read instead of failing. Both
 // speak() and prefetch() apply it so the cached URL matches.
 const MAX_TTS_CHARS = 3500
-function capText(text: string): string {
+export function capText(text: string): string {
   if (text.length <= MAX_TTS_CHARS) return text
   const cut = text.slice(0, MAX_TTS_CHARS)
   const sp = cut.lastIndexOf(' ')

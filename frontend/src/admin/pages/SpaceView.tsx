@@ -7,6 +7,7 @@ import { FileTree } from '../components/FileTree'
 import { MarkdownView, stripMdExt } from '../components/MarkdownView'
 import { FormView } from '../components/FormView'
 import { ReadAloudBar } from '../components/ReadAloudBar'
+import { PrepareAudioPanel } from '../components/PrepareAudioPanel'
 import { HeaderActionBtn, HeaderOverflowMenu, useHeaderWidth, headerIsCompact, type HeaderAction } from '../components/HeaderActions'
 // Monaco is heavy (~3MB). Load it only when the user actually starts editing.
 const Editor = lazy(() => import('../components/Editor'))
@@ -121,6 +122,7 @@ export function SpaceView() {
   const isForm = !!formEntry?.form
   const [formData, setFormData] = useState<api.FormData | null>(null)
   const [readAloud, setReadAloud] = useState(false)
+  const [prepareAudioOpen, setPrepareAudioOpen] = useState(false)
   // Server studio voices for read-aloud (undefined = still probing).
   const [ttsVoices, setTtsVoices] = useState<api.ServerVoice[] | undefined>(undefined)
   useEffect(() => {
@@ -854,6 +856,15 @@ export function SpaceView() {
             >
               <Archive size={16} />
             </button>
+            {ttsVoices && ttsVoices.length > 0 && (
+              <button
+                onClick={() => setPrepareAudioOpen(true)}
+                title="Audio vorbereiten (Ordner vertonen, offline hören)"
+                className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
+              >
+                <Headphones size={16} />
+              </button>
+            )}
             <input
               ref={uploadInputRef}
               type="file"
@@ -1212,6 +1223,16 @@ export function SpaceView() {
           onClose={() => setReadAloud(false)}
           serverVoices={ttsVoices}
           ttsURL={ttsURL}
+        />
+      )}
+      {ttsVoices && ttsVoices.length > 0 && (
+        <PrepareAudioPanel
+          key={prepareAudioOpen ? 'audio-open' : 'audio-closed'}
+          open={prepareAudioOpen}
+          spaceID={spaceID}
+          tree={tree}
+          voices={ttsVoices}
+          onClose={() => setPrepareAudioOpen(false)}
         />
       )}
     </div>

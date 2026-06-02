@@ -1,0 +1,157 @@
+// "Vertonen" (pre-synthesise) — generate + cache the read-aloud audio for whole
+// pages without the user opening + playing them, so a synced space can be heard
+// in airplane mode. For each page we reproduce the player's exact chunks
+// (chunksFromMarkdown → groupChunks 'block') and fetch each /tts URL; the service
+// worker caches those clips (cache-first on /tts, see public/sw.js), so the next
+// time the player requests the byte-identical URL it's served from cache offline.
+//
+// The spoken text only ever reaches this app's own server (Piper runs locally in
+// the container) — never a third party. Shared by the in-space "prepare audio"
+// panel and the space-manager "include voice" offline option.
+
+import * as api from './api'
+import { chunksFromMarkdown } from './markdownChunks'
+import { capText } from './serverTts'
+
+// Same trigger the player uses (ReadAloudBar): a page whose PATH contains
+// "meditation" is voiced in the slow, emphasised meditation style. The style is
+// part of the cache key, so it must match the player's URL exactly.
+const MEDITATION_RE = /meditation/i
+
+const PER_PAGE_CONCURRENCY = 3
+
+/** All directory paths (excluding form folders) — the folder picker's options. */
+export function folderList(tree: api.Entry[]): string[] {
+  const out: string[] = []
+  const walk = (entries: api.Entry[]) => {
+    for (const e of entries) {
+      if (e.is_dir && !e.form) {
+        out.push(e.path)
+        if (e.children) walk(e.children)
+      }
+    }
+  }
+  walk(tree)
+  return out.sort((a, b) => a.localeCompare(b))
+}
+
+/**
+ * markdownPagesUnder returns every markdown page at or below `folder` (recursing
+ * into all subfolders, skipping form folders). folder === '' means the whole
+ * space.
+ */
+export function markdownPagesUnder(tree: api.Entry[], folder: string): string[] {
+  const all: string[] = []
+  const walk = (entries: api.Entry[]) => {
+    for (const e of entries) {
+      if (e.is_dir) {
+        if (!e.form && e.children) walk(e.children)
+      } else if (e.path.toLowerCase().endsWith('.md')) {
+        all.push(e.path)
+      }
+    }
+  }
+  walk(tree)
+  if (!folder) return all
+  const prefix = folder.endsWith('/') ? folder : folder + '/'
+  return all.filter(p => p.startsWith(prefix))
+}
+
+export type VertonenProgress = {
+  /** Pages fully processed so far. */ done: number
+  /** Total pages to process. */ total: number
+  /** Path currently being voiced (for the UI). */ current: string
+  /** Audio clips successfully cached so far. */ clips: number
+}
+
+export type VertonenResult = {
+  pages: number
+  clips: number
+  /** Individual /tts clips that failed to fetch. */ clipFailed: number
+  /** Pages that failed to load/render entirely. */ pageFailed: number
+  /** Pages with no readable prose (nothing to voice). */ emptyPages: number
+  cancelled: boolean
+}
+
+/** A mutable flag the caller flips to abort between pages/chunks. */
+export type Cancel = { cancelled: boolean }
+
+// Must match sw.js's AUDIO cache name — we peek it to skip clips already cached
+// (e.g. from a previous run or from normal playback), so re-runs are cheap and we
+// don't re-hit the Piper backend or grow the cache needlessly.
+const AUDIO_CACHE = 'notation-audio'
+
+/**
+ * vertonenPages synthesises + caches the audio for each page. Pages are voiced
+ * sequentially (renderToStaticMarkup is main-thread + CPU-heavy, and we yield
+ * between pages to keep the UI responsive); chunks within a page fetch in small
+ * parallel batches. A page that fails to render/fetch is skipped, never aborting
+ * the run. Returns counts for the summary.
+ */
+export async function vertonenPages(
+  spaceID: string,
+  paths: string[],
+  voiceId: string,
+  onProgress?: (p: VertonenProgress) => void,
+  cancel?: Cancel,
+): Promise<VertonenResult> {
+  // Ask the browser to make the origin's storage persistent so a big batch of
+  // audio doesn't get evicted (and doesn't pressure the shell/offline caches).
+  try { await navigator.storage?.persist?.() } catch { /* best-effort */ }
+  const audioCache = typeof caches !== 'undefined'
+    ? await caches.open(AUDIO_CACHE).catch(() => null)
+    : null
+
+  let clips = 0
+  let clipFailed = 0
+  let pageFailed = 0
+  let emptyPages = 0
+  const result = (pages: number, cancelled: boolean): VertonenResult =>
+    ({ pages, clips, clipFailed, pageFailed, emptyPages, cancelled })
+  const emit = (done: number, current: string) =>
+    onProgress?.({ done, total: paths.length, current, clips })
+  emit(0, paths[0] ?? '')
+
+  for (let i = 0; i < paths.length; i++) {
+    if (cancel?.cancelled) return result(i, true)
+    const path = paths[i]
+    emit(i, path)
+    let texts: string[] | null
+    try {
+      const { content } = await api.readFile(spaceID, path)
+      texts = await chunksFromMarkdown(content)
+    } catch {
+      pageFailed++
+      continue
+    }
+    if (texts === null) { pageFailed++; continue } // render threw
+    if (texts.length === 0) { emptyPages++; continue } // nothing readable to voice
+    const style = MEDITATION_RE.test(path) ? 'meditation' : ''
+    for (let j = 0; j < texts.length; j += PER_PAGE_CONCURRENCY) {
+      if (cancel?.cancelled) return result(i, true)
+      const batch = texts.slice(j, j + PER_PAGE_CONCURRENCY)
+      await Promise.all(batch.map(async (t) => {
+        if (cancel?.cancelled) return // tighten Stoppen: skip not-yet-started fetches
+        const text = capText(t)
+        if (!text.trim()) return
+        const url = api.ttsURL(voiceId, text, style)
+        // Already cached (prior run or playback) → nothing to do; bounds re-runs.
+        if (audioCache && await audioCache.match(url)) { clips++; return }
+        try {
+          // GET the same URL the player will request → SW caches it (cache-first
+          // on /tts). We read the body so the fetch fully completes before the
+          // SW stores it.
+          const r = await fetch(url, { credentials: 'same-origin' })
+          if (r.ok) { await r.arrayBuffer(); clips++ } else { clipFailed++ }
+        } catch {
+          clipFailed++
+        }
+      }))
+      emit(i, path)
+    }
+    // Yield so the main thread can paint progress between heavy pages.
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+  }
+  emit(paths.length, '')
+  return result(paths.length, false)
+}
