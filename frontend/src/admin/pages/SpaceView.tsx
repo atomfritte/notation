@@ -5,6 +5,7 @@ import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
 import { MarkdownView, stripMdExt } from '../components/MarkdownView'
+import { FormView } from '../components/FormView'
 // Monaco is heavy (~3MB). Load it only when the user actually starts editing.
 const Editor = lazy(() => import('../components/Editor'))
 import { SharePanel } from '../components/SharePanel'
@@ -111,6 +112,12 @@ export function SpaceView() {
   const [bookmarks, setBookmarks] = useState<string[]>([])
   
   const [ctxMenu, setCtxMenu] = useState<{ x: number, y: number, items: MenuItem[] } | null>(null)
+
+  // Form folders: when the selected path is a folder with a _form.md template,
+  // we render the FormView instead of treating it as a file.
+  const formEntry = useMemo(() => findTreeEntry(tree, file), [tree, file])
+  const isForm = !!formEntry?.form
+  const [formData, setFormData] = useState<api.FormData | null>(null)
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('notation_theme') as 'light' | 'dark') || 'dark'
@@ -548,6 +555,15 @@ export function SpaceView() {
       setEtag(null)
       return
     }
+    // Form folders aren't files — the FormView fetch effect handles them; don't
+    // try to read the directory as a file (it would 404).
+    if (isForm) {
+      setContent('')
+      setEtag(null)
+      setEditing(false)
+      setHistoryMode(false)
+      return
+    }
     let cancelled = false
     if (isTextFile(file)) {
       api.readFile(spaceID, file)
@@ -567,7 +583,18 @@ export function SpaceView() {
     refreshComments()
     // A late response from the previous file must not clobber the current one.
     return () => { cancelled = true }
-  }, [spaceID, file, refreshComments])
+  }, [spaceID, file, refreshComments, isForm])
+
+  // Load a form folder's schema + entries when one is selected.
+  useEffect(() => {
+    if (!spaceID || !file || !isForm) { setFormData(null); return }
+    let cancelled = false
+    setFormData(null)
+    api.getForm(spaceID, file)
+      .then(d => { if (!cancelled) setFormData(d) })
+      .catch(e => { if (!cancelled) setErr(String(e)) })
+    return () => { cancelled = true }
+  }, [spaceID, file, isForm])
 
   // uploadFiles is the single ingress point for the upload UX — both the
   // drag-drop overlay AND the explicit "Upload" button call into it.
@@ -687,7 +714,7 @@ export function SpaceView() {
             title="Back to all Spaces"
           >
             <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium w-full">
-              <div className="w-5 h-5 rounded bg-[var(--notation-bg-alt)] text-white dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase relative">
+              <div className="w-5 h-5 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase relative">
                 <span className="group-hover:opacity-0 transition-opacity">{spaceID.charAt(0)}</span>
                 <ChevronLeft size={12} className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
@@ -853,7 +880,7 @@ export function SpaceView() {
       >
         {dragOver && (
           <div className="absolute inset-0 z-30 bg-[color:var(--notation-accent-10)] dark:bg-[color:var(--notation-accent-15)] border-4 border-dashed border-[color:var(--notation-accent)] flex items-center justify-center pointer-events-none">
-            <div className="bg-white bg-[var(--notation-bg-alt)] rounded-lg px-6 py-4 shadow-xl flex items-center gap-3">
+            <div className="bg-[var(--notation-bg-alt)] rounded-lg px-6 py-4 shadow-xl flex items-center gap-3">
               <Upload size={24} className="text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]" />
               <div>
                 <div className="text-[var(--notation-fg)] font-semibold">Drop to upload</div>
@@ -937,14 +964,16 @@ export function SpaceView() {
                   <List size={18} />
                 </button>
               )}
-              <button
-                onClick={() => { setHistoryMode(v => !v); setEditing(false) }}
-                className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${historyMode ? 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}
-                title="Version history"
-              >
-                <History size={18} />
-              </button>
-              {isTextFile(file) && !historyMode && (
+              {!isForm && (
+                <button
+                  onClick={() => { setHistoryMode(v => !v); setEditing(false) }}
+                  className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${historyMode ? 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}
+                  title="Version history"
+                >
+                  <History size={18} />
+                </button>
+              )}
+              {isTextFile(file) && !historyMode && !isForm && (
                 <button onClick={() => setEditing(v => !v)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)] dark:bg-[color:var(--notation-accent-10)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}>
                   {editing ? <Eye size={16} /> : <Edit3 size={16} />}
                 </button>
@@ -952,10 +981,12 @@ export function SpaceView() {
               <button onClick={() => toggleBookmark(file)} className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`} title="Favorite">
                 <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
               </button>
-              <button onClick={() => setShowComments(!showComments)} className={`p-1.5 rounded-md transition-colors flex items-center gap-1 ${showComments ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`} title="Comments">
-                <MessageSquare size={18} />
-                {comments.length > 0 && <span className="text-xs font-bold text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]">{comments.length}</span>}
-              </button>
+              {!isForm && (
+                <button onClick={() => setShowComments(!showComments)} className={`p-1.5 rounded-md transition-colors flex items-center gap-1 ${showComments ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`} title="Comments">
+                  <MessageSquare size={18} />
+                  {comments.length > 0 && <span className="text-xs font-bold text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]">{comments.length}</span>}
+                </button>
+              )}
               
               {isMarkdownFile(file) && !editing && (
                 <button
@@ -1019,6 +1050,23 @@ export function SpaceView() {
                   refreshTree()
                 }}
               />
+            ) : file && isForm ? (
+              <div className="absolute inset-0 flex flex-col animate-in fade-in duration-300">
+                {formData ? (
+                  <FormView
+                    data={formData}
+                    onSubmit={async (values) => {
+                      await api.submitForm(spaceID, file, values)
+                      const fresh = await api.getForm(spaceID, file)
+                      setFormData(fresh)
+                      refreshTree()
+                    }}
+                    onEditTemplate={() => setSearchParams({ file: `${file}/_form.md` })}
+                  />
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">Loading form…</div>
+                )}
+              </div>
             ) : file ? (
               // In edit mode the editor manages its own scroll, so the wrapper
               // must give it a definite height — otherwise Monaco's `height: 100%`
@@ -1110,7 +1158,7 @@ export function SpaceView() {
             </div>
           )}
 
-          {showComments && file && (
+          {showComments && file && !isForm && (
             <div id="comments-panel" className="surface-elevated w-[320px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
               <div className="p-3 border-b border-[var(--notation-border)] flex justify-between items-center bg-[var(--notation-bg-elevated)]">
                  <h3 className="font-semibold text-sm text-[var(--notation-fg)] flex items-center gap-2">
@@ -1186,4 +1234,18 @@ function flattenTreeFiles(entries: api.Entry[], onlyMd: boolean): string[] {
     }
   }
   return result
+}
+
+// Depth-first lookup of the tree entry at a given path (form folders are in the
+// tree with their children omitted, so this still finds them).
+function findTreeEntry(entries: api.Entry[], path: string): api.Entry | null {
+  if (!path) return null
+  for (const e of entries) {
+    if (e.path === path) return e
+    if (e.is_dir && e.children) {
+      const hit = findTreeEntry(e.children, path)
+      if (hit) return hit
+    }
+  }
+  return null
 }

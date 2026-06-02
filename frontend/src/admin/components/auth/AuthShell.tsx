@@ -16,12 +16,12 @@ export function AuthShell({ title, subtitle, children }: Props) {
     <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--notation-bg)] text-[var(--notation-fg)] p-6">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-9 h-9 rounded-md bg-[var(--notation-bg-alt)] text-white dark:bg-[color:var(--notation-accent-15)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-lg">
+          <div className="w-9 h-9 rounded-md bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-15)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-lg">
             n
           </div>
           <div className="text-lg font-semibold tracking-tight">notation</div>
         </div>
-        <div className="rounded-xl border border-[var(--notation-border)] bg-white bg-[var(--notation-bg-alt)]/50 shadow-sm p-6">
+        <div className="rounded-xl border border-[var(--notation-border)] bg-[var(--notation-bg-alt)]/50 shadow-sm p-6">
           <h1 className="text-xl font-semibold text-[var(--notation-fg)]">{title}</h1>
           {subtitle && (
             <p className="text-sm text-[var(--notation-fg-muted)] mt-1.5">{subtitle}</p>

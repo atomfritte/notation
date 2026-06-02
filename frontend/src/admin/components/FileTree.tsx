@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, type Dispatch, type SetStateAction } from 'react'
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, ClipboardList } from 'lucide-react'
 import type { Entry } from '../lib/api'
 
 /**
@@ -80,6 +80,27 @@ export function FileTree({
     try { localStorage.setItem(collapseStorageKey, JSON.stringify(collapsed)) }
     catch { /* quota error etc. — not fatal */ }
   }, [collapsed, collapseStorageKey, isRoot])
+
+  // Reveal the active file: whenever `current` changes, expand any child folder
+  // that contains it. Each level only handles its own direct children; once a
+  // folder opens, the nested FileTree mounts and its own effect reveals the
+  // next level down, so the whole ancestor chain unfolds. Gated on `current`
+  // changing (not every render) so it never re-opens a folder the user just
+  // collapsed while staying on the same file.
+  useEffect(() => {
+    if (!current) return
+    setCollapsed(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const e of entries) {
+        if (e.is_dir && next[e.path] && (current === e.path || current.startsWith(e.path + '/'))) {
+          next[e.path] = false
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [current, entries])
 
   function toggle(path: string) {
     setCollapsed(prev => ({ ...prev, [path]: !prev[path] }))
@@ -181,10 +202,18 @@ function FileRow({
   onContextMenu?: (e: React.MouseEvent, path: string, isDir: boolean) => void
 }) {
   const isActive = current === entry.path
+  // Keep the active row in view when navigation happens elsewhere (prev/next,
+  // in-content links, command palette, search). `block: 'nearest'` only scrolls
+  // when the row is actually off-screen, so it never jumps unnecessarily.
+  const rowRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (isActive) rowRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [isActive])
 
   return (
     <li>
       <button
+        ref={rowRef}
         onClick={() => onSelect(entry.path)}
         onContextMenu={(evt) => {
           evt.stopPropagation()
@@ -232,6 +261,39 @@ function DirRow({
 }) {
   const isDropTarget = dropTarget === entry.path
   const dragDepthRef = useRef(0)
+
+  // A form folder isn't browsable — clicking it opens the Form view (like a
+  // file) rather than expanding. Render it as a distinct row with an entry
+  // count and keep it scrolled into view when it's the active selection.
+  const isFormActive = !!entry.form && current === entry.path
+  const formRowRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (isFormActive) formRowRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [isFormActive])
+  if (entry.form) {
+    return (
+      <li>
+        <button
+          ref={formRowRef}
+          onClick={() => onSelect(entry.path)}
+          onContextMenu={(evt) => { evt.stopPropagation(); onContextMenu?.(evt, entry.path, true) }}
+          className={`flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-md transition-colors ${
+            current === entry.path
+              ? 'bg-[var(--notation-border)] text-[var(--notation-fg)] font-medium'
+              : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-bg-alt)]/50 hover:text-[var(--notation-fg)]'
+          }`}
+          style={{ paddingLeft: depth * 12 + 8 }}
+          title={`${entry.path} (form)`}
+        >
+          <ClipboardList size={14} className={current === entry.path ? 'text-[color:var(--notation-accent)]' : 'opacity-70'} />
+          <span className="truncate flex-1">{entry.name}</span>
+          {entry.entries ? (
+            <span className="text-[9px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full flex-shrink-0">{entry.entries}</span>
+          ) : null}
+        </button>
+      </li>
+    )
+  }
 
   function handleDragOver(e: React.DragEvent) {
     const types = e.dataTransfer.types

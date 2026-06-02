@@ -14,6 +14,11 @@ type Entry struct {
 	Size     int64   `json:"size"`
 	Modified string  `json:"modified"` // RFC3339
 	Children []Entry `json:"children,omitempty"`
+	// Form marks a directory that contains a _form.md template. Its children
+	// (the template + stored entries) are omitted from the tree — the UI opens
+	// it as a form instead of a file listing. Entries is the submission count.
+	Form    bool `json:"form,omitempty"`
+	Entries int  `json:"entries,omitempty"`
 }
 
 // Tree returns a recursive listing of the Space's files directory. Dotfiles
@@ -26,6 +31,29 @@ func (s *Store) Tree(spaceID string) ([]Entry, error) {
 	}
 	defer root.Close()
 	return readDirInRoot(root, ".")
+}
+
+// formFolderEntryCount reports whether children contain a _form.md template
+// and, if so, how many submission files (.md, excluding the template) sit
+// alongside it.
+func formFolderEntryCount(children []Entry) (int, bool) {
+	hasTemplate := false
+	for _, c := range children {
+		if !c.IsDir && c.Name == FormTemplateName {
+			hasTemplate = true
+			break
+		}
+	}
+	if !hasTemplate {
+		return 0, false
+	}
+	count := 0
+	for _, c := range children {
+		if !c.IsDir && c.Name != FormTemplateName && strings.HasSuffix(c.Name, ".md") {
+			count++
+		}
+	}
+	return count, true
 }
 
 func readDirInRoot(root *os.Root, dir string) ([]Entry, error) {
@@ -66,7 +94,14 @@ func readDirInRoot(root *os.Root, dir string) ([]Entry, error) {
 		if info.IsDir() {
 			children, err := readDirInRoot(root, rel)
 			if err == nil {
-				e.Children = children
+				// A directory holding a _form.md becomes a Form: hide its files
+				// (template + entries) and expose just a submission count.
+				if formCount, ok := formFolderEntryCount(children); ok {
+					e.Form = true
+					e.Entries = formCount
+				} else {
+					e.Children = children
+				}
 			}
 		}
 		out = append(out, e)

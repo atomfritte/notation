@@ -51,7 +51,7 @@ export function PasskeySetup({ onDone }: Props) {
             value={label}
             onChange={e => setLabel(e.target.value)}
             placeholder="MacBook"
-            className="w-full bg-white bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-[var(--notation-border)] dark:focus:border-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 text-sm text-[var(--notation-fg)]"
+            className="w-full bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-[var(--notation-border)] dark:focus:border-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 text-sm text-[var(--notation-fg)]"
           />
         </div>
         <button

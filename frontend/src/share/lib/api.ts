@@ -34,6 +34,42 @@ export type Entry = {
   size: number
   modified: string
   children?: Entry[]
+  form?: boolean
+  entries?: number
+}
+
+export type FormFieldType =
+  | 'string' | 'text' | 'integer' | 'number' | 'bool'
+  | 'date' | 'time' | 'datetime' | 'select' | 'email' | 'url'
+
+export type FormField = {
+  key: string
+  label: string
+  type: FormFieldType
+  required: boolean
+  options?: string[]
+  default?: string
+}
+
+export type FormSchema = {
+  title: string
+  title_field: string
+  fields: FormField[]
+}
+
+export type FormEntry = {
+  id: string
+  path: string
+  created_at: string
+  title: string
+  values: Record<string, unknown>
+}
+
+export type FormData = {
+  folder: string
+  schema: FormSchema
+  entries: FormEntry[]
+  can_submit: boolean
 }
 
 export type CommentAnchor = {
@@ -111,6 +147,22 @@ export async function listComments(path: string): Promise<Comment[]> {
  *  server-side on comment permission; read-only shares get a 403. */
 export async function listAllComments(): Promise<Comment[]> {
   const r = await fetch(`${API}/all-comments`)
+  if (!r.ok) throw await asError(r)
+  return r.json()
+}
+
+export async function getForm(folder: string): Promise<FormData> {
+  const r = await fetch(`${API}/form/${encodePath(folder)}`)
+  if (!r.ok) throw await asError(r)
+  return r.json()
+}
+
+export async function submitForm(folder: string, values: Record<string, unknown>): Promise<FormEntry> {
+  const r = await fetch(`${API}/form/${encodePath(folder)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  })
   if (!r.ok) throw await asError(r)
   return r.json()
 }

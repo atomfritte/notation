@@ -63,7 +63,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       role="menu"
       aria-orientation="vertical"
       onKeyDown={onKeyDown}
-      className="fixed z-50 min-w-[160px] bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-md shadow-xl py-1 animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-50 min-w-[160px] surface-elevated bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-md shadow-xl py-1 animate-in fade-in zoom-in-95 duration-100"
       style={{ top: y, left: x }}
     >
       {items.map((item, i) => (

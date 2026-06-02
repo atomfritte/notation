@@ -130,7 +130,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, 
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder="Add a comment…"
-            className="w-full bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none transition-all"
+            className="w-full bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none transition-all"
             rows={2}
             disabled={submitting}
           />
@@ -246,7 +246,7 @@ function CommentRow({
             autoFocus
             rows={2}
             disabled={busy}
-            className="w-full bg-white bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none"
+            className="w-full bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none"
           />
           <div className="flex gap-1.5 justify-end">
             <button
