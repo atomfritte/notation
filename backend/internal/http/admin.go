@@ -763,12 +763,7 @@ func (h *adminHandlers) deleteFormEntry(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	folder := chi.URLParam(r, "*")
-	schema, err := h.store.FormSchema(id, folder)
-	if err != nil {
-		writeFormError(w, err)
-		return
-	}
-	if err := h.store.DeleteFormEntry(id, folder, r.URL.Query().Get("id"), schema); err != nil {
+	if err := h.store.DeleteFormEntry(id, folder, r.URL.Query().Get("id")); err != nil {
 		writeFormError(w, err)
 		return
 	}

@@ -153,7 +153,7 @@ func TestFormEntry_EditDeleteAndImages(t *testing.T) {
 	}
 
 	// Delete removes the entry file.
-	if err := st.DeleteFormEntry("s", "log", e.ID, schema); err != nil {
+	if err := st.DeleteFormEntry("s", "log", e.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if _, err := st.Stat("s", e.Path); err == nil {

@@ -102,7 +102,7 @@ func (s *Store) CreateFormEntry(spaceID, folder string, schema FormSchema, in ma
 	if err != nil {
 		return FormEntry{}, err
 	}
-	sanitizeFormImages(clean, schema, folder)
+	s.sanitizeFormImages(spaceID, clean, schema, folder)
 	ts := now.UTC()
 	title := entryTitle(schema, clean, "")
 	base := ts.Format("2006-01-02_150405")
@@ -377,15 +377,6 @@ func parseFormBool(s string) bool {
 	}
 }
 
-func containsFold(opts []string, v string) bool {
-	for _, o := range opts {
-		if strings.EqualFold(strings.TrimSpace(o), v) {
-			return true
-		}
-	}
-	return false
-}
-
 func parseAnyDateTime(s string) bool {
 	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04", "2006-01-02T15:04", "2006-01-02 15:04:05"} {
 		if _, err := time.Parse(layout, s); err == nil {
@@ -503,11 +494,16 @@ func imageCell(v any, folder string) string {
 
 // ---- image attachment safety ----
 
+// inAttachDir reports whether p is a real attachment path inside this folder's
+// _att dir (so cleanup can never touch a file outside it).
+func inAttachDir(p, folder string) bool {
+	return strings.HasPrefix(p, folder+"/"+formAttachDir+"/") && !strings.Contains(p, "..")
+}
+
 // sanitizeFormImages drops any image-field path that doesn't live inside this
-// form folder's attachment dir, so an entry can only reference images uploaded
-// for it (never an arbitrary file). Mutates and returns values.
-func sanitizeFormImages(values map[string]any, schema FormSchema, folder string) map[string]any {
-	prefix := folder + "/" + formAttachDir + "/"
+// form folder's attachment dir OR doesn't actually exist on disk, so an entry
+// can only reference images genuinely uploaded for it. Mutates and returns values.
+func (s *Store) sanitizeFormImages(spaceID string, values map[string]any, schema FormSchema, folder string) map[string]any {
 	for _, f := range schema.Fields {
 		if f.Type != FieldImage {
 			continue
@@ -518,8 +514,10 @@ func sanitizeFormImages(values map[string]any, schema FormSchema, folder string)
 		}
 		kept := make([]string, 0)
 		for _, p := range toStringSlice(raw) {
-			if strings.HasPrefix(p, prefix) && !strings.Contains(p, "..") {
-				kept = append(kept, p)
+			if inAttachDir(p, folder) {
+				if _, err := s.Stat(spaceID, p); err == nil {
+					kept = append(kept, p)
+				}
 			}
 		}
 		if len(kept) == 0 {
@@ -531,16 +529,14 @@ func sanitizeFormImages(values map[string]any, schema FormSchema, folder string)
 	return values
 }
 
-// entryImagePaths returns the in-folder attachment paths an entry references.
-func entryImagePaths(schema FormSchema, values map[string]any, folder string) []string {
-	prefix := folder + "/" + formAttachDir + "/"
+// allEntryImagePaths returns every in-folder attachment path referenced anywhere
+// in an entry's values — used for CLEANUP, so images survive even after their
+// field is removed from the template and still get deleted with the entry.
+func allEntryImagePaths(values map[string]any, folder string) []string {
 	var out []string
-	for _, f := range schema.Fields {
-		if f.Type != FieldImage {
-			continue
-		}
-		for _, p := range toStringSlice(values[f.Key]) {
-			if strings.HasPrefix(p, prefix) && !strings.Contains(p, "..") {
+	for _, v := range values {
+		for _, p := range toStringSlice(v) {
+			if inAttachDir(p, folder) {
 				out = append(out, p)
 			}
 		}
@@ -598,7 +594,7 @@ func (s *Store) UpdateFormEntry(spaceID, folder, entryID string, schema FormSche
 	if err != nil {
 		return FormEntry{}, err
 	}
-	sanitizeFormImages(clean, schema, folder)
+	s.sanitizeFormImages(spaceID, clean, schema, folder)
 	created := old.CreatedAt
 	if created.IsZero() {
 		created = now.UTC()
@@ -607,7 +603,7 @@ func (s *Store) UpdateFormEntry(spaceID, folder, entryID string, schema FormSche
 	if _, err := s.WriteFile(spaceID, path, strings.NewReader(content), maxBytes); err != nil {
 		return FormEntry{}, err
 	}
-	s.deleteRemovedImages(spaceID, folder, schema, old.Values, clean)
+	s.deleteRemovedImages(spaceID, folder, old.Values, clean)
 	return FormEntry{
 		ID:        entryID,
 		Path:      path,
@@ -618,7 +614,7 @@ func (s *Store) UpdateFormEntry(spaceID, folder, entryID string, schema FormSche
 }
 
 // DeleteFormEntry removes an entry file and (best-effort) its uploaded images.
-func (s *Store) DeleteFormEntry(spaceID, folder, entryID string, schema FormSchema) error {
+func (s *Store) DeleteFormEntry(spaceID, folder, entryID string) error {
 	path, old, err := s.resolveFormEntry(spaceID, folder, entryID)
 	if err != nil {
 		return err
@@ -626,18 +622,18 @@ func (s *Store) DeleteFormEntry(spaceID, folder, entryID string, schema FormSche
 	if err := s.DeleteFile(spaceID, path); err != nil {
 		return err
 	}
-	for _, p := range entryImagePaths(schema, old.Values, folder) {
+	for _, p := range allEntryImagePaths(old.Values, folder) {
 		_ = s.DeleteFile(spaceID, p)
 	}
 	return nil
 }
 
-func (s *Store) deleteRemovedImages(spaceID, folder string, schema FormSchema, oldV, newV map[string]any) {
+func (s *Store) deleteRemovedImages(spaceID, folder string, oldV, newV map[string]any) {
 	keep := map[string]bool{}
-	for _, p := range entryImagePaths(schema, newV, folder) {
+	for _, p := range allEntryImagePaths(newV, folder) {
 		keep[p] = true
 	}
-	for _, p := range entryImagePaths(schema, oldV, folder) {
+	for _, p := range allEntryImagePaths(oldV, folder) {
 		if !keep[p] {
 			_ = s.DeleteFile(spaceID, p)
 		}

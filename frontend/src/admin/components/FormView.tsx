@@ -380,24 +380,29 @@ function ImageField({ value, onChange }: { value: string[]; onChange: (v: unknow
   const [busy, setBusy] = useState(0)
   const [err, setErr] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Track the latest value so overlapping uploads append atomically (each
+  // completion reads + appends synchronously) instead of clobbering via a stale
+  // closure when several batches are in flight.
+  const valueRef = useRef(value)
+  valueRef.current = value
 
   async function add(files: FileList | null) {
     if (!files || !uploadImage) return
     setErr(null)
     const list = Array.from(files).filter(f => f.type.startsWith('image/'))
+    if (inputRef.current) inputRef.current.value = '' // allow re-picking the same file
     setBusy(b => b + list.length)
-    const added: string[] = []
     for (const file of list) {
       try {
-        added.push(await uploadImage(await prepareImage(file)))
+        const path = await uploadImage(await prepareImage(file))
+        valueRef.current = [...valueRef.current, path]
+        onChange(valueRef.current)
       } catch (e) {
         setErr(String((e as Error)?.message ?? e))
       } finally {
         setBusy(b => b - 1)
       }
     }
-    if (added.length) onChange([...value, ...added])
-    if (inputRef.current) inputRef.current.value = ''
   }
 
   if (!uploadImage) {
@@ -660,8 +665,10 @@ function FieldValue({ field, value }: { field: FormField; value: unknown }) {
       )
     }
     case 'smiley': {
-      const n = Math.min(Math.max(toNum(value), 1), 5)
-      return <span className="text-xl">{SMILEYS[n - 1]} <span className="text-xs text-[var(--notation-fg-muted)] align-middle">{toNum(value)}/5</span></span>
+      const raw = toNum(value)
+      if (raw < 1) return <span className="opacity-40">—</span>
+      const n = Math.min(raw, 5)
+      return <span className="text-xl">{SMILEYS[n - 1]} <span className="text-xs text-[var(--notation-fg-muted)] align-middle">{raw}/5</span></span>
     }
     case 'multiselect':
       return (
