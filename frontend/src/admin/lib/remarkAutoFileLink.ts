@@ -66,12 +66,15 @@ export function buildAutoFileLink(opts: AutoFileLinkOptions): Plugin<[], Root> {
   const currentDir = opts.currentFile ? dirname(opts.currentFile) : ''
   const currentPath = opts.currentFile ?? ''
 
-  function makeBadge(resolved: string): PhrasingContent {
+  // The matched prose word itself becomes the link (dashed underline + a ↗
+  // affordance appended via the `.auto-file-link::after` CSS), so the reader
+  // sees the word they wrote turned into a link rather than a separate badge.
+  function makeWordLink(resolved: string, text: string): PhrasingContent {
     return {
       type: 'link',
       url: `?file=${encodeURIComponent(resolved)}`,
       title: resolved,
-      children: [{ type: 'text', value: 'File' } as Text],
+      children: [{ type: 'text', value: text } as Text],
       data: {
         hProperties: {
           className: 'auto-file-link',
@@ -81,10 +84,27 @@ export function buildAutoFileLink(opts: AutoFileLinkOptions): Plugin<[], Root> {
     } as PhrasingContent
   }
 
+  // For inline-code mentions (a path in backticks) we can't underline inside
+  // the <code>, so we append a standalone ↗ link icon right after it.
+  function makeIconLink(resolved: string): PhrasingContent {
+    return {
+      type: 'link',
+      url: `?file=${encodeURIComponent(resolved)}`,
+      title: resolved,
+      children: [{ type: 'text', value: '↗' } as Text],
+      data: {
+        hProperties: {
+          className: 'auto-file-link-icon',
+          title: resolved,
+        },
+      },
+    } as PhrasingContent
+  }
+
   return () => (tree) => {
-    // Pass 1 — regular prose. Walk text nodes, locate mentions, splice in a
-    // sibling `[File]` link after each match without touching the original
-    // wording.
+    // Pass 1 — regular prose. Walk text nodes, locate mentions, and replace the
+    // matched word in place with a link wrapping that exact word (the ↗ is
+    // added by CSS), leaving the rest of the sentence untouched.
     visit(tree, 'text', (node: Text, idx, parent) => {
       if (!parent || idx == null) return
       const ptype = (parent as { type: string }).type
@@ -114,10 +134,12 @@ export function buildAutoFileLink(opts: AutoFileLinkOptions): Plugin<[], Root> {
         const candidates = index.get(token.toLowerCase()) ?? []
         const resolved = resolve(candidates, currentDir, currentPath)
         if (!resolved) continue
-        if (end > cursor) {
-          out.push({ type: 'text', value: value.slice(cursor, end) } as Text)
+        // Emit the run of plain text before the match, then the matched word
+        // wrapped as the link itself (replacing the plain occurrence).
+        if (start > cursor) {
+          out.push({ type: 'text', value: value.slice(cursor, start) } as Text)
         }
-        out.push(makeBadge(resolved))
+        out.push(makeWordLink(resolved, value.slice(start, end)))
         cursor = end
         produced = true
       }
@@ -143,7 +165,7 @@ export function buildAutoFileLink(opts: AutoFileLinkOptions): Plugin<[], Root> {
       const candidates = index.get(value.toLowerCase()) ?? []
       const resolved = resolve(candidates, currentDir, currentPath)
       if (!resolved) return
-      ;(parent as Parent).children.splice(idx + 1, 0, makeBadge(resolved))
+      ;(parent as Parent).children.splice(idx + 1, 0, makeIconLink(resolved))
       return [SKIP, idx + 2]
     })
   }
