@@ -11,6 +11,13 @@ export type Sentence = { text: string; range: Range; block: number }
 const SKIP_TAGS = new Set(['TABLE', 'PRE', 'CODE', 'SCRIPT', 'STYLE', 'BUTTON', 'SVG', 'svg'])
 const SKIP_CLASSES = ['no-read', 'no-print', 'page-nav', 'selection-toolbar', 'prose-table-wrap']
 
+// The standalone "↗" badge that remarkAutoFileLink injects after an inline-code
+// file mention is its OWN text node. We can't target it by class (rehype-sanitize
+// strips the badge's className), so we drop the glyph itself: it's a UI affordance,
+// never prose, so it shouldn't be spoken — and dropping it keeps the off-screen
+// vertonen chunker (which never runs that plugin) producing identical chunk text.
+const AUTO_FILE_LINK_BADGE = '↗'
+
 function isSkipped(el: Element | null, root: Element): boolean {
   while (el && el !== root) {
     if (SKIP_TAGS.has(el.tagName)) return true
@@ -47,6 +54,7 @@ function collectBlock(block: HTMLElement, root: HTMLElement, out: Sentence[], bl
     acceptNode(n) {
       const t = n.textContent ?? ''
       if (!t.trim()) return NodeFilter.FILTER_REJECT
+      if (t.trim() === AUTO_FILE_LINK_BADGE) return NodeFilter.FILTER_REJECT
       return isSkipped((n as Text).parentElement, root) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
     },
   })
