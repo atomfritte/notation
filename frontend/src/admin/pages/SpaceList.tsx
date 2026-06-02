@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Moon, Sun, Trash2, FolderOpen, Sparkles, LogOut, X, Palette, CloudDownload, Cloud, CloudOff, RefreshCw, Loader2 } from 'lucide-react'
+import { Plus, Search, Moon, Sun, Trash2, FolderOpen, Sparkles, LogOut, X, Palette, CloudDownload, Cloud, CloudOff, RefreshCw, Loader2, Headphones } from 'lucide-react'
 import * as api from '../lib/api'
 import { logout } from '../lib/auth'
 import * as offline from '../lib/offlineSync'
+import { defaultVoice, markdownPagesUnder, vertonenPages, type Cancel } from '../lib/vertonen'
 import { ThemePalette } from '../components/ThemePalette'
 
 /**
@@ -46,6 +47,10 @@ export function SpaceList() {
     localStorage.setItem('notation_theme', theme)
   }, [theme])
 
+  // Studio voices (fetched once, shared by all cards) gate the offline "include
+  // voice" action and tell it which voice to pull.
+  const [ttsVoices, setTtsVoices] = useState<api.ServerVoice[]>([])
+
   function refresh() {
     api.listSpaces().then(setSpaces).catch(e => setErr(String(e)))
   }
@@ -53,6 +58,7 @@ export function SpaceList() {
   useEffect(() => {
     refresh()
     api.me().then(setMe).catch(() => {})
+    api.ttsInfo().then(r => setTtsVoices(r.available ? r.voices : [])).catch(() => {})
   }, [])
 
   async function onDelete(id: string) {
@@ -180,7 +186,7 @@ export function SpaceList() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(s => (
-              <SpaceCard key={s.id} space={s} onDelete={() => onDelete(s.id)} online={online} />
+              <SpaceCard key={s.id} space={s} onDelete={() => onDelete(s.id)} online={online} voices={ttsVoices} />
             ))}
             <CreateCard onClick={() => setCreating(true)} />
           </div>
@@ -220,7 +226,7 @@ export function SpaceList() {
 
 // ---- Card --------------------------------------------------------------
 
-function SpaceCard({ space, onDelete, online }: { space: api.Meta; onDelete: () => void; online: boolean }) {
+function SpaceCard({ space, onDelete, online, voices }: { space: api.Meta; onDelete: () => void; online: boolean; voices: api.ServerVoice[] }) {
   const hue = useMemo(() => hueFromString(space.id), [space.id])
   const hue2 = (hue + 40) % 360
   const initial = (space.name || space.id).charAt(0).toUpperCase()
@@ -228,9 +234,17 @@ function SpaceCard({ space, onDelete, online }: { space: api.Meta; onDelete: () 
   const [synced, setSynced] = useState(() => offline.isOffline(space.id))
   const [info, setInfo] = useState(() => offline.offlineInfo(space.id))
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [op, setOp] = useState<'sync' | 'voice'>('sync')
   const [oerr, setOErr] = useState<string | null>(null)
+  const [voiceMsg, setVoiceMsg] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const voiceCancel = useRef<Cancel>({ cancelled: false })
+  const alive = useRef(true)
+  // On unmount (e.g. the search box filters this card out mid-run) abort the loop
+  // and stop touching state. The cancel ref only breaks between pages/batches, so
+  // `alive` also guards the post-await setState in doSync/doVoice.
+  useEffect(() => () => { alive.current = false; voiceCancel.current.cancelled = true }, [])
   const busy = progress !== null
   // Offline + not synced = can't open it; dim + block navigation.
   const blocked = !online && !synced
@@ -248,15 +262,18 @@ function SpaceCard({ space, onDelete, online }: { space: api.Meta; onDelete: () 
   async function doSync() {
     setMenuOpen(false)
     setOErr(null)
+    setVoiceMsg(null)
+    setOp('sync')
     setProgress({ done: 0, total: 0 })
     try {
-      await offline.syncSpace(space.id, space.name || space.id, (done, total) => setProgress({ done, total }))
+      await offline.syncSpace(space.id, space.name || space.id, (done, total) => { if (alive.current) setProgress({ done, total }) })
+      if (!alive.current) return
       setSynced(true)
       setInfo(offline.offlineInfo(space.id))
     } catch (e) {
-      setOErr(String((e as Error)?.message ?? e))
+      if (alive.current) setOErr(String((e as Error)?.message ?? e))
     } finally {
-      setProgress(null)
+      if (alive.current) setProgress(null)
     }
   }
   async function removeOffline() {
@@ -264,6 +281,33 @@ function SpaceCard({ space, onDelete, online }: { space: api.Meta; onDelete: () 
     await offline.unsyncSpace(space.id)
     setSynced(false)
     setInfo(undefined)
+  }
+  // "Include voice": pull the already-synthesised audio for the whole space into
+  // the offline cache (cache-only — never triggers synthesis; that's the in-space
+  // "Audio vorbereiten" manager's job). Skips clips already cached.
+  async function doVoice() {
+    setMenuOpen(false)
+    setOErr(null)
+    setVoiceMsg(null)
+    const voiceId = defaultVoice(voices)
+    if (!voiceId) return
+    setOp('voice')
+    setProgress({ done: 0, total: 0 })
+    voiceCancel.current = { cancelled: false }
+    try {
+      const tree = await api.getTree(space.id)
+      const pages = markdownPagesUnder(tree, '')
+      const r = await vertonenPages(space.id, pages, voiceId, p => { if (alive.current) setProgress({ done: p.done, total: p.total }) }, voiceCancel.current, true)
+      if (!alive.current) return
+      // Surface what happened — a cache-only run on a space with nothing prepared
+      // pulls 0 clips (all 404 → skipped), which would otherwise look identical to
+      // success and leave airplane-mode playback silently empty.
+      setVoiceMsg(r.clips > 0 ? `${r.clips} Audios offline` : 'Noch nichts vertont — erst „Audio vorbereiten" im Space')
+    } catch (e) {
+      if (alive.current) setOErr(String((e as Error)?.message ?? e))
+    } finally {
+      if (alive.current) { setProgress(null); setOp('sync') }
+    }
   }
 
   return (
@@ -291,10 +335,14 @@ function SpaceCard({ space, onDelete, online }: { space: api.Meta; onDelete: () 
             {busy ? (
               <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)]">
                 <Loader2 size={12} className="animate-spin" />
-                Syncing {progress!.total ? `${progress!.done}/${progress!.total}` : '…'}
+                {op === 'voice' ? 'Vertonen' : 'Syncing'} {progress!.total ? `${progress!.done}/${progress!.total}` : '…'}
               </span>
             ) : oerr ? (
               <span className="text-[var(--notation-danger)] truncate" title={oerr}>Offline sync failed</span>
+            ) : voiceMsg ? (
+              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)] truncate" title={voiceMsg}>
+                <Headphones size={12} className="flex-shrink-0" /> <span className="truncate">{voiceMsg}</span>
+              </span>
             ) : synced ? (
               <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)]">
                 <Cloud size={12} fill="currentColor" /> Offline{info ? ` · ${formatDate(new Date(info.syncedAt).toISOString())}` : ''}
@@ -323,6 +371,9 @@ function SpaceCard({ space, onDelete, online }: { space: api.Meta; onDelete: () 
       {menuOpen && synced && !busy && (
         <div className="absolute top-10 left-2 z-10 w-40 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] shadow-xl py-1 text-sm" onClick={e => e.preventDefault()}>
           <button onClick={(e) => { e.stopPropagation(); void doSync() }} className="w-full text-left px-3 py-1.5 hover:bg-[var(--notation-bg-alt)] flex items-center gap-2"><RefreshCw size={13} /> Update now</button>
+          {voices.length > 0 && online && (
+            <button onClick={(e) => { e.stopPropagation(); void doVoice() }} title="Bereits vertonte Audios offline mitnehmen" className="w-full text-left px-3 py-1.5 hover:bg-[var(--notation-bg-alt)] flex items-center gap-2"><Headphones size={13} /> Audio einbeziehen</button>
+          )}
           <button onClick={(e) => { e.stopPropagation(); void removeOffline() }} className="w-full text-left px-3 py-1.5 hover:bg-[var(--notation-bg-alt)] text-[var(--notation-danger)] flex items-center gap-2"><CloudOff size={13} /> Remove offline</button>
         </div>
       )}

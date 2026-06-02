@@ -2,6 +2,7 @@ package tts
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -113,6 +114,46 @@ func TestSynth_CacheAndKeys(t *testing.T) {
 	// Empty text → error.
 	if _, _, err := s.Get(ctx, "test", "de_DE-thorsten-high", "", "   "); err == nil {
 		t.Error("empty text should error")
+	}
+}
+
+func TestSynth_GetCached(t *testing.T) {
+	s := newTestSynth(t)
+	var calls int32
+	s.synthFn = func(_ context.Context, vm *voiceModel, _ styleParams, text string) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		return []byte("audio:" + vm.ID + ":" + text), nil
+	}
+
+	// Not synthesised yet → ErrNotCached, and GetCached must NOT synthesise.
+	if _, _, err := s.GetCached("test", "de_DE-thorsten-high", "", "Hallo"); !errors.Is(err, ErrNotCached) {
+		t.Fatalf("GetCached miss = %v, want ErrNotCached", err)
+	}
+	if calls != 0 {
+		t.Fatalf("GetCached synthesised (%d calls); it must only peek", calls)
+	}
+
+	// Prime the cache via a normal Get, then GetCached returns it with no synth.
+	if _, _, err := s.Get(context.Background(), "test", "de_DE-thorsten-high", "", "Hallo"); err != nil {
+		t.Fatal(err)
+	}
+	a, etag, err := s.GetCached("test", "de_DE-thorsten-high", "", "Hallo")
+	if err != nil {
+		t.Fatalf("GetCached hit: %v", err)
+	}
+	if string(a) != "audio:de_DE-thorsten-high:Hallo" || etag == "" {
+		t.Fatalf("GetCached a=%q etag=%q", a, etag)
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1 (GetCached must not re-synthesise)", calls)
+	}
+
+	// Empty text + unknown voice still error the same way as Get.
+	if _, _, err := s.GetCached("test", "de_DE-thorsten-high", "", "  "); !errors.Is(err, ErrEmpty) {
+		t.Errorf("empty text = %v, want ErrEmpty", err)
+	}
+	if _, _, err := s.GetCached("test", "xx_XX-nope", "", "x"); !errors.Is(err, ErrNoVoice) {
+		t.Errorf("unknown voice = %v, want ErrNoVoice", err)
 	}
 }
 

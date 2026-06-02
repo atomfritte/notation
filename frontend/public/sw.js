@@ -90,7 +90,11 @@ async function cacheFirst(cacheName, req) {
   if (hit) return hit
   try {
     const res = await fetch(req)
-    if (res.ok) cache.put(req, res.clone())
+    // Only cache FULL responses. <audio> sends Range requests → the server replies
+    // 206 Partial Content (a Content-Range body); caching that under the bare URL
+    // would serve a partial/protocol-wrong clip to later non-Range requests. The
+    // vertonen/prefetch fetches send no Range → clean 200 → cached for offline.
+    if (res.status === 200) cache.put(req, res.clone())
     return res
   } catch (err) {
     return hit || Response.error()

@@ -42,13 +42,26 @@ func serveTTS(synth *tts.Synth, scope string, w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusRequestEntityTooLarge, "text too long")
 		return
 	}
-	audio, etag, err := synth.Get(r.Context(), scope, r.URL.Query().Get("voice"), r.URL.Query().Get("style"), text)
+	voice, style := r.URL.Query().Get("voice"), r.URL.Query().Get("style")
+	// Cache-only requests (the offline "include voice" flow) never synthesise:
+	// they return already-prepared audio or 404. The URL is identical to the
+	// player's, so a 200 caches under the same key the player will request.
+	var audio []byte
+	var etag string
+	var err error
+	if r.Header.Get("X-TTS-Cache-Only") != "" {
+		audio, etag, err = synth.GetCached(scope, voice, style, text)
+	} else {
+		audio, etag, err = synth.Get(r.Context(), scope, voice, style, text)
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, tts.ErrEmpty):
 			writeError(w, http.StatusBadRequest, "missing text")
 		case errors.Is(err, tts.ErrNoVoice):
 			writeError(w, http.StatusNotFound, "no such voice")
+		case errors.Is(err, tts.ErrNotCached):
+			writeError(w, http.StatusNotFound, "not cached")
 		case errors.Is(err, tts.ErrUnavailable):
 			writeError(w, http.StatusServiceUnavailable, "server tts not available")
 		default:
