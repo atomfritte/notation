@@ -153,6 +153,10 @@ func ParseFormSchema(md string) FormSchema {
 
 	if len(schema.Fields) > 0 {
 		schema.TitleField = schema.Fields[0].Key
+	} else {
+		// Never marshal a nil slice (→ JSON `null`), which the client would
+		// try to iterate and crash on. An empty template yields an empty form.
+		schema.Fields = []FormField{}
 	}
 	if schema.Title == "" {
 		schema.Title = "Form"

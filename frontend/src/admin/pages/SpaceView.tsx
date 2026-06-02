@@ -574,7 +574,10 @@ export function SpaceView() {
           setContent(res.content)
           setEtag(res.etag)
         })
-        .catch(e => { if (!cancelled) setErr(String(e)) })
+        // A 400 usually means the path is a directory — e.g. a form folder the
+        // tree hasn't classified yet. Don't flash an error; once the tree loads
+        // the form effect takes over.
+        .catch(e => { if (!cancelled && (e as { status?: number })?.status !== 400) setErr(String(e)) })
     } else {
       // Binary file — viewer streams via direct URL, no content fetch needed.
       setContent('')

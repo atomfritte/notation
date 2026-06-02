@@ -215,7 +215,9 @@ function ShareUI() {
         if (cancelled) return
         setContent(c)
         setEditBuffer(c)
-      }).catch(e => { if (!cancelled) setErr(String(e)) })
+      // A 400 usually means the path is a directory (a form folder the tree
+      // hasn't classified yet) — don't flash an error; the form effect handles it.
+      }).catch(e => { if (!cancelled && (e as { status?: number })?.status !== 400) setErr(String(e)) })
     } else {
       setContent('')
       setEditBuffer('')

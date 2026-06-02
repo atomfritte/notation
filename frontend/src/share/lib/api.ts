@@ -103,7 +103,7 @@ async function asError(r: Response): Promise<Error> {
   } catch {
     /* ignore */
   }
-  return new Error(msg)
+  return Object.assign(new Error(msg), { status: r.status })
 }
 
 function encodePath(p: string): string {
