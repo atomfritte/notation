@@ -1,11 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive } from 'lucide-react'
+import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones } from 'lucide-react'
 import * as api from '../lib/api'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
 import { MarkdownView, stripMdExt } from '../components/MarkdownView'
 import { FormView } from '../components/FormView'
+import { ReadAloudBar } from '../components/ReadAloudBar'
 // Monaco is heavy (~3MB). Load it only when the user actually starts editing.
 const Editor = lazy(() => import('../components/Editor'))
 import { SharePanel } from '../components/SharePanel'
@@ -118,6 +119,7 @@ export function SpaceView() {
   const formEntry = useMemo(() => findTreeEntry(tree, file), [tree, file])
   const isForm = !!formEntry?.form
   const [formData, setFormData] = useState<api.FormData | null>(null)
+  const [readAloud, setReadAloud] = useState(false)
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('notation_theme') as 'light' | 'dark') || 'dark'
@@ -988,6 +990,17 @@ export function SpaceView() {
                 </button>
               )}
               
+              {isMarkdownFile(file) && !editing && !isForm && (
+                <button
+                  onClick={() => setReadAloud(v => !v)}
+                  className={`p-1.5 rounded-md transition-colors ${readAloud ? 'bg-[var(--notation-border)] text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}
+                  title="Read aloud"
+                  aria-pressed={readAloud}
+                >
+                  <Headphones size={18} />
+                </button>
+              )}
+
               {isMarkdownFile(file) && !editing && (
                 <button
                   onClick={() => window.print()}
@@ -1217,6 +1230,16 @@ export function SpaceView() {
         onSearch={(q) => api.searchSpace(spaceID, q)}
       />
       <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} scope="admin" />
+      {readAloud && (
+        <ReadAloudBar
+          navFiles={allFiles}
+          currentFile={file}
+          content={content}
+          onNavigate={selectFile}
+          storageKey={`notation_readpos_${spaceID}`}
+          onClose={() => setReadAloud(false)}
+        />
+      )}
     </div>
   )
 }
