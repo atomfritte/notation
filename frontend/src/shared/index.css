@@ -342,6 +342,13 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, #FACC15 60%, transparent);
 }
 
+/* Read-aloud: the sentence currently being spoken (CSS Custom Highlight API —
+   no DOM mutation, so it never disturbs the comment / search marks). */
+::highlight(readaloud) {
+  background-color: var(--notation-accent-30);
+  color: inherit;
+}
+
 /* Heading anchors stay clickable but the wrap doesn't override heading color */
 .prose h1 > a, .prose h2 > a, .prose h3 > a, .prose h4 > a, .prose h5 > a, .prose h6 > a {
   color: inherit;

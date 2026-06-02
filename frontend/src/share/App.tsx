@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import {
   PanelLeft, List, MessageSquare, Search, Printer, Sun, Moon, Palette,
-  Bookmark, FileText, Folder, HelpCircle, Menu, X, Check,
+  Bookmark, FileText, Folder, HelpCircle, Menu, X, Check, Headphones,
 } from 'lucide-react'
 import * as api from './lib/api'
 import { ShareCommentsPanel } from './ShareCommentsPanel'
@@ -10,6 +10,7 @@ import { FileTree } from '../admin/components/FileTree'
 import { FileViewer } from '../admin/components/FileViewer'
 import { MarkdownView, stripMdExt } from '../admin/components/MarkdownView'
 import { FormView } from '../admin/components/FormView'
+import { ReadAloudBar } from '../admin/components/ReadAloudBar'
 import { CommentThread } from '../admin/components/CommentThread'
 import { Outline } from '../admin/components/Outline'
 import { CommandPalette } from '../admin/components/CommandPalette'
@@ -45,6 +46,7 @@ function ShareUI() {
   const formEntry = useMemo(() => findFormEntry(tree, file), [tree, file])
   const isForm = !!formEntry?.form
   const [formData, setFormData] = useState<api.FormData | null>(null)
+  const [readAloud, setReadAloud] = useState(false)
 
   // Theme: we still seed from prefers-color-scheme but only allow the user
   // to override it when features.theme is on. initTheme() repaints the
@@ -382,6 +384,7 @@ function ShareUI() {
   if (features?.outline && !isMobile && isMarkdownFile(file)) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={16} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
   if (canComment && !isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={16} />, active: showComments, badge: comments.length, onClick: () => { openedBySelectionRef.current = false; setShowComments(v => !v) } })
   if (features?.bookmarks) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove bookmark' : 'Bookmark this page', icon: <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />, active: !!isBookmarked, onClick: () => toggleBookmark(file) })
+  if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={16} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
   if (features?.print && isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={16} />, onClick: () => window.print() })
   if (features?.theme) headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={16} />, onClick: () => setThemeOpen(true) })
   if (features?.theme) headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
@@ -727,6 +730,16 @@ function ShareUI() {
         <ThemePalette onClose={() => setThemeOpen(false)} />
       )}
       <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} scope="share" />
+      {readAloud && (
+        <ReadAloudBar
+          navFiles={navFiles}
+          currentFile={file}
+          content={content}
+          onNavigate={select}
+          storageKey={`notation_readpos_${api.TOKEN}`}
+          onClose={() => setReadAloud(false)}
+        />
+      )}
     </div>
   )
 }

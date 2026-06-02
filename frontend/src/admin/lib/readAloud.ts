@@ -1,0 +1,177 @@
+// Read-aloud (audiobook) core: readable-text extraction + a pluggable, fully
+// on-device TTS engine. NO text ever leaves the device — the system engine is
+// restricted to `localService` voices (browser "natural"/cloud voices are
+// excluded), and any future engine (e.g. an in-browser neural model) must run
+// locally too. See ReadAloudBar.tsx for the orchestration + UI.
+
+export type Sentence = { text: string; range: Range }
+
+// Block elements whose text we read; everything else (tables, code, the page-
+// nav footer, the floating toolbars) is skipped so it reads like a book.
+const SKIP_TAGS = new Set(['TABLE', 'PRE', 'CODE', 'SCRIPT', 'STYLE', 'BUTTON', 'SVG', 'svg'])
+const SKIP_CLASSES = ['no-read', 'no-print', 'page-nav', 'selection-toolbar', 'prose-table-wrap']
+
+function isSkipped(el: Element | null, root: Element): boolean {
+  while (el && el !== root) {
+    if (SKIP_TAGS.has(el.tagName)) return true
+    for (const c of SKIP_CLASSES) if (el.classList.contains(c)) return true
+    el = el.parentElement
+  }
+  return false
+}
+
+/**
+ * extractSentences walks the rendered article and returns an ordered list of
+ * sentences, each mapped to a DOM Range (for highlighting + scroll). Sentences
+ * never cross block boundaries (so each paragraph/heading is its own unit, with
+ * natural pauses), and tables / code blocks are skipped entirely.
+ */
+export function extractSentences(article: HTMLElement): Sentence[] {
+  const out: Sentence[] = []
+  // Iterate the top-level blocks in document order; recurse only into ones we
+  // read. Each block's text is split into sentences mapped back to ranges.
+  for (const block of Array.from(article.children)) {
+    if (isSkipped(block, article)) continue
+    collectBlock(block as HTMLElement, article, out)
+  }
+  return out
+}
+
+function collectBlock(block: HTMLElement, root: HTMLElement, out: Sentence[]) {
+  // Gather the text nodes inside this block, skipping nested tables/code.
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      const t = n.textContent ?? ''
+      if (!t.trim()) return NodeFilter.FILTER_REJECT
+      return isSkipped((n as Text).parentElement, root) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+    },
+  })
+  const nodes: { node: Text; start: number }[] = []
+  let flat = ''
+  let cur = walker.nextNode() as Text | null
+  while (cur) {
+    nodes.push({ node: cur, start: flat.length })
+    flat += cur.textContent ?? ''
+    cur = walker.nextNode() as Text | null
+  }
+  const collapsed = flat.replace(/\s+/g, ' ').trim()
+  if (!collapsed) return
+
+  // Split into sentences on terminal punctuation; fall back to the whole block.
+  // Offsets are computed against the ORIGINAL flat text so ranges stay valid.
+  for (const [s, e] of sentenceSpans(flat)) {
+    const text = flat.slice(s, e).replace(/\s+/g, ' ').trim()
+    if (text.length < 1) continue
+    const range = rangeFor(nodes, s, e)
+    if (range) out.push({ text, range })
+  }
+}
+
+// sentenceSpans returns [start,end) offsets of sentences within `flat`.
+function sentenceSpans(flat: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = []
+  const re = /[^.!?…]*[.!?…]+["')\]]*\s*|[^.!?…]+$/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(flat)) !== null) {
+    const start = m.index
+    const end = m.index + m[0].length
+    if (flat.slice(start, end).trim()) spans.push([start, end])
+    if (m.index === re.lastIndex) re.lastIndex++ // guard zero-width
+  }
+  return spans.length ? spans : [[0, flat.length]]
+}
+
+function rangeFor(nodes: { node: Text; start: number }[], start: number, end: number): Range | null {
+  let startNode: Text | null = null, startOff = 0, endNode: Text | null = null, endOff = 0
+  for (const { node, start: ns } of nodes) {
+    const len = (node.textContent ?? '').length
+    const ne = ns + len
+    if (!startNode && start < ne) { startNode = node; startOff = Math.max(0, start - ns) }
+    if (end <= ne) { endNode = node; endOff = Math.max(0, end - ns); break }
+  }
+  if (!startNode) return null
+  if (!endNode) { const last = nodes[nodes.length - 1]; endNode = last.node; endOff = (last.node.textContent ?? '').length }
+  try {
+    const r = document.createRange()
+    r.setStart(startNode, Math.min(startOff, (startNode.textContent ?? '').length))
+    r.setEnd(endNode, Math.min(endOff, (endNode.textContent ?? '').length))
+    return r
+  } catch {
+    return null
+  }
+}
+
+// ---- TTS engine ----------------------------------------------------------
+
+export type TtsVoice = { id: string; label: string; lang: string }
+export type SpeakOpts = { voiceId?: string; rate: number }
+export type SpeakHandle = { cancel: () => void }
+
+export interface TtsEngine {
+  id: 'system' | 'neural'
+  label: string
+  /** Voices that run ENTIRELY on-device (no network). */
+  voices(): TtsVoice[]
+  speak(text: string, opts: SpeakOpts, onEnd: () => void, onError: (msg: string) => void): SpeakHandle
+  cancelAll(): void
+}
+
+/**
+ * systemEngine wraps the browser's SpeechSynthesis but only ever exposes
+ * `localService` voices, so the spoken text is synthesised on the device and
+ * never sent to a cloud voice service.
+ */
+export function systemEngine(): TtsEngine | null {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null
+  const synth = window.speechSynthesis
+  const localVoices = () => synth.getVoices().filter(v => v.localService)
+  return {
+    id: 'system',
+    label: 'System voice (on-device)',
+    voices() {
+      return localVoices().map(v => ({ id: v.voiceURI, label: v.name, lang: v.lang }))
+    },
+    speak(text, opts, onEnd, onError) {
+      const u = new SpeechSynthesisUtterance(text)
+      const v = localVoices().find(x => x.voiceURI === opts.voiceId)
+      if (v) { u.voice = v; u.lang = v.lang }
+      u.rate = opts.rate
+      let done = false
+      u.onend = () => { if (!done) { done = true; onEnd() } }
+      u.onerror = (e) => { if (!done) { done = true; if (e.error !== 'interrupted' && e.error !== 'canceled') onError(String(e.error)); else onEnd() } }
+      synth.speak(u)
+      return { cancel: () => { done = true; synth.cancel() } }
+    },
+    cancelAll() { synth.cancel() },
+  }
+}
+
+/** Resolve the list of available local engines. Neural (in-browser) slots in
+ *  here as a follow-up without touching the orchestration. */
+export function availableEngines(): TtsEngine[] {
+  const out: TtsEngine[] = []
+  const sys = systemEngine()
+  if (sys) out.push(sys)
+  return out
+}
+
+// ---- Persistence ---------------------------------------------------------
+
+export type ReadPos = { file: string; sentence: number }
+
+export function loadReadPos(storageKey: string): ReadPos | null {
+  try {
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return null
+    const p = JSON.parse(raw)
+    if (typeof p?.file === 'string' && typeof p?.sentence === 'number') return p
+  } catch { /* ignore */ }
+  return null
+}
+
+export function saveReadPos(storageKey: string, pos: ReadPos | null) {
+  try {
+    if (pos) localStorage.setItem(storageKey, JSON.stringify(pos))
+    else localStorage.removeItem(storageKey)
+  } catch { /* quota — non-fatal */ }
+}
