@@ -219,8 +219,9 @@ export async function ttsInfo(): Promise<{ available: boolean; voices: ServerVoi
 }
 
 /** Audio URL for one chunk; deterministic + immutable so the browser caches it. */
-export function ttsURL(voiceId: string, text: string): string {
-  return `${API}/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}`
+export function ttsURL(voiceId: string, text: string, style?: string): string {
+  return `${API}/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}` +
+    (style ? `&style=${encodeURIComponent(style)}` : '')
 }
 
 export async function searchSpace(q: string, glob?: string): Promise<GrepMatch[]> {

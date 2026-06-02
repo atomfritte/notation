@@ -75,7 +75,7 @@ type Synth struct {
 	flight  flightGroup
 	// synthFn produces raw Opus bytes; the piper+opusenc pipeline by default,
 	// swappable in tests.
-	synthFn func(ctx context.Context, vm *voiceModel, text string) ([]byte, error)
+	synthFn func(ctx context.Context, vm *voiceModel, p styleParams, text string) ([]byte, error)
 }
 
 // New builds a Synth, discovering voices and detecting whether TTS can run.
@@ -164,9 +164,26 @@ func (s *Synth) resolveVoice(id string) (*voiceModel, error) {
 // cacheKey is the content-addressed key (hex) for scope+voice+text, also the
 // ETag. The scope (e.g. "admin" or a spaceID) isolates each caller's entries so
 // a share guest can't pollute or evict another context's cached audio.
-func cacheKey(scope, voiceID, text string) string {
-	h := sha256.Sum256([]byte(scope + "\x00" + voiceID + "\x00" + strings.TrimSpace(text)))
+func cacheKey(scope, voiceID, style, text string) string {
+	h := sha256.Sum256([]byte(scope + "\x00" + voiceID + "\x00" + style + "\x00" + strings.TrimSpace(text)))
 	return hex.EncodeToString(h[:])
+}
+
+// styleParams tunes Piper's delivery for a named style.
+type styleParams struct {
+	lengthScale     float64 // >1 = slower speech; 0 = piper default
+	sentenceSilence float64 // seconds of silence between sentences; 0 = default
+}
+
+// styleFor maps a style name to synthesis params. "meditation" reads slowly with
+// long pauses; anything else is normal.
+func styleFor(name string) styleParams {
+	switch name {
+	case "meditation":
+		return styleParams{lengthScale: 1.45, sentenceSilence: 1.0}
+	default:
+		return styleParams{}
+	}
 }
 
 // synthTimeout bounds a single synthesis so a stuck piper can't pin a worker.
@@ -179,7 +196,7 @@ const synthTimeout = 120 * time.Second
 // often prefetched, and if that prefetch is aborted the synthesis must still
 // finish (and cache) so a concurrent real playback request doesn't fail with the
 // prefetcher's cancellation. A fixed timeout bounds it instead.
-func (s *Synth) Get(_ context.Context, scope, voiceID, text string) (audio []byte, etag string, err error) {
+func (s *Synth) Get(_ context.Context, scope, voiceID, style, text string) (audio []byte, etag string, err error) {
 	if !s.Available() {
 		return nil, "", ErrUnavailable
 	}
@@ -191,18 +208,19 @@ func (s *Synth) Get(_ context.Context, scope, voiceID, text string) (audio []byt
 	if err != nil {
 		return nil, "", err
 	}
-	key := cacheKey(scope, vm.ID, text)
+	key := cacheKey(scope, vm.ID, style, text)
 	etag = `"` + key + `"`
 	if b, ok := s.cache.get(key); ok {
 		return b, etag, nil
 	}
+	p := styleFor(style)
 	b, err := s.flight.Do(key, func() ([]byte, error) {
 		if b, ok := s.cache.get(key); ok {
 			return b, nil
 		}
 		sctx, cancel := context.WithTimeout(context.Background(), synthTimeout)
 		defer cancel()
-		out, err := s.synthFn(sctx, vm, text)
+		out, err := s.synthFn(sctx, vm, p, text)
 		if err != nil {
 			return nil, err
 		}
@@ -214,13 +232,19 @@ func (s *Synth) Get(_ context.Context, scope, voiceID, text string) (audio []byt
 
 // runPipeline = piper (raw PCM) → opusenc (Ogg/Opus), fully buffered for
 // robustness (a paragraph's PCM is only a couple of MB).
-func (s *Synth) runPipeline(ctx context.Context, vm *voiceModel, text string) ([]byte, error) {
+func (s *Synth) runPipeline(ctx context.Context, vm *voiceModel, p styleParams, text string) ([]byte, error) {
 	s.sem <- struct{}{}
 	defer func() { <-s.sem }()
 
 	args := []string{"--model", vm.model, "--output-raw"}
 	if s.cfg.EspeakData != "" && dirExists(s.cfg.EspeakData) {
 		args = append(args, "--espeak_data", s.cfg.EspeakData)
+	}
+	if p.lengthScale > 0 {
+		args = append(args, "--length_scale", strconv.FormatFloat(p.lengthScale, 'f', 2, 64))
+	}
+	if p.sentenceSilence > 0 {
+		args = append(args, "--sentence_silence", strconv.FormatFloat(p.sentenceSilence, 'f', 2, 64))
 	}
 	piper := exec.CommandContext(ctx, s.cfg.PiperBin, args...)
 	piper.Stdin = strings.NewReader(text)

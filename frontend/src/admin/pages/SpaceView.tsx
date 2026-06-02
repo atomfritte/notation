@@ -128,7 +128,7 @@ export function SpaceView() {
     api.ttsInfo().then(r => { if (!cancelled) setTtsVoices(r.available ? r.voices : []) }).catch(() => { if (!cancelled) setTtsVoices([]) })
     return () => { cancelled = true }
   }, [])
-  const ttsURL = useCallback((voiceId: string, text: string) => api.ttsURL(voiceId, text), [])
+  const ttsURL = useCallback((voiceId: string, text: string, style?: string) => api.ttsURL(voiceId, text, style), [])
   const { ref: headerRef, width: headerWidth } = useHeaderWidth()
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {

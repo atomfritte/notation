@@ -30,7 +30,7 @@ function capText(text: string): string {
  */
 export function createServerEngine(
   voices: ServerVoice[],
-  ttsURL: (voiceId: string, text: string) => string,
+  ttsURL: (voiceId: string, text: string, style?: string) => string,
 ): TtsEngine {
   const audio = new Audio()
   audio.preload = 'auto'
@@ -48,7 +48,7 @@ export function createServerEngine(
     prefetch(text, opts) {
       if (text && text.trim()) {
         // Warm the server + browser caches so the next clip plays instantly.
-        void fetch(ttsURL(opts.voiceId || '', capText(text)), { credentials: 'same-origin' }).catch(() => { /* surfaced on speak */ })
+        void fetch(ttsURL(opts.voiceId || '', capText(text), opts.style), { credentials: 'same-origin' }).catch(() => { /* surfaced on speak */ })
       }
     },
     speak(text, opts, onEnd, onError, onProgress): SpeakHandle {
@@ -62,7 +62,7 @@ export function createServerEngine(
           if (d && isFinite(d)) onProgress(Math.min(1, audio.currentTime / d))
         }
       }
-      audio.src = ttsURL(opts.voiceId || '', capText(text))
+      audio.src = ttsURL(opts.voiceId || '', capText(text), opts.style)
       audio.playbackRate = opts.rate || 1
       audio.play().catch(() => { if (!cancelled) onError('autoplay blocked') })
       return { cancel: () => { cancelled = true; cleanup(); try { audio.pause() } catch { /* ignore */ } } }

@@ -171,7 +171,7 @@ export function chunkIndexForSentence(chunks: Chunk[], sentenceIndex: number): n
 // ---- TTS engine ----------------------------------------------------------
 
 export type TtsVoice = { id: string; label: string; lang: string }
-export type SpeakOpts = { voiceId?: string; rate: number }
+export type SpeakOpts = { voiceId?: string; rate: number; style?: string }
 export type SpeakHandle = { cancel: () => void }
 
 export interface TtsEngine {

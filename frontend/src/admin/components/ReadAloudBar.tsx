@@ -10,6 +10,10 @@ type Status = 'idle' | 'playing' | 'paused'
 type EngineId = 'system' | 'neural'
 
 const PAGE_PAUSE_MS = 1200 // beat between pages, like turning a page
+// Pages whose name/path mention "meditation" are read slowly, with long pauses.
+const MEDITATION_RE = /meditation/i
+const MEDITATION_PAGE_PAUSE_MS = 4000
+const MEDITATION_CHUNK_PAUSE_MS = 1800
 const RATES = [0.75, 1, 1.25, 1.5, 1.75]
 
 /**
@@ -37,7 +41,7 @@ export function ReadAloudBar({
   /** Server studio voices (from /tts/info); enables the studio engine. */
   serverVoices?: ServerVoice[]
   /** Build a /tts audio URL for (voiceId, text). Must be stable (memoised). */
-  ttsURL?: (voiceId: string, text: string) => string
+  ttsURL?: (voiceId: string, text: string, style?: string) => string
 }) {
   const [systemEng] = useState<TtsEngine | null>(() => systemEngine())
   const serverEng = useMemo<TtsEngine | null>(
@@ -198,6 +202,9 @@ export function ReadAloudBar({
     if (!eng) return
     const chunks = chunksRef.current
     chunkRef.current = c
+    // Meditation pages: slow, emphasised, long pauses.
+    const meditation = MEDITATION_RE.test(fileRef.current)
+    const style = meditation ? 'meditation' : ''
     if (c >= chunks.length) {
       // End of page → brief pause, then advance to the next page.
       highlight(null)
@@ -210,7 +217,7 @@ export function ReadAloudBar({
         if (statusRef.current !== 'playing') return
         pendingRef.current = 0
         onNavigate(next)
-      }, PAGE_PAUSE_MS)
+      }, meditation ? MEDITATION_PAGE_PAUSE_MS : PAGE_PAUSE_MS)
       return
     }
     const chunk = chunks[c]
@@ -227,7 +234,7 @@ export function ReadAloudBar({
     const doPrefetch = () => {
       if (prefetched) return
       prefetched = true
-      if (eng.prefetch && c + 1 < chunks.length) eng.prefetch(chunks[c + 1].text, { voiceId, rate })
+      if (eng.prefetch && c + 1 < chunks.length) eng.prefetch(chunks[c + 1].text, { voiceId, rate, style })
     }
 
     // chunk.text joins sentences with single spaces (see groupChunks), so the
@@ -236,18 +243,24 @@ export function ReadAloudBar({
     const joins = Math.max(0, chunk.sentences.length - 1)
     const total = chunk.sentences.reduce((a, s) => a + s.text.length, 0) + joins || 1
     let started = false // did this chunk actually produce audio?
-    const advance = () => { if (statusRef.current === 'playing') speakChunk(c + 1) }
+    const next = () => { if (statusRef.current === 'playing') speakChunk(c + 1) }
+    // On a meditation page, breathe between paragraphs instead of chaining gaplessly.
+    const advance = () => {
+      if (statusRef.current !== 'playing') return
+      if (meditation) pauseTimer.current = setTimeout(next, MEDITATION_CHUNK_PAUSE_MS)
+      else next()
+    }
     const onErr = () => {
       if (statusRef.current !== 'playing') return
       // A neural chunk that errors before any audio played is a blocked/failed
       // START (e.g. autoplay), not a bad chunk — park rather than racing through
       // the whole document. The system engine has no such state, so it skips.
       if (eng.id === 'neural' && !started) { cancelSpeech(); releaseWake(); setStat('paused'); return }
-      advance() // skip a chunk that glitched mid-playback rather than stalling
+      next() // skip a chunk that glitched mid-playback rather than stalling
     }
     handleRef.current?.cancel() // neutralise any still-pending prior synth (no overlap on the shared audio)
     handleRef.current = eng.speak(
-      chunk.text, { voiceId, rate },
+      chunk.text, { voiceId, rate: meditation && eng.id === 'system' ? rate * 0.6 : rate, style },
       advance,
       onErr,
       (frac) => {

@@ -42,7 +42,7 @@ func serveTTS(synth *tts.Synth, scope string, w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusRequestEntityTooLarge, "text too long")
 		return
 	}
-	audio, etag, err := synth.Get(r.Context(), scope, r.URL.Query().Get("voice"), text)
+	audio, etag, err := synth.Get(r.Context(), scope, r.URL.Query().Get("voice"), r.URL.Query().Get("style"), text)
 	if err != nil {
 		switch {
 		case errors.Is(err, tts.ErrEmpty):

@@ -219,8 +219,9 @@ export const ttsInfo = () =>
   fetchJSON<{ available: boolean; voices: ServerVoice[] }>('/api/admin/tts/info')
 
 /** Audio URL for one chunk; deterministic + immutable so the browser caches it. */
-export const ttsURL = (voiceId: string, text: string) =>
-  `/api/admin/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}`
+export const ttsURL = (voiceId: string, text: string, style?: string) =>
+  `/api/admin/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}` +
+  (style ? `&style=${encodeURIComponent(style)}` : '')
 
 /** Direct URL for the whole-Space ZIP export (attachment download). */
 export const exportURL = (id: string) =>
