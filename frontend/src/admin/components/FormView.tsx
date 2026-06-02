@@ -32,7 +32,16 @@ export function FormView({
   /** Admin-only: open the _form.md template in the editor. */
   onEditTemplate?: () => void
 }) {
-  const { schema, entries, can_submit } = data
+  // Defensive: a template with no recognised fields can arrive with a missing
+  // / null `fields` — normalise so nothing tries to iterate `undefined`.
+  const schema: FormSchema = {
+    title: data.schema?.title || 'Form',
+    title_field: data.schema?.title_field || '',
+    fields: data.schema?.fields ?? [],
+  }
+  const entries = data.entries ?? []
+  const can_submit = !!data.can_submit
+  const noFields = schema.fields.length === 0
   const [tab, setTab] = useState<Tab>(can_submit ? 'new' : 'entries')
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -83,7 +92,24 @@ export function FormView({
         </div>
 
         {tab === 'new' && can_submit && (
-          <NewEntryForm schema={schema} onSubmit={onSubmit} onDone={() => setTab('entries')} />
+          noFields ? (
+            <div className="text-sm text-[var(--notation-fg-muted)] space-y-3">
+              <p>This form has no fields yet. Edit the <code className="px-1 py-0.5 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)]">_form.md</code> template — every line with a <code className="px-1 py-0.5 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)]">[type]</code> tag becomes a field:</p>
+              <pre className="bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] rounded-md p-3 text-xs overflow-x-auto">{`# My form
+Name: ______ [string] (required)
+Date: ______ [date]
+Rating: ______ [select: low, mid, high]
+Notes:
+______ [text]`}</pre>
+              {onEditTemplate && (
+                <button onClick={onEditTemplate} className="px-4 py-2 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] font-semibold text-sm rounded-md hover:opacity-90">
+                  Edit the template
+                </button>
+              )}
+            </div>
+          ) : (
+            <NewEntryForm schema={schema} onSubmit={onSubmit} onDone={() => setTab('entries')} />
+          )
         )}
         {tab === 'entries' && (
           <EntryBrowser schema={schema} entries={entries} openId={openId} setOpenId={setOpenId} />

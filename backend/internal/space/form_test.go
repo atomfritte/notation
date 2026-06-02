@@ -79,3 +79,15 @@ func TestValidateFormValues(t *testing.T) {
 		t.Error("undeclared key leaked into entry values")
 	}
 }
+
+// A template with no recognised fields must yield a non-nil empty slice, not a
+// nil slice — nil marshals to JSON `null`, which the client iterates and crashes.
+func TestParseFormSchema_EmptyIsNonNil(t *testing.T) {
+	s := ParseFormSchema("# Heading only\n\nNo fields here at all.\n")
+	if s.Fields == nil {
+		t.Fatal("Fields must be non-nil for an empty template")
+	}
+	if len(s.Fields) != 0 {
+		t.Errorf("want 0 fields, got %d", len(s.Fields))
+	}
+}
