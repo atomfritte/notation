@@ -59,6 +59,11 @@ func NewRouter(d Deps) (http.Handler, error) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// PWA root-scope files (public): service worker, manifest, icons.
+	for _, f := range []string{"sw.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "icon.svg"} {
+		r.Get("/"+f, web.RootFile(f))
+	}
+
 	// Authelia-bypass: share routes.
 	sh := &shareHandlers{
 		cfg: d.Cfg, store: d.Store, shares: d.Shares,
