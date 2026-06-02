@@ -209,6 +209,20 @@ export function fileURLForShare(path: string): string {
   return `${API}/file/${encodePath(path)}`
 }
 
+// ---- server-side TTS (read-aloud studio voice) ----
+export type ServerVoice = { id: string; label: string; lang: string }
+
+export async function ttsInfo(): Promise<{ available: boolean; voices: ServerVoice[] }> {
+  const r = await fetch(`${API}/tts/info`)
+  if (!r.ok) throw await asError(r)
+  return r.json()
+}
+
+/** Audio URL for one chunk; deterministic + immutable so the browser caches it. */
+export function ttsURL(voiceId: string, text: string): string {
+  return `${API}/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}`
+}
+
 export async function searchSpace(q: string, glob?: string): Promise<GrepMatch[]> {
   const params = new URLSearchParams({ q })
   if (glob) params.set('glob', glob)

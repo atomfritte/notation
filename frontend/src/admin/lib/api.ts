@@ -212,6 +212,16 @@ export const writeFileBinary = async (id: string, path: string, blob: Blob): Pro
 export const fileURL = (id: string, path: string) =>
   `/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`
 
+// ---- server-side TTS (read-aloud studio voice) ----
+export type ServerVoice = { id: string; label: string; lang: string }
+
+export const ttsInfo = () =>
+  fetchJSON<{ available: boolean; voices: ServerVoice[] }>('/api/admin/tts/info')
+
+/** Audio URL for one chunk; deterministic + immutable so the browser caches it. */
+export const ttsURL = (voiceId: string, text: string) =>
+  `/api/admin/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}`
+
 /** Direct URL for the whole-Space ZIP export (attachment download). */
 export const exportURL = (id: string) =>
   `/api/admin/spaces/${encodeURIComponent(id)}/export`

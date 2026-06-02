@@ -14,6 +14,7 @@ import (
 	"github.com/yoogie27/notation/internal/mcptoken"
 	"github.com/yoogie27/notation/internal/share"
 	"github.com/yoogie27/notation/internal/space"
+	"github.com/yoogie27/notation/internal/tts"
 	"github.com/yoogie27/notation/web"
 )
 
@@ -30,6 +31,7 @@ type Deps struct {
 	MCPTokens     *mcptoken.Store
 	MCP           *mcphandler.Server
 	AuthStore     *authstore.Store
+	TTS           *tts.Synth
 	SessionSecret []byte
 }
 
@@ -60,7 +62,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 	// Authelia-bypass: share routes.
 	sh := &shareHandlers{
 		cfg: d.Cfg, store: d.Store, shares: d.Shares,
-		audit: d.Audit, comments: d.Comments, git: d.Git,
+		audit: d.Audit, comments: d.Comments, git: d.Git, tts: d.TTS,
 	}
 	r.Route(d.Cfg.SharePath, func(sr chi.Router) {
 		sr.Route("/api", func(api chi.Router) {
@@ -75,6 +77,8 @@ func NewRouter(d Deps) (http.Handler, error) {
 			api.Get("/{token}/form/*", sh.getForm)
 			api.Post("/{token}/form/*", sh.postFormEntry)
 			api.Post("/{token}/form-upload/*", sh.postFormImage)
+			api.Get("/{token}/tts", sh.getTTS)
+			api.Get("/{token}/tts/info", sh.getTTSInfo)
 			api.Get("/{token}/search", sh.searchSpace)
 		})
 		sr.Get("/{token}", web.ShareIndex())
@@ -132,7 +136,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 	ahdmin := &adminHandlers{
 		cfg: d.Cfg, store: d.Store, git: d.Git,
 		shares: d.Shares, mcpTokens: d.MCPTokens, comments: d.Comments,
-		audit: d.Audit,
+		audit: d.Audit, tts: d.TTS,
 	}
 	adminMW := adminMiddleware(d.Cfg, d.SessionSecret)
 	r.Route("/api/admin", func(ar chi.Router) {
@@ -144,6 +148,8 @@ func NewRouter(d Deps) (http.Handler, error) {
 		// for the whole subtree is safe and centralises the policy.
 		ar.Use(requireCSRF)
 		ar.Get("/me", adminMeHandler())
+		ar.Get("/tts", ahdmin.getTTS)
+		ar.Get("/tts/info", ahdmin.getTTSInfo)
 		ar.Get("/spaces", ahdmin.listSpaces)
 		ar.Post("/spaces", ahdmin.createSpace)
 		ar.Route("/spaces/{spaceID}", func(sr chi.Router) {

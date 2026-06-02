@@ -1,31 +1,32 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Headphones, Play, Pause, SkipBack, SkipForward, X, Lock, ChevronDown, Download, Sparkles, AlertCircle, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Headphones, Play, Pause, SkipBack, SkipForward, X, Lock, ChevronDown, Server } from 'lucide-react'
 import {
   extractSentences, groupChunks, chunkIndexForSentence, systemEngine, loadReadPos, saveReadPos,
   type Sentence, type Chunk, type TtsEngine, type TtsVoice,
 } from '../lib/readAloud'
-import { createNeuralEngine, neuralModelReady, downloadNeuralModel } from '../lib/neuralTts'
+import { createServerEngine, type ServerVoice } from '../lib/serverTts'
 
 type Status = 'idle' | 'playing' | 'paused'
 type EngineId = 'system' | 'neural'
-type NeuralState = 'checking' | 'need-download' | 'downloading' | 'ready' | 'error'
 
 const PAGE_PAUSE_MS = 1200 // beat between pages, like turning a page
 const RATES = [0.75, 1, 1.25, 1.5, 1.75]
 
 /**
- * ReadAloudBar — a fully on-device audiobook player for the current Space.
- * Reads a page's prose (skipping tables/code) in synthesis chunks: one sentence
- * at a time for the system voice, a paragraph at a time for the neural voice
- * (which prefetches the next paragraph so playback is gapless). Highlights the
- * current sentence, pauses at the end of a page, then auto-advances to the next
- * page in menu order. The reading position is saved per Space (the storageKey is
- * per-user for admin / per-share-token for guests) and restored.
+ * ReadAloudBar — an audiobook player for the current Space. Reads a page's prose
+ * (skipping tables/code) in synthesis chunks: one sentence at a time for the
+ * on-device system voice, a paragraph at a time for the server "studio voice"
+ * (Piper on the backend, which prefetches the next paragraph so playback is
+ * gapless). Highlights the current sentence, pauses at the end of a page, then
+ * auto-advances. Reading position is saved per Space (per-user for admin /
+ * per-share-token for guests) and restored.
  *
- * No text ever leaves the device: the engine is restricted to on-device voices.
+ * The system voice runs entirely on-device. The studio voice sends each
+ * paragraph to THIS app's own server (same origin) to be synthesised by Piper —
+ * never to a third party.
  */
 export function ReadAloudBar({
-  navFiles, currentFile, content, onNavigate, storageKey, onClose,
+  navFiles, currentFile, content, onNavigate, storageKey, onClose, serverVoices, ttsURL,
 }: {
   navFiles: string[]
   currentFile: string
@@ -33,17 +34,21 @@ export function ReadAloudBar({
   onNavigate: (path: string) => void
   storageKey: string
   onClose: () => void
+  /** Server studio voices (from /tts/info); enables the studio engine. */
+  serverVoices?: ServerVoice[]
+  /** Build a /tts audio URL for (voiceId, text). Must be stable (memoised). */
+  ttsURL?: (voiceId: string, text: string) => string
 }) {
   const [systemEng] = useState<TtsEngine | null>(() => systemEngine())
+  const serverEng = useMemo<TtsEngine | null>(
+    () => (serverVoices && serverVoices.length && ttsURL ? createServerEngine(serverVoices, ttsURL) : null),
+    [serverVoices, ttsURL],
+  )
+  const studioAvailable = !!serverEng
   const [engineId, setEngineId] = useState<EngineId>(() =>
-    (localStorage.getItem('notation_readaloud_engine') as EngineId) === 'neural' ? 'neural' : 'system')
-  const [neuralEng, setNeuralEng] = useState<TtsEngine | null>(null)
-  const [neuralState, setNeuralState] = useState<NeuralState>('checking')
-  const [dlPct, setDlPct] = useState(0)
-  const [neuralErr, setNeuralErr] = useState<string | null>(null)
-  // The engine actually used for synthesis. Neural is null until its model is
-  // downloaded; until then the setup UI is shown instead of the play controls.
-  const engine = engineId === 'neural' ? neuralEng : systemEng
+    localStorage.getItem('notation_readaloud_engine') === 'neural' ? 'neural' : 'system')
+  // The engine actually used for synthesis.
+  const engine = engineId === 'neural' ? serverEng : systemEng
 
   const [voices, setVoices] = useState<TtsVoice[]>([])
   const [voiceId, setVoiceId] = useState<string>(() => localStorage.getItem('notation_readaloud_voice') || '')
@@ -64,8 +69,6 @@ export function ReadAloudBar({
   const fileRef = useRef(currentFile)
   const engineRef = useRef<TtsEngine | null>(engine)
   engineRef.current = engine
-  const neuralEngRef = useRef<TtsEngine | null>(neuralEng)
-  neuralEngRef.current = neuralEng
   fileRef.current = currentFile
 
   const setStat = (s: Status) => { statusRef.current = s; setStatus(s) }
@@ -117,35 +120,10 @@ export function ReadAloudBar({
   useEffect(() => { localStorage.setItem('notation_readaloud_rate', String(rate)) }, [rate])
   useEffect(() => { localStorage.setItem('notation_readaloud_engine', engineId) }, [engineId])
 
-  // ---- neural engine readiness ----
-  // When the studio voice is selected, check whether its model is already
-  // cached; if so build the engine, otherwise offer the one-time download.
-  useEffect(() => {
-    if (engineId !== 'neural' || neuralEng) return
-    let cancelled = false
-    setNeuralState('checking')
-    neuralModelReady().then(ready => {
-      if (cancelled) return
-      if (ready) { setNeuralEng(createNeuralEngine()); setNeuralState('ready') }
-      else setNeuralState('need-download')
-    }).catch(() => { if (!cancelled) setNeuralState('need-download') })
-    return () => { cancelled = true }
-  }, [engineId, neuralEng])
-
-  const startDownload = useCallback(() => {
-    setNeuralErr(null); setNeuralState('downloading'); setDlPct(0)
-    downloadNeuralModel(p => setDlPct(p))
-      .then(() => { setNeuralEng(createNeuralEngine()); setNeuralState('ready') })
-      .catch(e => {
-        const raw = String((e as Error)?.message ?? e)
-        // A blocked/failed fetch surfaces as an opaque "Failed to fetch" — give
-        // something actionable (this is the usual symptom of a CSP/offline issue).
-        const msg = /fetch|network|load failed|connect|csp|content security/i.test(raw)
-          ? 'Couldn’t reach the voice download — check your connection (the server must allow huggingface.co).'
-          : raw
-        setNeuralErr(msg); setNeuralState('error')
-      })
-  }, [])
+  // Free the server engine's <audio> when it changes / on unmount.
+  useEffect(() => () => { serverEng?.dispose?.() }, [serverEng])
+  // If the studio voice was remembered but isn't available here, fall back.
+  useEffect(() => { if (engineId === 'neural' && serverVoices && serverVoices.length === 0) setEngineId('system') }, [engineId, serverVoices])
 
   // ---- highlight (CSS Custom Highlight API; degrades to scroll-only) ----
   const highlight = useCallback((range: Range | null) => {
@@ -208,13 +186,6 @@ export function ReadAloudBar({
   const switchEngine = useCallback((id: EngineId) => {
     if (id === engineId) return
     finish()
-    // Free the neural engine's audio element + cached paragraph WAVs when leaving
-    // it; re-selecting rebuilds cheaply (model already stored).
-    if (engineId === 'neural' && neuralEngRef.current) {
-      neuralEngRef.current.dispose?.()
-      setNeuralEng(null)
-      setNeuralState('checking')
-    }
     setProgress({ i: 0, n: 0 })
     setEngineId(id)
   }, [engineId, finish])
@@ -374,7 +345,7 @@ export function ReadAloudBar({
   }, [navFiles, onNavigate])
 
   // Cleanup on unmount.
-  useEffect(() => () => { cancelSpeech(); highlight(null); releaseWake(); neuralEngRef.current?.dispose?.() }, [cancelSpeech, highlight, releaseWake])
+  useEffect(() => () => { cancelSpeech(); highlight(null); releaseWake() }, [cancelSpeech, highlight, releaseWake])
 
   // MediaSession: surface play/pause + page skip on the lock screen / headset,
   // and reflect what's being read. (Lock-screen controls only appear once the
@@ -404,17 +375,17 @@ export function ReadAloudBar({
     }
   }, [curText, currentFile, status, play, pause, jumpPage])
 
-  // If the browser has no system speech engine at all, the studio voice is the
-  // only option — switch to it automatically.
-  useEffect(() => { if (!systemEng && engineId === 'system') setEngineId('neural') }, [engineId])
+  // If the browser has no system speech engine, the studio voice is the only
+  // option — switch to it automatically when it's available.
+  useEffect(() => { if (!systemEng && studioAvailable && engineId === 'system') setEngineId('neural') }, [engineId, systemEng, studioAvailable])
 
   const playing = status === 'playing'
   const sysUnsupported = engineId === 'system' && !systemEng
+  const studioPending = engineId === 'neural' && !serverEng
   const noVoices = engineId === 'system' && !!systemEng && voices.length === 0
-  const neuralSetup = engineId === 'neural' && neuralState !== 'ready'
   const engineOptions = [
     ...(systemEng ? [{ value: 'system', label: 'System' }] : []),
-    { value: 'neural', label: 'Studio · DE' },
+    ...(studioAvailable ? [{ value: 'neural', label: 'Studio' }] : []),
   ]
 
   return (
@@ -422,13 +393,15 @@ export function ReadAloudBar({
       <div className="pointer-events-auto w-full max-w-2xl surface-elevated bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl px-3 py-2 flex items-center gap-2">
         <Headphones size={18} className="text-[color:var(--notation-accent)] flex-shrink-0" />
 
-        <Dropdown value={engineId} onChange={v => switchEngine(v as EngineId)} title="Voice engine"
-          options={engineOptions} />
+        {engineOptions.length > 1 && (
+          <Dropdown value={engineId} onChange={v => switchEngine(v as EngineId)} title="Voice engine"
+            options={engineOptions} />
+        )}
 
         {sysUnsupported ? (
-          <span className="flex-1 text-sm text-[var(--notation-fg-muted)]">No system voice here — pick the studio voice.</span>
-        ) : neuralSetup ? (
-          <NeuralSetup state={neuralState} pct={dlPct} err={neuralErr} onDownload={startDownload} />
+          <span className="flex-1 text-sm text-[var(--notation-fg-muted)]">{studioAvailable ? 'No system voice here — pick the studio voice.' : 'Read-aloud isn’t available in this browser.'}</span>
+        ) : studioPending ? (
+          <span className="flex-1 text-sm text-[var(--notation-fg-muted)]">Loading the studio voice…</span>
         ) : noVoices ? (
           <span className="flex-1 text-sm text-[var(--notation-fg-muted)]">No on-device voices installed. Add a system voice to listen.</span>
         ) : (
@@ -466,16 +439,22 @@ export function ReadAloudBar({
               )}
             </div>
 
-            {engineId === 'system' && (
+            {voices.length > 1 && (
               <Dropdown value={voiceId} onChange={setVoiceId} title="Voice"
                 options={voices.map(v => ({ value: v.id, label: `${v.label}${v.lang ? ' · ' + v.lang : ''}` }))} compact />
             )}
             <Dropdown value={String(rate)} onChange={(v) => setRate(Number(v))} title="Speed"
               options={RATES.map(r => ({ value: String(r), label: `${r}×` }))} />
 
-            <span className="hidden sm:flex items-center gap-1 text-[10px] text-[var(--notation-fg-muted)] px-1" title="Audio is generated on your device — text never leaves it.">
-              {engineId === 'neural' ? <Sparkles size={11} /> : <Lock size={11} />} on-device
-            </span>
+            {engineId === 'neural' ? (
+              <span className="hidden sm:flex items-center gap-1 text-[10px] text-[var(--notation-fg-muted)] px-1" title="Synthesised by Piper on your own server — text only goes to this app, never a third party.">
+                <Server size={11} /> your server
+              </span>
+            ) : (
+              <span className="hidden sm:flex items-center gap-1 text-[10px] text-[var(--notation-fg-muted)] px-1" title="Audio is generated on your device — text never leaves it.">
+                <Lock size={11} /> on-device
+              </span>
+            )}
           </>
         )}
 
@@ -514,65 +493,6 @@ function Dropdown({
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--notation-fg-muted)]" />
-    </div>
-  )
-}
-
-// NeuralSetup — the inline UI shown while the studio (neural) voice isn't ready:
-// a one-time model download with progress, then it hands off to the player.
-function NeuralSetup({
-  state, pct, err, onDownload,
-}: {
-  state: NeuralState
-  pct: number
-  err: string | null
-  onDownload: () => void
-}) {
-  if (state === 'checking') {
-    return <span className="flex-1 text-sm text-[var(--notation-fg-muted)] px-1">Preparing studio voice…</span>
-  }
-  if (state === 'downloading') {
-    return (
-      <div className="flex-1 min-w-0 px-1">
-        <div className="text-xs text-[var(--notation-fg)] mb-1 flex items-center gap-1.5">
-          <Loader2 size={13} className="animate-spin flex-shrink-0 text-[color:var(--notation-accent)]" />
-          {pct > 0 ? `Downloading German voice… ${pct}%` : 'Connecting…'}
-        </div>
-        <div className="h-1.5 rounded-full bg-[var(--notation-border)] overflow-hidden">
-          <div className="h-full bg-[var(--notation-accent)] transition-[width] duration-200" style={{ width: `${Math.max(pct, 4)}%` }} />
-        </div>
-        <div className="text-[10px] text-[var(--notation-fg-muted)] mt-1">≈113 MB · one-time · keeps going if you wait</div>
-      </div>
-    )
-  }
-  if (state === 'error') {
-    return (
-      <div className="flex-1 min-w-0 flex items-center gap-2 px-1 py-0.5">
-        <button
-          onClick={onDownload}
-          className="inline-flex items-center gap-1.5 rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] text-xs font-medium px-2.5 py-1.5 hover:opacity-90 flex-shrink-0"
-        >
-          <Download size={14} /> Retry
-        </button>
-        <span className="flex-1 min-w-0 text-xs leading-snug text-[color:var(--notation-danger,#dc2626)] flex items-start gap-1">
-          <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
-          <span className="break-words">{err || 'Download failed'}</span>
-        </span>
-      </div>
-    )
-  }
-  // need-download
-  return (
-    <div className="flex-1 min-w-0 flex items-center gap-2 px-1">
-      <button
-        onClick={onDownload}
-        className="inline-flex items-center gap-1.5 rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] text-xs font-medium px-2.5 py-1.5 hover:opacity-90 flex-shrink-0"
-      >
-        <Download size={14} /> Download German voice
-      </button>
-      <span className="hidden sm:inline text-[10px] text-[var(--notation-fg-muted)] leading-snug">
-        ≈113 MB, one-time. Stays on your device — text never leaves it.
-      </span>
     </div>
   )
 }

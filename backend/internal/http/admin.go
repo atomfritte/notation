@@ -21,6 +21,7 @@ import (
 	"github.com/yoogie27/notation/internal/mcptoken"
 	"github.com/yoogie27/notation/internal/share"
 	"github.com/yoogie27/notation/internal/space"
+	"github.com/yoogie27/notation/internal/tts"
 )
 
 type adminHandlers struct {
@@ -31,6 +32,7 @@ type adminHandlers struct {
 	mcpTokens *mcptoken.Store
 	comments  *share.CommentStore
 	audit     *share.AuditLog
+	tts       *tts.Synth
 }
 
 func adminAuthor(r *http.Request) gitrepo.Author {

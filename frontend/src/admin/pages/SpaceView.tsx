@@ -121,6 +121,14 @@ export function SpaceView() {
   const isForm = !!formEntry?.form
   const [formData, setFormData] = useState<api.FormData | null>(null)
   const [readAloud, setReadAloud] = useState(false)
+  // Server studio voices for read-aloud (undefined = still probing).
+  const [ttsVoices, setTtsVoices] = useState<api.ServerVoice[] | undefined>(undefined)
+  useEffect(() => {
+    let cancelled = false
+    api.ttsInfo().then(r => { if (!cancelled) setTtsVoices(r.available ? r.voices : []) }).catch(() => { if (!cancelled) setTtsVoices([]) })
+    return () => { cancelled = true }
+  }, [])
+  const ttsURL = useCallback((voiceId: string, text: string) => api.ttsURL(voiceId, text), [])
   const { ref: headerRef, width: headerWidth } = useHeaderWidth()
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -1202,6 +1210,8 @@ export function SpaceView() {
           onNavigate={selectFile}
           storageKey={`notation_readpos_${spaceID}`}
           onClose={() => setReadAloud(false)}
+          serverVoices={ttsVoices}
+          ttsURL={ttsURL}
         />
       )}
     </div>
