@@ -23,6 +23,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,31 +51,41 @@ type Voice struct {
 
 // Config configures the synthesiser. Zero values fall back to sensible defaults.
 type Config struct {
-	PiperBin      string // path or name of the piper binary
-	ModelDir      string // dir scanned for *.onnx voice models
-	EspeakData    string // path to espeak-ng-data (optional)
-	OpusEnc       string // path or name of opusenc
-	Bitrate       int    // opus bitrate kbps (default 32)
-	CacheDir      string // disk cache directory
-	CacheMaxBytes int64  // cache size cap (default 512 MiB)
-	Concurrency   int    // max concurrent piper runs (default ~NumCPU/2)
+	PiperBin      string   // path or name of the piper binary
+	ModelDir      string   // dir scanned for *.onnx voice models
+	EspeakData    string   // path to espeak-ng-data (optional)
+	OpusEnc       string   // path or name of opusenc (required for ALL engines)
+	Bitrate       int      // opus bitrate kbps (default 32)
+	CacheDir      string   // disk cache directory
+	CacheMaxBytes int64    // cache size cap (default 512 MiB)
+	Concurrency   int      // max concurrent synth runs (default ~NumCPU/2)
+	KokoroURL     string   // base URL of an optional Kokoro ONNX sidecar
+	KokoroVoices  []string // voice ids served by the sidecar (engine "kokoro")
 }
+
+const (
+	enginePiper  = "piper"
+	engineKokoro = "kokoro"
+	kokoroRate   = 24000 // Kokoro outputs 24 kHz mono PCM
+)
 
 type voiceModel struct {
 	Voice
-	model      string // path to .onnx
+	engine     string // enginePiper | engineKokoro
+	model      string // path to .onnx (piper only)
 	sampleRate int
 }
 
 // Synth is a cached, concurrency-limited server-side TTS synthesiser.
 type Synth struct {
-	cfg     Config
-	voices  map[string]*voiceModel
-	order   []Voice // discovery order, for listing + default
-	sem     chan struct{}
-	cache   *diskCache
-	flight  flightGroup
-	// synthFn produces raw Opus bytes; the piper+opusenc pipeline by default,
+	cfg    Config
+	voices map[string]*voiceModel
+	order  []Voice // discovery order, for listing + default
+	sem    chan struct{}
+	cache  *diskCache
+	flight flightGroup
+	httpc  *http.Client
+	// synthFn produces raw Opus bytes; dispatches per voice engine by default,
 	// swappable in tests.
 	synthFn func(ctx context.Context, vm *voiceModel, p styleParams, text string) ([]byte, error)
 }
@@ -97,17 +109,44 @@ func New(cfg Config) *Synth {
 		voices: map[string]*voiceModel{},
 		sem:    make(chan struct{}, cfg.Concurrency),
 		cache:  &diskCache{dir: cfg.CacheDir, maxBytes: cfg.CacheMaxBytes},
+		httpc:  &http.Client{Timeout: synthTimeout},
 	}
-	s.synthFn = s.runPipeline
+	s.synthFn = s.synthesize
 
-	piper := resolveBin(cfg.PiperBin)
+	// opusenc encodes every engine's PCM → Ogg/Opus, so it's required for any TTS.
 	opus := resolveBin(cfg.OpusEnc)
-	if piper == "" || opus == "" {
+	if opus == "" {
 		return s // unavailable
 	}
-	s.cfg.PiperBin, s.cfg.OpusEnc = piper, opus
-	s.discover()
+	s.cfg.OpusEnc = opus
+
+	// Piper voices (local ONNX) need the piper binary; optional.
+	if piper := resolveBin(cfg.PiperBin); piper != "" {
+		s.cfg.PiperBin = piper
+		s.discover()
+	}
+	// Kokoro voices come from an optional sidecar (no local model needed).
+	if cfg.KokoroURL != "" {
+		s.registerKokoro()
+	}
 	return s
+}
+
+// registerKokoro adds the sidecar-served voices (engine "kokoro").
+func (s *Synth) registerKokoro() {
+	for _, id := range s.cfg.KokoroVoices {
+		id = strings.TrimSpace(id)
+		if id == "" || s.voices[id] != nil {
+			continue
+		}
+		vm := &voiceModel{
+			Voice:      Voice{ID: id, Label: voiceLabel(id), Lang: voiceLang(id)},
+			engine:     engineKokoro,
+			sampleRate: kokoroRate,
+		}
+		s.voices[id] = vm
+		s.order = append(s.order, vm.Voice)
+	}
 }
 
 func (s *Synth) discover() {
@@ -130,6 +169,7 @@ func (s *Synth) discover() {
 		id := strings.TrimSuffix(name, ".onnx")
 		vm := &voiceModel{
 			Voice:      Voice{ID: id, Label: voiceLabel(id), Lang: voiceLang(id)},
+			engine:     enginePiper,
 			model:      model,
 			sampleRate: 22050,
 		}
@@ -230,12 +270,31 @@ func (s *Synth) Get(_ context.Context, scope, voiceID, style, text string) (audi
 	return b, etag, err
 }
 
-// runPipeline = piper (raw PCM) → opusenc (Ogg/Opus), fully buffered for
-// robustness (a paragraph's PCM is only a couple of MB).
-func (s *Synth) runPipeline(ctx context.Context, vm *voiceModel, p styleParams, text string) ([]byte, error) {
+// synthesize dispatches to the voice's engine, then encodes the resulting raw
+// 16-bit-mono PCM to Ogg/Opus. The concurrency gate + opus stage are shared.
+func (s *Synth) synthesize(ctx context.Context, vm *voiceModel, p styleParams, text string) ([]byte, error) {
 	s.sem <- struct{}{}
 	defer func() { <-s.sem }()
 
+	var pcm []byte
+	var err error
+	switch vm.engine {
+	case engineKokoro:
+		pcm, err = s.runKokoro(ctx, vm, p, text)
+	default:
+		pcm, err = s.runPiper(ctx, vm, p, text)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(pcm) == 0 {
+		return nil, errors.New("synth produced no audio")
+	}
+	return s.pcmToOpus(ctx, pcm, vm.sampleRate)
+}
+
+// runPiper produces raw 16-bit mono PCM via the piper binary (stdin = text).
+func (s *Synth) runPiper(ctx context.Context, vm *voiceModel, p styleParams, text string) ([]byte, error) {
 	args := []string{"--model", vm.model, "--output-raw"}
 	if s.cfg.EspeakData != "" && dirExists(s.cfg.EspeakData) {
 		args = append(args, "--espeak_data", s.cfg.EspeakData)
@@ -254,15 +313,44 @@ func (s *Synth) runPipeline(ctx context.Context, vm *voiceModel, p styleParams, 
 	if err := piper.Run(); err != nil {
 		return nil, fmt.Errorf("piper: %w: %s", err, strings.TrimSpace(pErr.String()))
 	}
-	if pcm.Len() == 0 {
-		return nil, errors.New("piper produced no audio")
-	}
+	return pcm.Bytes(), nil
+}
 
+// runKokoro asks the Kokoro ONNX sidecar to synthesise, returning raw 16-bit
+// mono PCM at kokoroRate. Contract: POST {voice,text,speed} → audio/* PCM bytes.
+func (s *Synth) runKokoro(ctx context.Context, vm *voiceModel, p styleParams, text string) ([]byte, error) {
+	speed := 1.0
+	if p.lengthScale > 0 {
+		speed = 1.0 / p.lengthScale // meditation (1.45) → ~0.69, slower
+	}
+	body, _ := json.Marshal(map[string]any{"voice": vm.ID, "text": text, "speed": speed})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.cfg.KokoroURL, "/")+"/synthesize", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.httpc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("kokoro sidecar: %w", err)
+	}
+	defer resp.Body.Close()
+	pcm, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	if err != nil {
+		return nil, fmt.Errorf("kokoro sidecar: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("kokoro sidecar: status %d: %s", resp.StatusCode, strings.TrimSpace(string(pcm[:min(len(pcm), 200)])))
+	}
+	return pcm, nil
+}
+
+// pcmToOpus encodes raw 16-bit mono PCM at sampleRate to Ogg/Opus via opusenc.
+func (s *Synth) pcmToOpus(ctx context.Context, pcm []byte, sampleRate int) ([]byte, error) {
 	opus := exec.CommandContext(ctx, s.cfg.OpusEnc,
 		"--quiet", "--raw",
-		"--raw-rate", strconv.Itoa(vm.sampleRate), "--raw-chan", "1", "--raw-bits", "16",
+		"--raw-rate", strconv.Itoa(sampleRate), "--raw-chan", "1", "--raw-bits", "16",
 		"--bitrate", strconv.Itoa(s.cfg.Bitrate), "-", "-")
-	opus.Stdin = &pcm
+	opus.Stdin = bytes.NewReader(pcm)
 	var out, oErr bytes.Buffer
 	opus.Stdout = &out
 	opus.Stderr = &oErr

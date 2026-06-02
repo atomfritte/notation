@@ -21,6 +21,10 @@ services:
       NOTATION_SHARE_PATH: "/s"
       NOTATION_MCP_PATH: "/mcp"
       NOTATION_BASE_URL: "https://notation.example.com"
+      # Optional higher-quality read-aloud voice via the Kokoro sidecar below.
+      # Leave NOTATION_TTS_KOKORO_URL empty to use Piper only (the default).
+      NOTATION_TTS_KOKORO_URL: "http://kokoro:8080"
+      NOTATION_TTS_KOKORO_VOICES: "de_DE-martin-kokoro"
     volumes:
       - ./data:/data
     labels:
@@ -38,8 +42,21 @@ services:
       - "traefik.http.routers.notation-public.entrypoints=websecure"
       - "traefik.http.routers.notation-public.tls.certresolver=le"
       - "traefik.http.routers.notation-public.priority=100"
-    networks: [proxy]
+    networks: [proxy, internal]
+
+  # Optional: higher-quality German read-aloud voice (Kokoro, CPU-only, ONNX).
+  # Supply a German Kokoro model in ./kokoro-models (see tts-sidecar/README.md).
+  # Remove this service + the NOTATION_TTS_KOKORO_URL above to use Piper only.
+  kokoro:
+    build: ./tts-sidecar
+    container_name: notation-kokoro
+    restart: unless-stopped
+    volumes:
+      - ./kokoro-models:/models:ro
+    networks: [internal]
 
 networks:
   proxy:
     external: true
+  internal:
+    internal: true
