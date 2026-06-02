@@ -116,7 +116,7 @@ export function ThemePalette({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="surface-elevated bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-2xl w-full animate-in zoom-in-95 duration-150 overflow-hidden flex flex-col"
+        className="surface-elevated surface-gradient bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-2xl w-full animate-in zoom-in-95 duration-150 overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
         style={{ maxHeight: '88vh' }}
       >

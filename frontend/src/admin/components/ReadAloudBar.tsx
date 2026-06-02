@@ -455,7 +455,7 @@ export function ReadAloudBar({
 
   return (
     <div className="no-print fixed bottom-0 inset-x-0 z-40 flex justify-center px-3 pb-3 pointer-events-none">
-      <div className="pointer-events-auto w-full max-w-2xl surface-elevated bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="pointer-events-auto w-full max-w-2xl surface-elevated pill-accent bg-[var(--notation-bg-elevated)] border border-[color:var(--notation-accent-50)] rounded-xl shadow-2xl shadow-[color:var(--notation-accent-20)] px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <Headphones size={18} className="text-[color:var(--notation-accent)] flex-shrink-0" />
 
         {engineOptions.length > 1 && (
@@ -481,7 +481,7 @@ export function ReadAloudBar({
             </button>
             <button
               onClick={() => (playing ? pause() : play())}
-              className="p-2 rounded-full bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 flex-shrink-0"
+              className="p-2 rounded-full bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] shadow-md shadow-[color:var(--notation-accent-40)] hover:opacity-90 flex-shrink-0"
               title={playing ? 'Pause' : 'Play'}
             >
               {playing ? <Pause size={16} /> : <Play size={16} />}

@@ -92,6 +92,56 @@
   --notation-code-bg: color-mix(in srgb, var(--notation-bg), black 35%);
 }
 
+/* ---- Derived gradients ---------------------------------------------------
+ *
+ * Defined once, in terms of the *active* accent/fg tokens. Because var()
+ * substitution is resolved on the element that finally uses the gradient,
+ * these adapt to the current theme AND to light/dark automatically — no
+ * per-theme or per-mode duplication. color-mix keeps them tasteful: the
+ * heading gradient only leans toward the accent (stays legible), and the
+ * accent gradient deepens the accent rather than rainbow-ing across hues. */
+:root {
+  /* Heading text: mostly fg, tipping into the accent at the tail. The accent
+     blend stays ≤55% so even low-contrast themes (Solarized/Gruvbox light) keep
+     the title comfortably legible — headings are large text, so this clears AA
+     with margin to spare. */
+  --notation-heading-grad: linear-gradient(105deg,
+    var(--notation-fg) 0%,
+    color-mix(in oklab, var(--notation-accent) 55%, var(--notation-fg)) 90%);
+  /* Pills / badges: accent → a deeper, slightly desaturated accent. */
+  --notation-accent-grad: linear-gradient(135deg,
+    var(--notation-accent) 0%,
+    color-mix(in oklab, var(--notation-accent) 58%, var(--notation-fg)) 100%);
+}
+
+/* Clip a gradient into the glyphs of a heading/title. */
+.text-gradient-accent {
+  background: var(--notation-heading-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Some accents on some themes can be very light; a faint shadow keeps the
+     text from disappearing against bright surfaces. */
+  -webkit-text-fill-color: transparent;
+}
+
+/* A faint accent glow for elevated "boxes" (modals, cards, panels). Layered as
+   a background-image so it composes on top of whatever bg-color the element
+   already sets, and follows the border-radius of its host. */
+.surface-gradient {
+  background-image: radial-gradient(135% 120% at 100% 0%,
+    var(--notation-accent-15) 0%, transparent 55%);
+}
+
+/* An OPAQUE accent-tinted surface gradient — for the read-aloud pill, which
+   should read as its own coloured panel. Uses color-mix (not the alpha accent
+   tokens) so the surface never goes see-through at the tinted end. */
+.pill-accent {
+  background-image: linear-gradient(135deg,
+    color-mix(in srgb, var(--notation-bg-elevated), var(--notation-accent) 7%) 0%,
+    color-mix(in srgb, var(--notation-bg-elevated), var(--notation-accent) 24%) 100%);
+}
+
 /* ---- Print stylesheet ----------------------------------------------------
  *
  * When the user hits Cmd/Ctrl-P (or the Print button in the page header) we
@@ -471,6 +521,13 @@ mark.comment-anchor.comment-anchor-blink {
   line-height: 1.15;
   margin-top: 0.6em;
   margin-bottom: 0.5em;
+  /* Gradient glyphs — a subtle accent sheen across the title. */
+  background: var(--notation-heading-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  width: fit-content;
 }
 .prose h2 {
   font-size: 1.55em;
@@ -480,7 +537,9 @@ mark.comment-anchor.comment-anchor-blink {
   margin-top: 2em;
   margin-bottom: 0.55em;
   padding-bottom: 0.25em;
-  border-bottom: 1px solid rgba(127,127,127,0.15);
+  /* Accent rule that fades out to the right — replaces the flat hairline. */
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(to right, var(--notation-accent-40) 0%, var(--notation-accent-10) 35%, transparent 75%) 1;
 }
 .prose h3 {
   font-size: 1.22em;
@@ -502,9 +561,14 @@ mark.comment-anchor.comment-anchor-blink {
   font-style: normal;
   font-weight: normal;
   border-left-width: 3px;
-  padding-left: 1em;
+  border-left-color: var(--notation-accent);
+  padding: 0.5em 1em;
   color: inherit;
-  opacity: 0.78;
+  /* Accent glow concentrated near the left edge — gives quotes a "highlighted"
+     feel while leaving the bulk of the text on the clean page bg, so quote text
+     keeps its full contrast (the old opacity:0.78 dimmed the text everywhere). */
+  background: linear-gradient(to right, var(--notation-accent-15) 0%, transparent 30%);
+  border-radius: 0 8px 8px 0;
 }
 .prose blockquote p::before, .prose blockquote p::after { content: none; }
 .prose hr { border-color: rgba(127,127,127,0.15); margin-top: 2.5em; margin-bottom: 2.5em; }
@@ -536,6 +600,8 @@ mark.comment-anchor.comment-anchor-blink {
 }
 .prose table thead {
   background-color: color-mix(in srgb, var(--notation-bg-elevated), var(--notation-border) 40%);
+  /* Faint accent tint at the top of the header row. */
+  background-image: linear-gradient(to bottom, var(--notation-accent-10) 0%, transparent 90%);
 }
 .prose table thead th {
   text-align: left;
@@ -543,7 +609,9 @@ mark.comment-anchor.comment-anchor-blink {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--notation-fg-muted);
+  /* Nudge the muted header toward fg so it stays legible against the tinted
+     header row across low-contrast themes, without losing the muted-label look. */
+  color: color-mix(in srgb, var(--notation-fg-muted), var(--notation-fg) 35%);
   padding: 0.6rem 0.9rem;
   border-bottom: 1px solid var(--notation-border);
   white-space: nowrap;
@@ -648,6 +716,9 @@ mark.comment-anchor.comment-anchor-blink {
   border-radius: 8px;
   padding: 1em 1.25em;
   background-color: var(--notation-code-bg);
+  /* Very faint accent sheen in the top-left corner — depth without tinting
+     the code itself. */
+  background-image: radial-gradient(120% 140% at 0% 0%, var(--notation-accent-10) 0%, transparent 42%);
   border: 1px solid var(--notation-border);
   font-family: var(--notation-code-font);
 }

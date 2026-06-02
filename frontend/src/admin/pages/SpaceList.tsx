@@ -152,7 +152,7 @@ export function SpaceList() {
 
       <main className="max-w-6xl mx-auto px-6 py-12">
         <div className="mb-10">
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--notation-fg)]">
+          <h1 className="text-4xl font-bold tracking-tight text-gradient-accent w-fit">
             Your Spaces
           </h1>
           <p className="text-[var(--notation-fg-muted)] mt-2">
@@ -357,7 +357,7 @@ function CreateModal({ initialStatus, onClose, onCreated }: { initialStatus: api
       onClick={onClose}
     >
       <div
-        className="bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-150"
+        className="surface-gradient bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

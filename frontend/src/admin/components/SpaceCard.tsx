@@ -115,7 +115,7 @@ export function SpaceCard({ space, onDelete, online, voices }: { space: api.Meta
         aria-disabled={blocked}
         aria-busy={busy}
         className={
-          'block rounded-xl border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] overflow-hidden shadow-sm transition-all duration-200 ' +
+          'block rounded-xl border border-[var(--notation-border)] bg-gradient-to-b from-[var(--notation-bg-alt)] to-[var(--notation-bg)] overflow-hidden shadow-sm transition-all duration-200 ' +
           (blocked ? 'opacity-40 cursor-not-allowed' : 'hover:border-[color:var(--notation-accent-40)] hover:shadow-xl hover:shadow-black/5 dark:hover:shadow-black/40 hover:-translate-y-0.5')
         }
       >

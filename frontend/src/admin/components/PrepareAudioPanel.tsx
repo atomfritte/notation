@@ -58,7 +58,7 @@ export function PrepareAudioPanel({ open, spaceID, tree, voices, onClose }: Prop
       onClick={() => { if (!running) onClose() }}
     >
       <div
-        className="w-full max-w-lg bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-150 flex flex-col max-h-[90vh]"
+        className="w-full max-w-lg surface-gradient bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-150 flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--notation-border)]">

@@ -43,7 +43,7 @@ export function HelpPanel({ open, onClose, scope = 'admin' }: Props) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150"
+        className="w-full max-w-2xl surface-gradient bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-4 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--notation-border)]">
