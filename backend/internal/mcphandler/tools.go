@@ -116,6 +116,19 @@ func (s *Server) toolDefs() []toolDef {
 			),
 		},
 		{
+			Name:        "map",
+			Description: "Return a structural map of the whole Space: every markdown file with its heading outline (level, text, line), without any body text. One call to grasp the document structure and decide where to read — far cheaper than get_tree followed by a read_file/outline per file. Form folders are collapsed, same as get_tree.",
+			InputSchema: schemaObject(
+				prop("directory", "string", "Optional subdirectory to scope the map to, e.g. 'notes/'. Defaults to the whole Space."),
+				prop("max_depth", "number", "Deepest heading level to include (1-6). Default 6 (all levels)."),
+			),
+		},
+		{
+			Name:        "forms_guide",
+			Description: "Return the complete guide to building a Notation Form: how a folder becomes a fillable form, the _form.md template syntax, every supported field type and alias, modifiers, and a worked example. Call this before creating a form, then build it with mkdir + create_file.",
+			InputSchema: schemaObject(),
+		},
+		{
 			Name:        "git_log",
 			Description: "Return recent commits for the Space (latest first).",
 			InputSchema: schemaObject(prop("limit", "number", "Maximum commits to return (default 50, max 500).")),
@@ -396,6 +409,19 @@ func (s *Server) dispatchTool(_ context.Context, spaceID, tokenID, name string, 
 			return errResult(err.Error()), nil
 		}
 		return jsonResult(outline)
+
+	case "map":
+		dir := stringArg(args, "directory")
+		m, err := s.store.Map(spaceID, dir, intArg(args, "max_depth", 6))
+		s.auditCall(spaceID, tokenID, "mcp.map", dir, err)
+		if err != nil {
+			return errResult(err.Error()), nil
+		}
+		return jsonResult(m)
+
+	case "forms_guide":
+		s.auditCall(spaceID, tokenID, "mcp.forms_guide", "", nil)
+		return textResult(formsGuide), nil
 
 	case "git_log":
 		limit := intArg(args, "limit", 50)

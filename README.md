@@ -411,6 +411,7 @@ curl -X POST "https://notes.example.com/mcp/myspace" \
 | `get_tree`    | Nested directory tree as JSON |
 | `glob`        | Find paths matching `**/*.md` etc. |
 | `outline`     | Heading outline of a markdown file (level + line) |
+| `map`         | Structure map of the whole Space — every markdown file with its headings, no body text |
 | `read_file`   | Full file contents |
 | `write_file`  | Create or overwrite (auto-commit on save) |
 | `create_file` | Atomic create — fails if exists |
@@ -421,6 +422,7 @@ curl -X POST "https://notes.example.com/mcp/myspace" \
 | `grep`        | Regex search with `**` glob + N lines of context |
 | `git_log`     | Recent commits |
 | `git_diff`    | Diff of one commit by hash |
+| `forms_guide` | Full manual for authoring a Form (`_form.md` syntax + field types) |
 
 Generate a token from the **Integration** tab in the admin sidebar — the modal also shows ready-to-copy snippets for Claude Code, Cursor, and a raw curl call.
 
