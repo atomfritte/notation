@@ -12,7 +12,12 @@ import * as api from './api'
 const REG_KEY = 'notation_offline_v1'
 const cacheNameFor = (id: string) => `notation-offline-${id}`
 
-export type OfflineEntry = { name: string; syncedAt: number; files: number; failed: number }
+export type OfflineEntry = {
+  name: string; syncedAt: number; files: number; failed: number
+  /** Paths that failed to cache (capped — `failed` is the true total). Optional
+   *  so entries written before this field round-trip without migration. */
+  failedPaths?: string[]
+}
 export type OfflineRegistry = Record<string, OfflineEntry>
 
 export const offlineSupported = typeof caches !== 'undefined'
@@ -98,7 +103,7 @@ export async function syncSpace(
   ].map(abs))
 
   let done = 0
-  let failed = 0
+  const failedPaths: string[] = []
   onProgress?.(0, files.length)
   for (let i = 0; i < files.length; i += SYNC_CONCURRENCY) {
     const batch = files.slice(i, i + SYNC_CONCURRENCY)
@@ -107,14 +112,15 @@ export async function syncSpace(
         fetchAndCache(cache, api.fileURL(id, p)),
         fetchAndCache(cache, api.commentsURL(id, p)), // comments are optional — don't count as a failure
       ])
-      return file
+      return { p, ok: !!file }
     }))
     for (const r of results) {
-      if (!r) failed++
+      if (!r.ok) failedPaths.push(r.p)
       done++
     }
     onProgress?.(done, files.length)
   }
+  const failed = failedPaths.length
 
   // Prune files that were removed server-side since the last sync.
   for (const req of await cache.keys()) {
@@ -123,7 +129,9 @@ export async function syncSpace(
 
   const synced = files.length - failed
   const r = registry()
-  r[id] = { name, syncedAt: Date.now(), files: synced, failed }
+  // Cap the stored list (it's JSON-persisted to localStorage); `failed` keeps the
+  // true total so the "N failed" count stays accurate even when the list is clipped.
+  r[id] = { name, syncedAt: Date.now(), files: synced, failed, failedPaths: failedPaths.slice(0, 50) }
   saveRegistry(r)
   return { files: synced, failed }
 }

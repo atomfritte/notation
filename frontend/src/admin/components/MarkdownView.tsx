@@ -410,7 +410,12 @@ export function MarkdownView({
   // element so hover / active-comment / selection state changes (which re-render
   // this component constantly) don't re-parse the whole document each time.
   const renderedMarkdown = useMemo(() => (
+        // key={content}: on a page change React replaces this whole subtree rather
+        // than diffing across the imperatively-inserted <mark>s (see the article
+        // comment) — avoiding the removeChild crash. content is reference-stable
+        // between non-navigation re-renders, so it only remounts on a real change.
         <ReactMarkdown
+          key={content}
           remarkPlugins={[
             remarkGfm,
             remarkMath,
@@ -531,6 +536,14 @@ export function MarkdownView({
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
+      {/* The article element stays stable (its hover/click/keydown listeners are
+          bound to it directly), but renderedMarkdown is keyed on content so React
+          REPLACES the whole prose subtree on a page change instead of diffing it.
+          The comment/search marks imperatively wrap text in <mark> (splitText +
+          surroundContents); diffing across that re-parents text nodes and makes
+          React do `parent.removeChild(textNode)` on a node whose parent is now a
+          <mark> → "node is not a child" crash. Replacing instead removes whole
+          block elements (each still a direct child of the article), so it's safe. */}
       <article ref={articleRef} className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-4 md:p-8">
         {renderedMarkdown}
       </article>

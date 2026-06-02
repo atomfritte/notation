@@ -145,6 +145,15 @@ export function PrepareAudioPanel({ open, spaceID, tree, voices, onClose }: Prop
                     {result.emptyPages > 0 && <span className="text-[var(--notation-fg-muted)]">, {result.emptyPages} ohne Text</span>}
                     {result.pageFailed > 0 && <span className="text-[var(--notation-danger)]">, {result.pageFailed} Seiten fehlgeschlagen</span>}
                     {result.clipFailed > 0 && <span className="text-[var(--notation-danger)]">, {result.clipFailed} Clips fehlgeschlagen</span>}.
+                    {(result.failedPages.length > 0 || result.failedClips.length > 0) && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-[var(--notation-danger)]">Fehlgeschlagene Seiten anzeigen</summary>
+                        <ul className="mt-1 max-h-32 overflow-y-auto space-y-0.5 font-mono text-[11px] text-[var(--notation-fg-muted)]">
+                          {result.failedPages.map(p => <li key={'p' + p} title="Seite konnte nicht geladen/gerendert werden">⚠ {p}</li>)}
+                          {result.failedClips.map(p => <li key={'c' + p} title="Audio-Clip(s) fehlgeschlagen">♪ {p}</li>)}
+                        </ul>
+                      </details>
+                    )}
                     <div className="text-xs text-[var(--notation-fg-muted)] mt-1">
                       Jetzt im Space-Manager den Space (erneut) offline synchronisieren — die Audios sind dann im Flugmodus verfügbar.
                     </div>

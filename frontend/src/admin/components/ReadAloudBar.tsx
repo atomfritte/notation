@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Headphones, Play, Pause, SkipBack, SkipForward, X, Lock, ChevronDown, Server } from 'lucide-react'
 import {
-  extractSentences, groupChunks, chunkIndexForSentence, systemEngine, loadReadPos, saveReadPos,
+  extractSentences, groupChunks, chunkIndexForSentence, systemEngine, loadReadPos, saveReadPos, ttsStyleForPath,
   type Sentence, type Chunk, type TtsEngine, type TtsVoice,
 } from '../lib/readAloud'
 import { createServerEngine, type ServerVoice } from '../lib/serverTts'
@@ -10,6 +10,7 @@ type Status = 'idle' | 'playing' | 'paused'
 type EngineId = 'system' | 'neural'
 
 const PAGE_PAUSE_MS = 1200 // beat between pages, like turning a page
+const CHUNK_PAUSE_MS = 500 // beat between paragraphs for the studio voice
 // Pages whose name/path mention "meditation" are read slowly, with long pauses.
 const MEDITATION_RE = /meditation/i
 const MEDITATION_PAGE_PAUSE_MS = 4000
@@ -72,6 +73,12 @@ export function ReadAloudBar({
   const highlightRef = useRef<{ clear: () => void; add: (r: Range) => void } | null>(null)
   const fileRef = useRef(currentFile)
   const engineRef = useRef<TtsEngine | null>(engine)
+  // One-shot: 'continue' means the NEXT play() resumes the saved position (even on
+  // another page); otherwise play() reads the page the user is on. Reset after use.
+  const resumeRef = useRef<'current' | 'continue'>('current')
+  // Voice the current chunk was spoken with — so a voice change while paused
+  // re-speaks (new voice) instead of resuming the old clip.
+  const lastVoiceRef = useRef('')
   engineRef.current = engine
   fileRef.current = currentFile
 
@@ -182,6 +189,7 @@ export function ReadAloudBar({
     cancelSpeech()
     highlight(null)
     hlSentRef.current = -1
+    resumeRef.current = 'current'
     releaseWake()
     setStat('idle')
     setCurText('')
@@ -204,7 +212,7 @@ export function ReadAloudBar({
     chunkRef.current = c
     // Meditation pages: slow, emphasised, long pauses.
     const meditation = MEDITATION_RE.test(fileRef.current)
-    const style = meditation ? 'meditation' : ''
+    const style = ttsStyleForPath(fileRef.current)
     if (c >= chunks.length) {
       // End of page → brief pause, then advance to the next page.
       highlight(null)
@@ -224,6 +232,7 @@ export function ReadAloudBar({
     setCurText(chunk.text)
     highlightSentence(chunk.startIndex)
     saveReadPos(storageKey, { file: fileRef.current, sentence: chunk.startIndex })
+    lastVoiceRef.current = voiceId
 
     // Warm the NEXT chunk so there's no gap while it synthesises (neural only),
     // but only once THIS chunk is actually playing — issuing it earlier would
@@ -244,10 +253,17 @@ export function ReadAloudBar({
     const total = chunk.sentences.reduce((a, s) => a + s.text.length, 0) + joins || 1
     let started = false // did this chunk actually produce audio?
     const next = () => { if (statusRef.current === 'playing') speakChunk(c + 1) }
-    // On a meditation page, breathe between paragraphs instead of chaining gaplessly.
+    // Breathe between paragraphs instead of chaining gaplessly. The studio voice
+    // gets a beat at every paragraph boundary (a NEW block) — but not when one long
+    // paragraph was split across chunks (same block). Meditation pauses everywhere.
+    const nextChunk = chunks[c + 1]
+    const crossesParagraph = !!nextChunk &&
+      nextChunk.sentences[0]?.block !== chunk.sentences[chunk.sentences.length - 1]?.block
     const advance = () => {
       if (statusRef.current !== 'playing') return
-      if (meditation) pauseTimer.current = setTimeout(next, MEDITATION_CHUNK_PAUSE_MS)
+      const ms = meditation ? MEDITATION_CHUNK_PAUSE_MS
+        : (eng.id === 'neural' && crossesParagraph ? CHUNK_PAUSE_MS : 0)
+      if (ms) pauseTimer.current = setTimeout(next, ms)
       else next()
     }
     const onErr = () => {
@@ -310,12 +326,40 @@ export function ReadAloudBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFile, content])
 
+  // Voice / speed changes take effect on the CURRENT chunk immediately, not just
+  // the next one. Speed is a live playbackRate change on the studio engine (no
+  // re-synth); voice is baked into the synth/URL and the system engine bakes rate
+  // into the utterance, so those re-speak the current chunk. initRef skips mount.
+  const initRef = useRef(true)
+  useEffect(() => {
+    if (initRef.current || statusRef.current !== 'playing') return
+    const eng = engineRef.current
+    if (eng?.setRate) eng.setRate(rate)
+    else { cancelSpeech(); speakChunk(chunkRef.current) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rate])
+  useEffect(() => {
+    // Bail on the mount tick, when not playing, or when the change is just a
+    // programmatic re-resolution to the voice already being spoken (e.g. the
+    // browser's async onvoiceschanged) — only a real user pick re-speaks.
+    if (initRef.current || statusRef.current !== 'playing' || voiceId === lastVoiceRef.current) return
+    cancelSpeech()
+    speakChunk(chunkRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceId])
+  useEffect(() => { initRef.current = false }, [])
+
   // ---- controls ----
   const play = useCallback(() => {
     if (!engine) return
     void acquireWake()
     if (statusRef.current === 'paused') {
       setStat('playing')
+      // Apply any speed change made while paused (live, no re-fetch).
+      engine.setRate?.(rate)
+      // If the voice changed while paused, the buffered clip is the old voice —
+      // re-speak the current chunk instead of resuming stale audio.
+      if (lastVoiceRef.current !== voiceId) { hlSentRef.current = -1; speakChunk(chunkRef.current); return }
       // Engines without in-place resume (system) restart the chunk: reset the
       // highlight tracker so the current sentence is re-highlighted + re-scrolled.
       if (!engine.resume) hlSentRef.current = -1
@@ -326,18 +370,22 @@ export function ReadAloudBar({
       if (!(engine.resume && engine.resume(onResumeFail))) speakChunk(chunkRef.current)
       return
     }
-    // Starting fresh: resume the saved position if it points elsewhere.
+    // Starting fresh: read the page the user is ON by default. Only continue from a
+    // saved spot elsewhere when the user explicitly opted in (one-shot resumeRef).
+    const mode = resumeRef.current
+    resumeRef.current = 'current'
     const saved = loadReadPos(storageKey)
     setStat('playing')
-    if (saved && saved.file !== fileRef.current && navFiles.includes(saved.file)) {
+    if (mode === 'continue' && saved && saved.file !== fileRef.current && navFiles.includes(saved.file)) {
       pendingRef.current = saved.sentence
       onNavigate(saved.file)
       return
     }
     const chunks = extractCurrent()
+    // Reopening on the same page resumes mid-page; a fresh page starts at the top.
     const sentence = saved && saved.file === fileRef.current ? Math.min(saved.sentence, Math.max(0, sentencesRef.current.length - 1)) : 0
     speakChunk(chunkIndexForSentence(chunks, sentence))
-  }, [engine, storageKey, navFiles, onNavigate, extractCurrent, speakChunk, acquireWake, releaseWake])
+  }, [engine, storageKey, navFiles, onNavigate, extractCurrent, speakChunk, acquireWake, releaseWake, rate, voiceId])
 
   const pause = useCallback(() => {
     if (pauseTimer.current) { clearTimeout(pauseTimer.current); pauseTimer.current = null }
@@ -396,6 +444,10 @@ export function ReadAloudBar({
   const sysUnsupported = engineId === 'system' && !systemEng
   const studioPending = engineId === 'neural' && !serverEng
   const noVoices = engineId === 'system' && !!systemEng && voices.length === 0
+  // Offer "continue where you left off" only when idle AND the saved spot is on a
+  // different page — pressing play itself always reads the current page.
+  const savedPos = useMemo(() => loadReadPos(storageKey), [storageKey, currentFile, status])
+  const canContinue = status === 'idle' && !!savedPos && savedPos.file !== currentFile && navFiles.includes(savedPos.file)
   const engineOptions = [
     ...(systemEng ? [{ value: 'system', label: 'System' }] : []),
     ...(studioAvailable ? [{ value: 'neural', label: 'Studio' }] : []),
@@ -403,7 +455,7 @@ export function ReadAloudBar({
 
   return (
     <div className="no-print fixed bottom-0 inset-x-0 z-40 flex justify-center px-3 pb-3 pointer-events-none">
-      <div className="pointer-events-auto w-full max-w-2xl surface-elevated bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl px-3 py-2 flex items-center gap-2">
+      <div className="pointer-events-auto w-full max-w-2xl surface-elevated bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <Headphones size={18} className="text-[color:var(--notation-accent)] flex-shrink-0" />
 
         {engineOptions.length > 1 && (
@@ -443,13 +495,19 @@ export function ReadAloudBar({
               <SkipForward size={16} />
             </button>
 
-            <div className="flex-1 min-w-0 px-1">
+            <div className="flex-1 min-w-0 px-1 [@media(max-height:480px)]:order-last [@media(max-height:480px)]:basis-full">
               <div className="text-xs text-[var(--notation-fg)] truncate">
                 {curText || (status === 'idle' ? 'Ready to read this page aloud.' : '')}
               </div>
-              {progress.n > 0 && (
+              {canContinue ? (
+                <button
+                  onClick={() => { resumeRef.current = 'continue'; play() }}
+                  className="text-[10px] underline text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]"
+                  title={`Continue from ${stripPath(savedPos!.file)}`}
+                >Continue where you left off →</button>
+              ) : progress.n > 0 ? (
                 <div className="text-[10px] text-[var(--notation-fg-muted)]">{progress.i}/{progress.n}</div>
-              )}
+              ) : null}
             </div>
 
             {voices.length > 1 && (
@@ -460,11 +518,11 @@ export function ReadAloudBar({
               options={RATES.map(r => ({ value: String(r), label: `${r}×` }))} />
 
             {engineId === 'neural' ? (
-              <span className="hidden sm:flex items-center gap-1 text-[10px] text-[var(--notation-fg-muted)] px-1" title="Synthesised by Piper on your own server — text only goes to this app, never a third party.">
+              <span className="hidden sm:flex [@media(max-height:480px)]:hidden items-center gap-1 text-[10px] text-[var(--notation-fg-muted)] px-1" title="Synthesised by Piper on your own server — text only goes to this app, never a third party.">
                 <Server size={11} /> your server
               </span>
             ) : (
-              <span className="hidden sm:flex items-center gap-1 text-[10px] text-[var(--notation-fg-muted)] px-1" title="Audio is generated on your device — text never leaves it.">
+              <span className="hidden sm:flex [@media(max-height:480px)]:hidden items-center gap-1 text-[10px] text-[var(--notation-fg-muted)] px-1" title="Audio is generated on your device — text never leaves it.">
                 <Lock size={11} /> on-device
               </span>
             )}

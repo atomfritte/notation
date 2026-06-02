@@ -12,11 +12,8 @@
 import * as api from './api'
 import { chunksFromMarkdown } from './markdownChunks'
 import { capText } from './serverTts'
-
-// Same trigger the player uses (ReadAloudBar): a page whose PATH contains
-// "meditation" is voiced in the slow, emphasised meditation style. The style is
-// part of the cache key, so it must match the player's URL exactly.
-const MEDITATION_RE = /meditation/i
+import { ttsStyleForPath } from './readAloud'
+import { isMarkdownFile } from './fileTypes'
 
 const PER_PAGE_CONCURRENCY = 3
 
@@ -59,7 +56,10 @@ export function markdownPagesUnder(tree: api.Entry[], folder: string): string[] 
     for (const e of entries) {
       if (e.is_dir) {
         if (!e.form && e.children) walk(e.children)
-      } else if (e.path.toLowerCase().endsWith('.md')) {
+      } else if (isMarkdownFile(e.path)) {
+        // Match the player's nav set (SpaceView flattenTreeFiles uses isMarkdownFile),
+        // so .mdx/.markdown pages the reader can auto-advance to also get pre-synth'd
+        // audio — otherwise they'd be silent offline.
         all.push(e.path)
       }
     }
@@ -83,6 +83,8 @@ export type VertonenResult = {
   /** Individual /tts clips that failed to fetch. */ clipFailed: number
   /** Pages that failed to load/render entirely. */ pageFailed: number
   /** Pages with no readable prose (nothing to voice). */ emptyPages: number
+  /** Paths of pages that failed to load/render — so the UI can name them. */ failedPages: string[]
+  /** Paths of pages that had ≥1 clip fail. */ failedClips: string[]
   cancelled: boolean
 }
 
@@ -126,8 +128,10 @@ export async function vertonenPages(
   let clipFailed = 0
   let pageFailed = 0
   let emptyPages = 0
+  const failedPages: string[] = []
+  const failedClipPages = new Set<string>()
   const result = (pages: number, cancelled: boolean): VertonenResult =>
-    ({ pages, clips, clipFailed, pageFailed, emptyPages, cancelled })
+    ({ pages, clips, clipFailed, pageFailed, emptyPages, failedPages, failedClips: [...failedClipPages], cancelled })
   const emit = (done: number, current: string) =>
     onProgress?.({ done, total: paths.length, current, clips })
   emit(0, paths[0] ?? '')
@@ -141,12 +145,12 @@ export async function vertonenPages(
       const { content } = await api.readFile(spaceID, path)
       texts = await chunksFromMarkdown(content)
     } catch {
-      pageFailed++
+      pageFailed++; failedPages.push(path)
       continue
     }
-    if (texts === null) { pageFailed++; continue } // render threw
+    if (texts === null) { pageFailed++; failedPages.push(path); continue } // render threw
     if (texts.length === 0) { emptyPages++; continue } // nothing readable to voice
-    const style = MEDITATION_RE.test(path) ? 'meditation' : ''
+    const style = ttsStyleForPath(path)
     for (let j = 0; j < texts.length; j += PER_PAGE_CONCURRENCY) {
       if (cancel?.cancelled) return result(i, true)
       const batch = texts.slice(j, j + PER_PAGE_CONCURRENCY)
@@ -172,9 +176,9 @@ export async function vertonenPages(
           })
           if (r.ok) { await r.arrayBuffer(); clips++ }
           else if (cacheOnly && r.status === 404) { /* not prepared yet — skip */ }
-          else { clipFailed++ }
+          else { clipFailed++; failedClipPages.add(path) }
         } catch {
-          clipFailed++
+          clipFailed++; failedClipPages.add(path)
         }
       }))
       emit(i, path)

@@ -68,6 +68,9 @@ export function createServerEngine(
       audio.play().catch(() => { if (!cancelled) onError('autoplay blocked') })
       return { cancel: () => { cancelled = true; cleanup(); try { audio.pause() } catch { /* ignore */ } } }
     },
+    // Live speed change: the <audio> element re-times the SAME clip (rate isn't
+    // baked into synthesis), so changing speed needs no re-fetch.
+    setRate(r: number) { try { audio.playbackRate = r || 1 } catch { /* ignore */ } },
     // In-place pause/resume: the <audio> element holds its position.
     pause() { try { audio.pause() } catch { /* ignore */ } },
     resume(onFail) {

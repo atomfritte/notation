@@ -182,6 +182,21 @@ export type TtsVoice = { id: string; label: string; lang: string }
 export type SpeakOpts = { voiceId?: string; rate: number; style?: string }
 export type SpeakHandle = { cancel: () => void }
 
+// Pages whose name/path mention "meditation" read slowly, with long pauses.
+const MEDITATION_RE = /meditation/i
+
+/**
+ * ttsStyleForPath returns the synthesis style token for a page path: "meditation.v2"
+ * (slow, big pauses) for meditation pages, else "v2" (normal voice with a gentle
+ * inter-sentence pause). The ".v2" suffix is a synthesis REVISION — bump it (here
+ * + in the backend styleFor) whenever the synthesised audio changes, so new clips
+ * get fresh /tts URLs + cache keys instead of serving stale cached audio. Shared by
+ * the player (ReadAloudBar) and the pre-synthesiser (vertonen) so their URLs match.
+ */
+export function ttsStyleForPath(path: string): string {
+  return MEDITATION_RE.test(path) ? 'meditation.v2' : 'v2'
+}
+
 export interface TtsEngine {
   id: 'system' | 'neural'
   label: string
@@ -199,6 +214,10 @@ export interface TtsEngine {
   ): SpeakHandle
   /** Optional: pre-synthesise upcoming chunk text so playback stays gapless. */
   prefetch?(text: string, opts: SpeakOpts): void
+  /** Optional live playback-rate change without re-synthesising (server engine
+   *  applies rate via the <audio> element). System engine bakes rate into the
+   *  utterance, so it omits this and the player re-speaks the chunk instead. */
+  setRate?(rate: number): void
   /** Optional in-place pause. If absent, the player cancels + restarts the chunk. */
   pause?(): void
   /** Optional in-place resume; returns true if it resumed where it left off.

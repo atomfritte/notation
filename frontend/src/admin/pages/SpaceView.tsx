@@ -1248,7 +1248,10 @@ function flattenTreeFiles(entries: api.Entry[], onlyMd: boolean): string[] {
     if (e.is_dir && e.children) {
       result.push(...flattenTreeFiles(e.children, onlyMd))
     } else if (!e.is_dir) {
-      if (!onlyMd || e.name.endsWith('.md')) result.push(e.path)
+      // Use isMarkdownFile (.md/.mdx/.markdown) — the same gate used everywhere
+      // else. A bare ".md" check dropped .mdx/.markdown pages from the nav list,
+      // so prev/next page (read-aloud + the footer button) couldn't reach them.
+      if (!onlyMd || isMarkdownFile(e.name)) result.push(e.path)
     }
   }
   return result
