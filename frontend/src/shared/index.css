@@ -823,3 +823,45 @@ mark.comment-anchor.comment-anchor-blink {
   --tw-prose-th-borders: var(--notation-border);
   --tw-prose-td-borders: var(--notation-border);
 }
+
+/* ---- Page-switch reveal -------------------------------------------------
+   Opening a page used to pop the new text in abruptly the instant the fetch
+   resolved. Now the first screenful of blocks fades up in a quick
+   top-to-bottom cascade, so a page switch reads as a deliberate transition
+   instead of a flash. The animated nodes are the freshly-mounted children of
+   <article> (ReactMarkdown is keyed on content), so the cascade replays on
+   every real page change but NOT on hover / comment re-renders. Capped at the
+   first 8 blocks — those are the on-screen ones; anything below the fold just
+   appears. Skipped entirely for readers who asked for reduced motion. */
+@keyframes notation-page-reveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  article.prose > *:nth-child(-n+8) {
+    animation: notation-page-reveal 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  article.prose > *:nth-child(2) { animation-delay: 0.03s; }
+  article.prose > *:nth-child(3) { animation-delay: 0.06s; }
+  article.prose > *:nth-child(4) { animation-delay: 0.09s; }
+  article.prose > *:nth-child(5) { animation-delay: 0.12s; }
+  article.prose > *:nth-child(6) { animation-delay: 0.15s; }
+  article.prose > *:nth-child(7) { animation-delay: 0.18s; }
+  article.prose > *:nth-child(8) { animation-delay: 0.21s; }
+}
+
+/* ---- Long-document virtualisation --------------------------------------
+   For long pages, skip rendering the blocks that aren't on screen so the
+   first paint only costs the visible text. `auto` intrinsic sizing lets the
+   browser remember each block's real height after first render, keeping the
+   scrollbar honest on the way down. MarkdownView adds `.cv-auto` only past a
+   length threshold, where the saving is worth it. Reset for print so nothing
+   off-screen is dropped from the printed page. */
+article.prose.cv-auto > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+@media print {
+  article.prose > * { animation: none !important; }
+  article.prose.cv-auto > * { content-visibility: visible; }
+}

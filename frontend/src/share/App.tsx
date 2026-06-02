@@ -5,6 +5,7 @@ import {
   Bookmark, FileText, Folder, HelpCircle, X, Headphones,
 } from 'lucide-react'
 import * as api from './lib/api'
+import { getCachedFile, setCachedFile, prefetchFile } from '../admin/lib/contentCache'
 import { ShareCommentsPanel } from './ShareCommentsPanel'
 import { HeaderActionBtn, HeaderOverflowMenu, useHeaderWidth, headerIsCompact, type HeaderAction } from '../admin/components/HeaderActions'
 import { FileTree } from '../admin/components/FileTree'
@@ -20,6 +21,10 @@ import { ThemePalette } from '../admin/components/ThemePalette'
 import { HelpPanel } from '../admin/components/HelpPanel'
 import { initTheme } from '../admin/lib/theme'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../admin/lib/fileTypes'
+
+// Cache key for a shared file's body. NUL-separated (can't appear in a token or
+// path) and `s`-prefixed so the share SPA never reads the admin SPA's entries.
+const shareKey = (token: string, path: string) => `s\u0000${token}\u0000${path}`
 
 function ShareUI() {
   const [info, setInfo] = useState<api.SpaceInfo | null>(null)
@@ -208,10 +213,24 @@ function ShareUI() {
     }
     let cancelled = false
     if (isTextFile(file)) {
+      // Cache-first (stale-while-revalidate): paint a previously-opened or
+      // hover-prefetched body immediately so the page switch feels instant,
+      // then revalidate against the server below.
+      const ck = shareKey(api.TOKEN, file)
+      const cached = getCachedFile(ck)
+      if (cached) {
+        setContent(cached.content)
+        setEditBuffer(cached.content)
+      }
       api.readFile(file).then(c => {
         if (cancelled) return
-        setContent(c)
-        setEditBuffer(c)
+        setCachedFile(ck, c, null)
+        // Skip the redundant state churn when the server agrees with the cached
+        // body — that no-op would otherwise clobber the edit buffer mid-edit.
+        if (!cached || cached.content !== c) {
+          setContent(c)
+          setEditBuffer(c)
+        }
       // A 400 usually means the path is a directory (a form folder the tree
       // hasn't classified yet) — don't flash an error; the form effect handles it.
       }).catch(e => { if (!cancelled && (e as { status?: number })?.status !== 400) setErr(String(e)) })
@@ -253,6 +272,13 @@ function ShareUI() {
     setSearchParams({ file: p })
     if (isMobile) setSidebarOpen(false)
   }, [setSearchParams, isMobile, editing, editBuffer, content])
+
+  // Warm a page's text into the cache on hover (tree / links / prev-next) so
+  // the open that follows paints from cache instead of waiting on the network.
+  const warmFile = useCallback((p: string) => {
+    if (!p || !isTextFile(p)) return
+    prefetchFile(shareKey(api.TOKEN, p), () => api.readFile(p).then(content => ({ content, etag: null })))
+  }, [])
 
   // Warn before a tab close / reload would drop unsaved edits (edit-permission
   // guests). In-app navigation is guarded by `select` above.
@@ -316,6 +342,7 @@ function ShareUI() {
     setErr(null)
     try {
       await api.writeFile(file, editBuffer)
+      setCachedFile(shareKey(api.TOKEN, file), editBuffer, null)
       setContent(editBuffer)
       setEditing(false)
     } catch (e) {
@@ -478,6 +505,7 @@ function ShareUI() {
               entries={tree}
               current={file}
               onSelect={select}
+              onPrefetch={warmFile}
               collapseStorageKey={`notation_share_tree_collapsed_${info.space.id}`}
             />
           )}
@@ -617,6 +645,7 @@ function ShareUI() {
                     currentFile={file}
                     navFiles={navFiles}
                     onNavigate={select}
+                    onPrefetch={warmFile}
                   />
                 ) : (
                   <FileViewer

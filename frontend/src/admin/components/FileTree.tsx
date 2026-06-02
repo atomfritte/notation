@@ -15,6 +15,10 @@ type Props = {
   entries: Entry[]
   current: string
   onSelect: (path: string) => void
+  /** Warm a file's content into the cache before it's opened (fired on row
+   *  hover) so the click that follows paints instantly. Best-effort; safe to
+   *  call for any path. */
+  onPrefetch?: (path: string) => void
   /** Right-click on a file or directory row. */
   onContextMenu?: (e: React.MouseEvent, path: string, isDir: boolean) => void
   /** Right-click on the empty area / inside the tree-area background. */
@@ -50,6 +54,7 @@ export function FileTree({
   entries,
   current,
   onSelect,
+  onPrefetch,
   onContextMenu,
   onBackgroundContextMenu,
   onMove,
@@ -170,6 +175,7 @@ export function FileTree({
               collapsed={!!collapsed[e.path]}
               onToggle={() => toggle(e.path)}
               onSelect={onSelect}
+              onPrefetch={onPrefetch}
               onContextMenu={onContextMenu}
               onBackgroundContextMenu={onBackgroundContextMenu}
               onMove={onMove}
@@ -183,6 +189,7 @@ export function FileTree({
               current={current}
               depth={depth}
               onSelect={onSelect}
+              onPrefetch={onPrefetch}
               onContextMenu={onContextMenu}
             />
       ))}
@@ -193,12 +200,13 @@ export function FileTree({
 // ---- Row components ----------------------------------------------------
 
 function FileRow({
-  entry, current, depth, onSelect, onContextMenu,
+  entry, current, depth, onSelect, onPrefetch, onContextMenu,
 }: {
   entry: Entry
   current: string
   depth: number
   onSelect: (path: string) => void
+  onPrefetch?: (path: string) => void
   onContextMenu?: (e: React.MouseEvent, path: string, isDir: boolean) => void
 }) {
   const isActive = current === entry.path
@@ -215,6 +223,9 @@ function FileRow({
       <button
         ref={rowRef}
         onClick={() => onSelect(entry.path)}
+        // Warm the cache on hover (desktop) / on the pointerdown that precedes
+        // a tap (touch) so the open that follows paints from cache instantly.
+        onPointerEnter={() => onPrefetch?.(entry.path)}
         onContextMenu={(evt) => {
           evt.stopPropagation()
           onContextMenu?.(evt, entry.path, false)
@@ -242,7 +253,7 @@ function FileRow({
 
 function DirRow({
   entry, current, depth, collapsed, onToggle,
-  onSelect, onContextMenu, onBackgroundContextMenu,
+  onSelect, onPrefetch, onContextMenu, onBackgroundContextMenu,
   onMove, onExternalDrop,
   dropTarget, setDropTarget,
 }: {
@@ -252,6 +263,7 @@ function DirRow({
   collapsed: boolean
   onToggle: () => void
   onSelect: (path: string) => void
+  onPrefetch?: (path: string) => void
   onContextMenu?: (e: React.MouseEvent, path: string, isDir: boolean) => void
   onBackgroundContextMenu?: (e: React.MouseEvent) => void
   onMove?: (from: string, toDir: string) => void
@@ -379,6 +391,7 @@ function DirRow({
           entries={entry.children}
           current={current}
           onSelect={onSelect}
+          onPrefetch={onPrefetch}
           onContextMenu={onContextMenu}
           onBackgroundContextMenu={onBackgroundContextMenu}
           onMove={onMove}

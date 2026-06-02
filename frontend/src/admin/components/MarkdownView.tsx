@@ -87,6 +87,10 @@ type Props = {
   navFiles?: string[]
   /** Navigate to another page (prev/next links + swipe). */
   onNavigate?: (path: string) => void
+  /** Warm a linked page's content into the cache before it's opened — wired to
+   *  hover on the prev/next buttons and on resolved in-document links so the
+   *  click that follows paints instantly. Best-effort. */
+  onPrefetch?: (path: string) => void
 }
 
 export function MarkdownView({
@@ -101,6 +105,7 @@ export function MarkdownView({
   currentFile,
   navFiles,
   onNavigate,
+  onPrefetch,
 }: Props) {
   const location = useLocation()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -471,15 +476,21 @@ export function MarkdownView({
                 // doesn't 404.
                 const url = new URL(href, 'http://_/')
                 const f = url.searchParams.get('file')
+                let target: string | undefined
                 if (f) {
                   const r = resolveTarget(f, false)
                   // Known-missing target: render inert so the reader isn't sent
                   // to a guaranteed 404. Only when we have a tree to check against.
                   if (haveFileList && !r.exists) return <BrokenLink>{children}</BrokenLink>
                   url.searchParams.set('file', r.path)
+                  target = r.path
                 }
                 return (
-                  <Link to={{ pathname: location.pathname, search: url.search, hash: url.hash }} className={className}>
+                  <Link
+                    to={{ pathname: location.pathname, search: url.search, hash: url.hash }}
+                    className={className}
+                    onMouseEnter={target ? () => onPrefetch?.(target!) : undefined}
+                  >
                     {children}
                   </Link>
                 )
@@ -504,6 +515,7 @@ export function MarkdownView({
                     hash: anchor ? '#' + anchor : '',
                   }}
                   className={className}
+                  onMouseEnter={() => onPrefetch?.(r.path)}
                 >
                   {children}
                 </Link>
@@ -532,7 +544,13 @@ export function MarkdownView({
         >
           {content}
         </ReactMarkdown>
-  ), [content, theme, autoFileLinkPlugin, fileIndex, currentDir, haveFileList, location.pathname, location.search])
+  ), [content, theme, autoFileLinkPlugin, fileIndex, currentDir, haveFileList, location.pathname, location.search, onPrefetch])
+
+  // For long documents, let the browser skip rendering the off-screen blocks
+  // (content-visibility: auto) so the first paint only costs the visible text.
+  // Short/medium docs render eagerly — there the optimisation buys nothing and
+  // would only risk scrollbar jitter. See `.cv-auto` in shared/index.css.
+  const longDoc = content.length > 12000
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
@@ -544,20 +562,20 @@ export function MarkdownView({
           React do `parent.removeChild(textNode)` on a node whose parent is now a
           <mark> → "node is not a child" crash. Replacing instead removes whole
           block elements (each still a direct child of the article), so it's safe. */}
-      <article ref={articleRef} className="prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-4 md:p-8">
+      <article ref={articleRef} className={`prose prose-zinc dark:prose-invert max-w-3xl mx-auto p-4 md:p-8${longDoc ? ' cv-auto' : ''}`}>
         {renderedMarkdown}
       </article>
 
       {navInfo && (navInfo.prev || navInfo.next) && onNavigate && (
         <nav className="page-nav max-w-3xl mx-auto px-4 md:px-8 pb-16 no-print">
           {navInfo.prev ? (
-            <button onClick={() => onNavigate(navInfo.prev!)} className="page-nav-btn group" title={navInfo.prev}>
+            <button onClick={() => onNavigate(navInfo.prev!)} onMouseEnter={() => onPrefetch?.(navInfo.prev!)} className="page-nav-btn group" title={navInfo.prev}>
               <span className="page-nav-dir">← Previous</span>
               <span className="page-nav-title">{pageLabel(navInfo.prev)}</span>
             </button>
           ) : <span className="flex-1" />}
           {navInfo.next ? (
-            <button onClick={() => onNavigate(navInfo.next!)} className="page-nav-btn page-nav-btn-next group" title={navInfo.next}>
+            <button onClick={() => onNavigate(navInfo.next!)} onMouseEnter={() => onPrefetch?.(navInfo.next!)} className="page-nav-btn page-nav-btn-next group" title={navInfo.next}>
               <span className="page-nav-dir">Next →</span>
               <span className="page-nav-title">{pageLabel(navInfo.next)}</span>
             </button>
