@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Headphones, Play, Pause, SkipBack, SkipForward, X, Lock, ChevronDown, Download, Sparkles, AlertCircle } from 'lucide-react'
+import { Headphones, Play, Pause, SkipBack, SkipForward, X, Lock, ChevronDown, Download, Sparkles, AlertCircle, Loader2 } from 'lucide-react'
 import {
   extractSentences, groupChunks, chunkIndexForSentence, systemEngine, loadReadPos, saveReadPos,
   type Sentence, type Chunk, type TtsEngine, type TtsVoice,
@@ -136,7 +136,15 @@ export function ReadAloudBar({
     setNeuralErr(null); setNeuralState('downloading'); setDlPct(0)
     downloadNeuralModel(p => setDlPct(p))
       .then(() => { setNeuralEng(createNeuralEngine()); setNeuralState('ready') })
-      .catch(e => { setNeuralErr(String((e as Error)?.message ?? e)); setNeuralState('error') })
+      .catch(e => {
+        const raw = String((e as Error)?.message ?? e)
+        // A blocked/failed fetch surfaces as an opaque "Failed to fetch" — give
+        // something actionable (this is the usual symptom of a CSP/offline issue).
+        const msg = /fetch|network|load failed|connect|csp|content security/i.test(raw)
+          ? 'Couldn’t reach the voice download — check your connection (the server must allow huggingface.co).'
+          : raw
+        setNeuralErr(msg); setNeuralState('error')
+      })
   }, [])
 
   // ---- highlight (CSS Custom Highlight API; degrades to scroll-only) ----
@@ -526,14 +534,34 @@ function NeuralSetup({
   if (state === 'downloading') {
     return (
       <div className="flex-1 min-w-0 px-1">
-        <div className="text-xs text-[var(--notation-fg)] mb-1">Downloading German voice… {pct}%</div>
-        <div className="h-1.5 rounded-full bg-[var(--notation-border)] overflow-hidden">
-          <div className="h-full bg-[var(--notation-accent)] transition-[width] duration-200" style={{ width: `${pct}%` }} />
+        <div className="text-xs text-[var(--notation-fg)] mb-1 flex items-center gap-1.5">
+          <Loader2 size={13} className="animate-spin flex-shrink-0 text-[color:var(--notation-accent)]" />
+          {pct > 0 ? `Downloading German voice… ${pct}%` : 'Connecting…'}
         </div>
+        <div className="h-1.5 rounded-full bg-[var(--notation-border)] overflow-hidden">
+          <div className="h-full bg-[var(--notation-accent)] transition-[width] duration-200" style={{ width: `${Math.max(pct, 4)}%` }} />
+        </div>
+        <div className="text-[10px] text-[var(--notation-fg-muted)] mt-1">≈113 MB · one-time · keeps going if you wait</div>
       </div>
     )
   }
-  // need-download or error
+  if (state === 'error') {
+    return (
+      <div className="flex-1 min-w-0 flex items-center gap-2 px-1 py-0.5">
+        <button
+          onClick={onDownload}
+          className="inline-flex items-center gap-1.5 rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] text-xs font-medium px-2.5 py-1.5 hover:opacity-90 flex-shrink-0"
+        >
+          <Download size={14} /> Retry
+        </button>
+        <span className="flex-1 min-w-0 text-xs leading-snug text-[color:var(--notation-danger,#dc2626)] flex items-start gap-1">
+          <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
+          <span className="break-words">{err || 'Download failed'}</span>
+        </span>
+      </div>
+    )
+  }
+  // need-download
   return (
     <div className="flex-1 min-w-0 flex items-center gap-2 px-1">
       <button
@@ -542,10 +570,8 @@ function NeuralSetup({
       >
         <Download size={14} /> Download German voice
       </button>
-      <span className="text-[10px] text-[var(--notation-fg-muted)] truncate">
-        {state === 'error'
-          ? <span className="inline-flex items-center gap-1 text-[color:var(--notation-danger,#dc2626)]"><AlertCircle size={11} /> {err || 'Download failed'} — retry</span>
-          : '≈113 MB, one-time. Stays on your device — text never leaves it.'}
+      <span className="hidden sm:inline text-[10px] text-[var(--notation-fg-muted)] leading-snug">
+        ≈113 MB, one-time. Stays on your device — text never leaves it.
       </span>
     </div>
   )
