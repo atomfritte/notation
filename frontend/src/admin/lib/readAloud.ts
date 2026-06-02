@@ -4,7 +4,7 @@
 // excluded), and any future engine (e.g. an in-browser neural model) must run
 // locally too. See ReadAloudBar.tsx for the orchestration + UI.
 
-export type Sentence = { text: string; range: Range }
+export type Sentence = { text: string; range: Range; block: number }
 
 // Block elements whose text we read; everything else (tables, code, the page-
 // nav footer, the floating toolbars) is skipped so it reads like a book.
@@ -29,15 +29,19 @@ function isSkipped(el: Element | null, root: Element): boolean {
 export function extractSentences(article: HTMLElement): Sentence[] {
   const out: Sentence[] = []
   // Iterate the top-level blocks in document order; recurse only into ones we
-  // read. Each block's text is split into sentences mapped back to ranges.
+  // read. Each block's text is split into sentences mapped back to ranges. The
+  // block index is recorded on every sentence so the player can group sentences
+  // back into per-paragraph synthesis chunks (see groupChunks).
+  let blockIdx = 0
   for (const block of Array.from(article.children)) {
     if (isSkipped(block, article)) continue
-    collectBlock(block as HTMLElement, article, out)
+    collectBlock(block as HTMLElement, article, out, blockIdx)
+    blockIdx++
   }
   return out
 }
 
-function collectBlock(block: HTMLElement, root: HTMLElement, out: Sentence[]) {
+function collectBlock(block: HTMLElement, root: HTMLElement, out: Sentence[], blockIdx: number) {
   // Gather the text nodes inside this block, skipping nested tables/code.
   const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
     acceptNode(n) {
@@ -63,7 +67,7 @@ function collectBlock(block: HTMLElement, root: HTMLElement, out: Sentence[]) {
     const text = flat.slice(s, e).replace(/\s+/g, ' ').trim()
     if (text.length < 1) continue
     const range = rangeFor(nodes, s, e)
-    if (range) out.push({ text, range })
+    if (range) out.push({ text, range, block: blockIdx })
   }
 }
 
@@ -101,6 +105,69 @@ function rangeFor(nodes: { node: Text; start: number }[], start: number, end: nu
   }
 }
 
+// ---- Synthesis chunks ----------------------------------------------------
+
+/** A chunk is what gets synthesised in ONE engine.speak() call. It carries the
+ *  joined text plus the individual sentences (with ranges) so the player can
+ *  still move the highlight within the chunk as it plays. */
+export type Chunk = { text: string; sentences: Sentence[]; startIndex: number }
+
+export type ChunkMode = 'sentence' | 'block'
+
+/**
+ * groupChunks turns the flat sentence list into synthesis chunks.
+ *
+ * - 'sentence': one chunk per sentence — for the system engine, whose synthesis
+ *   is instant, so small units give the tightest highlighting + resume.
+ * - 'block': roughly a paragraph per chunk (consecutive sentences, broken on a
+ *   new block once the chunk is reasonably long, and hard-capped at maxChars).
+ *   The neural engine reloads its model on every call, so synthesising a whole
+ *   paragraph at once amortises that cost — and the player prefetches the next
+ *   chunk while the current one plays, so there's no gap between paragraphs.
+ */
+export function groupChunks(
+  sentences: Sentence[],
+  mode: ChunkMode,
+  { minChars = 180, maxChars = 500 }: { minChars?: number; maxChars?: number } = {},
+): Chunk[] {
+  if (mode === 'sentence') {
+    return sentences.map((s, i) => ({ text: s.text, sentences: [s], startIndex: i }))
+  }
+  const chunks: Chunk[] = []
+  let cur: Sentence[] = []
+  let curStart = 0
+  let curLen = 0
+  const flush = () => {
+    if (!cur.length) return
+    chunks.push({ text: cur.map(s => s.text).join(' '), sentences: cur, startIndex: curStart })
+    cur = []; curLen = 0
+  }
+  for (let i = 0; i < sentences.length; i++) {
+    const s = sentences[i]
+    if (cur.length) {
+      const newBlock = cur[cur.length - 1].block !== s.block
+      const tooBig = curLen + s.text.length > maxChars
+      // Break at a paragraph boundary once we have enough to read, or whenever
+      // the chunk would grow too large (splits a very long paragraph).
+      if (tooBig || (newBlock && curLen >= minChars)) flush()
+    }
+    if (!cur.length) curStart = i
+    cur.push(s)
+    curLen += s.text.length + 1
+  }
+  flush()
+  return chunks
+}
+
+/** Index of the chunk that contains the given flat sentence index (for resume). */
+export function chunkIndexForSentence(chunks: Chunk[], sentenceIndex: number): number {
+  for (let c = 0; c < chunks.length; c++) {
+    const end = chunks[c].startIndex + chunks[c].sentences.length
+    if (sentenceIndex < end) return c
+  }
+  return Math.max(0, chunks.length - 1)
+}
+
 // ---- TTS engine ----------------------------------------------------------
 
 export type TtsVoice = { id: string; label: string; lang: string }
@@ -110,10 +177,29 @@ export type SpeakHandle = { cancel: () => void }
 export interface TtsEngine {
   id: 'system' | 'neural'
   label: string
+  /** How the player should group sentences per speak() call. Default 'sentence'. */
+  chunking?: ChunkMode
   /** Voices that run ENTIRELY on-device (no network). */
   voices(): TtsVoice[]
-  speak(text: string, opts: SpeakOpts, onEnd: () => void, onError: (msg: string) => void): SpeakHandle
+  /** Speak `text`. onProgress (0..1) is optional and drives in-chunk highlight. */
+  speak(
+    text: string,
+    opts: SpeakOpts,
+    onEnd: () => void,
+    onError: (msg: string) => void,
+    onProgress?: (fraction: number) => void,
+  ): SpeakHandle
+  /** Optional: pre-synthesise upcoming chunk text so playback stays gapless. */
+  prefetch?(text: string, opts: SpeakOpts): void
+  /** Optional in-place pause. If absent, the player cancels + restarts the chunk. */
+  pause?(): void
+  /** Optional in-place resume; returns true if it resumed where it left off.
+   *  onFail is invoked if playback couldn't actually restart (e.g. autoplay
+   *  blocked) so the player can park at paused rather than skip ahead. */
+  resume?(onFail?: () => void): boolean
   cancelAll(): void
+  /** Optional teardown: release the audio element + cached audio (neural). */
+  dispose?(): void
 }
 
 /**
@@ -128,6 +214,7 @@ export function systemEngine(): TtsEngine | null {
   return {
     id: 'system',
     label: 'System voice (on-device)',
+    chunking: 'sentence',
     voices() {
       return localVoices().map(v => ({ id: v.voiceURI, label: v.name, lang: v.lang }))
     },
