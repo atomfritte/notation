@@ -1,19 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Headphones, Loader2, Check, FolderTree } from 'lucide-react'
 import * as api from '../lib/api'
-import { folderList, markdownPagesUnder, vertonenPages, type VertonenProgress, type VertonenResult, type Cancel } from '../lib/vertonen'
-
-// Pick the default studio voice the way the read-aloud player does (ReadAloudBar's
-// neural path): the saved voice if it's a valid server voice, else one matching
-// the document language, else the first. Keeping this in lockstep means the URL
-// the player later requests matches what we pre-generate → offline cache HIT.
-function defaultVoice(voices: api.ServerVoice[]): string {
-  const saved = localStorage.getItem('notation_readaloud_voice') || ''
-  if (voices.some(v => v.id === saved)) return saved
-  const lang = (navigator.language || 'en').slice(0, 2).toLowerCase()
-  const byLang = voices.find(v => v.lang.toLowerCase().startsWith(lang))
-  return byLang?.id ?? voices[0]?.id ?? ''
-}
+import { folderList, markdownPagesUnder, vertonenPages, defaultVoice, type VertonenProgress, type VertonenResult, type Cancel } from '../lib/vertonen'
 
 type Props = {
   open: boolean

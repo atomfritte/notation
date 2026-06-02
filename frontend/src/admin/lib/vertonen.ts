@@ -20,6 +20,19 @@ const MEDITATION_RE = /meditation/i
 
 const PER_PAGE_CONCURRENCY = 3
 
+/**
+ * defaultVoice picks the studio voice the read-aloud player would default to
+ * (ReadAloudBar's neural path): the saved voice if it's a valid server voice,
+ * else one matching the document language, else the first. Used by BOTH the
+ * in-space panel and the space-manager so the pre-generated URLs match playback.
+ */
+export function defaultVoice(voices: api.ServerVoice[]): string {
+  const saved = (() => { try { return localStorage.getItem('notation_readaloud_voice') || '' } catch { return '' } })()
+  if (voices.some(v => v.id === saved)) return saved
+  const lang = (navigator.language || 'en').slice(0, 2).toLowerCase()
+  return voices.find(v => v.lang.toLowerCase().startsWith(lang))?.id ?? voices[0]?.id ?? ''
+}
+
 /** All directory paths (excluding form folders) — the folder picker's options. */
 export function folderList(tree: api.Entry[]): string[] {
   const out: string[] = []
@@ -94,6 +107,12 @@ export async function vertonenPages(
   voiceId: string,
   onProgress?: (p: VertonenProgress) => void,
   cancel?: Cancel,
+  // cacheOnly: send X-TTS-Cache-Only so the server returns only ALREADY-synthesised
+  // clips (404 otherwise, counted as skipped not failed). The URL stays identical
+  // to the player's, so a served clip caches under the key the player requests.
+  // Used by the space-manager "include voice" option — it pulls existing audio
+  // without triggering synthesis (that's the in-space manager's job).
+  cacheOnly = false,
 ): Promise<VertonenResult> {
   // Ask the browser to make the origin's storage persistent so a big batch of
   // audio doesn't get evicted (and doesn't pressure the shell/offline caches).
@@ -135,14 +154,24 @@ export async function vertonenPages(
         const text = capText(t)
         if (!text.trim()) return
         const url = api.ttsURL(voiceId, text, style)
-        // Already cached (prior run or playback) → nothing to do; bounds re-runs.
-        if (audioCache && await audioCache.match(url)) { clips++; return }
+        // Already cached as a full clip (prior run/playback) → nothing to do; bounds
+        // re-runs. Only a 200 counts — a stale 206 (from before the SW range fix)
+        // must be re-fetched so it gets overwritten with a complete body.
+        if (audioCache) {
+          const hit = await audioCache.match(url)
+          if (hit && hit.status === 200) { clips++; return }
+        }
         try {
           // GET the same URL the player will request → SW caches it (cache-first
           // on /tts). We read the body so the fetch fully completes before the
           // SW stores it.
-          const r = await fetch(url, { credentials: 'same-origin' })
-          if (r.ok) { await r.arrayBuffer(); clips++ } else { clipFailed++ }
+          const r = await fetch(url, {
+            credentials: 'same-origin',
+            headers: cacheOnly ? { 'X-TTS-Cache-Only': '1' } : undefined,
+          })
+          if (r.ok) { await r.arrayBuffer(); clips++ }
+          else if (cacheOnly && r.status === 404) { /* not prepared yet — skip */ }
+          else { clipFailed++ }
         } catch {
           clipFailed++
         }

@@ -40,6 +40,10 @@ var (
 	ErrUnavailable = errors.New("server tts not available")
 	ErrEmpty       = errors.New("empty text")
 	ErrNoVoice     = errors.New("no such voice")
+	// ErrNotCached is returned by GetCached when a clip hasn't been synthesised
+	// yet. The offline "include voice" flow uses cache-only requests so it pulls
+	// only already-synthesised audio instead of triggering (slow) synthesis.
+	ErrNotCached = errors.New("not cached")
 )
 
 // Voice is one selectable server voice.
@@ -268,6 +272,30 @@ func (s *Synth) Get(_ context.Context, scope, voiceID, style, text string) (audi
 		return out, nil
 	})
 	return b, etag, err
+}
+
+// GetCached returns a clip ONLY if it's already in the disk cache; it never
+// synthesises. Returns ErrNotCached on a miss. The "include voice" offline option
+// uses this (via a cache-only request header) so it downloads only audio that has
+// already been prepared, without hammering Piper for a whole space on demand.
+func (s *Synth) GetCached(scope, voiceID, style, text string) (audio []byte, etag string, err error) {
+	if !s.Available() {
+		return nil, "", ErrUnavailable
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil, "", ErrEmpty
+	}
+	vm, err := s.resolveVoice(voiceID)
+	if err != nil {
+		return nil, "", err
+	}
+	key := cacheKey(scope, vm.ID, style, text)
+	etag = `"` + key + `"`
+	if b, ok := s.cache.get(key); ok {
+		return b, etag, nil
+	}
+	return nil, etag, ErrNotCached
 }
 
 // synthesize dispatches to the voice's engine, then encodes the resulting raw
