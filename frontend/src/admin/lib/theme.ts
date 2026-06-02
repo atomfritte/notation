@@ -146,12 +146,17 @@ function tint(name: string, dark: string, light: string): Theme {
 }
 
 export const BUILTIN_THEMES: Theme[] = [
-  tint('Lime',   '#BFF355', '#65A30D'),
-  tint('Sky',    '#7DD3FC', '#0284C7'),
-  tint('Rose',   '#FB7185', '#E11D48'),
-  tint('Amber',  '#FCD34D', '#D97706'),
-  tint('Violet', '#C4B5FD', '#7C3AED'),
-  tint('Mint',   '#6EE7B7', '#059669'),
+  tint('Lime',    '#BFF355', '#65A30D'),
+  tint('Sky',     '#7DD3FC', '#0284C7'),
+  tint('Rose',    '#FB7185', '#E11D48'),
+  tint('Amber',   '#FCD34D', '#D97706'),
+  tint('Violet',  '#C4B5FD', '#7C3AED'),
+  tint('Mint',    '#6EE7B7', '#059669'),
+  tint('Cyan',    '#67E8F9', '#0891B2'),
+  tint('Teal',    '#5EEAD4', '#0D9488'),
+  tint('Fuchsia', '#F0ABFC', '#C026D3'),
+  tint('Orange',  '#FDBA74', '#EA580C'),
+  tint('Indigo',  '#A5B4FC', '#4F46E5'),
   {
     name: 'Dracula', builtIn: true,
     dark:  fillPalette({ accent: '#BD93F9', bg: '#282A36', bgElevated: '#21222C', fg: '#F8F8F2', fgMuted: '#6272A4', border: '#44475A' }, NEUTRAL_DARK),
@@ -171,6 +176,21 @@ export const BUILTIN_THEMES: Theme[] = [
     name: 'Nord', builtIn: true,
     dark:  fillPalette({ accent: '#88C0D0', bg: '#2E3440', bgElevated: '#3B4252', fg: '#ECEFF4', fgMuted: '#81A1C1', border: '#4C566A' }, NEUTRAL_DARK),
     light: fillPalette({ accent: '#5E81AC', bg: '#ECEFF4', bgElevated: '#E5E9F0', fg: '#2E3440', fgMuted: '#4C566A', border: '#D8DEE4' }, NEUTRAL_LIGHT),
+  },
+  {
+    name: 'Gruvbox', builtIn: true,
+    dark:  fillPalette({ accent: '#FABD2F', bg: '#282828', bgElevated: '#1D2021', fg: '#EBDBB2', fgMuted: '#928374', border: '#3C3836' }, NEUTRAL_DARK),
+    light: fillPalette({ accent: '#B57614', bg: '#FBF1C7', bgElevated: '#F2E5BC', fg: '#3C3836', fgMuted: '#7C6F64', border: '#EBDBB2' }, NEUTRAL_LIGHT),
+  },
+  {
+    name: 'Tokyo Night', builtIn: true,
+    dark:  fillPalette({ accent: '#7AA2F7', bg: '#1A1B26', bgElevated: '#16161E', fg: '#C0CAF5', fgMuted: '#565F89', border: '#292E42' }, NEUTRAL_DARK),
+    light: fillPalette({ accent: '#2E7DE9', bg: '#E1E2E7', bgElevated: '#D5D6DB', fg: '#343B58', fgMuted: '#6172B0', border: '#C4C8DA' }, NEUTRAL_LIGHT),
+  },
+  {
+    name: 'Catppuccin', builtIn: true,
+    dark:  fillPalette({ accent: '#CBA6F7', bg: '#1E1E2E', bgElevated: '#181825', fg: '#CDD6F4', fgMuted: '#9399B2', border: '#313244' }, NEUTRAL_DARK),
+    light: fillPalette({ accent: '#8839EF', bg: '#EFF1F5', bgElevated: '#E6E9EF', fg: '#4C4F69', fgMuted: '#6C6F85', border: '#CCD0DA' }, NEUTRAL_LIGHT),
   },
 ]
 
