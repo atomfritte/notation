@@ -49,6 +49,28 @@ export function ReadAloudBar({
 
   const setStat = (s: Status) => { statusRef.current = s; setStatus(s) }
 
+  // ---- keep playing when the screen would sleep ----
+  // The system speech engine is suspended by the browser once the page is
+  // backgrounded, so the reliable way to keep an audiobook going on a phone is
+  // to hold a Screen Wake Lock while reading (the display stays awake). Wake
+  // locks auto-release when the tab is hidden, so we re-acquire on return.
+  const wakeRef = useRef<{ release: () => Promise<void> } | null>(null)
+  const acquireWake = useCallback(async () => {
+    try {
+      const wl = (navigator as unknown as { wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> } }).wakeLock
+      if (wl && !wakeRef.current) wakeRef.current = await wl.request('screen')
+    } catch { /* not supported / denied — best effort */ }
+  }, [])
+  const releaseWake = useCallback(() => {
+    try { wakeRef.current?.release() } catch { /* ignore */ }
+    wakeRef.current = null
+  }, [])
+  useEffect(() => {
+    function onVis() { if (document.visibilityState === 'visible' && statusRef.current === 'playing') void acquireWake() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [acquireWake])
+
   // ---- voices (on-device only) ----
   useEffect(() => {
     if (!engine) return
@@ -108,9 +130,10 @@ export function ReadAloudBar({
   const finish = useCallback(() => {
     cancelSpeech()
     highlight(null)
+    releaseWake()
     setStat('idle')
     setCurText('')
-  }, [cancelSpeech, highlight])
+  }, [cancelSpeech, highlight, releaseWake])
 
   // Speak sentence i of the current page, chaining to i+1 on completion.
   const speakFrom = useCallback((i: number) => {
@@ -169,6 +192,7 @@ export function ReadAloudBar({
   // ---- controls ----
   const play = useCallback(() => {
     if (!engine) return
+    void acquireWake()
     if (statusRef.current === 'paused') { setStat('playing'); speakFrom(indexRef.current); return }
     // Starting fresh: resume the saved position if it points elsewhere.
     const saved = loadReadPos(storageKey)
@@ -180,9 +204,9 @@ export function ReadAloudBar({
     }
     const list = extractCurrent()
     speakFrom(saved && saved.file === fileRef.current ? Math.min(saved.sentence, Math.max(0, list.length - 1)) : 0)
-  }, [engine, storageKey, navFiles, onNavigate, extractCurrent, speakFrom])
+  }, [engine, storageKey, navFiles, onNavigate, extractCurrent, speakFrom, acquireWake])
 
-  const pause = useCallback(() => { cancelSpeech(); setStat('paused') }, [cancelSpeech])
+  const pause = useCallback(() => { cancelSpeech(); releaseWake(); setStat('paused') }, [cancelSpeech, releaseWake])
 
   const jumpPage = useCallback((dir: -1 | 1) => {
     const idx = navFiles.indexOf(fileRef.current)
@@ -193,7 +217,25 @@ export function ReadAloudBar({
   }, [navFiles, onNavigate])
 
   // Cleanup on unmount.
-  useEffect(() => () => { cancelSpeech(); highlight(null) }, [cancelSpeech, highlight])
+  useEffect(() => () => { cancelSpeech(); highlight(null); releaseWake() }, [cancelSpeech, highlight, releaseWake])
+
+  // MediaSession: surface play/pause + page skip on the lock screen / headset,
+  // and reflect what's being read. (Lock-screen controls only appear once the
+  // engine plays through a real audio element — i.e. the neural voice — but the
+  // metadata + handlers are harmless and ready for it.)
+  useEffect(() => {
+    const ms = (navigator as { mediaSession?: { metadata: unknown; playbackState: string; setActionHandler: (a: string, h: (() => void) | null) => void } }).mediaSession
+    const MM = (window as { MediaMetadata?: new (init: { title?: string; artist?: string }) => unknown }).MediaMetadata
+    if (!ms || !MM) return
+    try {
+      ms.metadata = new MM({ title: curText || 'Reading…', artist: stripPath(currentFile) })
+      ms.playbackState = status === 'playing' ? 'playing' : status === 'paused' ? 'paused' : 'none'
+      ms.setActionHandler('play', () => play())
+      ms.setActionHandler('pause', () => pause())
+      ms.setActionHandler('previoustrack', () => jumpPage(-1))
+      ms.setActionHandler('nexttrack', () => jumpPage(1))
+    } catch { /* unsupported handler — ignore */ }
+  }, [curText, currentFile, status, play, pause, jumpPage])
 
   const playing = status === 'playing'
   const unsupported = !engine
@@ -291,4 +333,8 @@ function Dropdown({
       <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--notation-fg-muted)]" />
     </div>
   )
+}
+
+function stripPath(p: string): string {
+  return p.slice(p.lastIndexOf('/') + 1).replace(/\.(md|mdx|markdown)$/i, '')
 }
