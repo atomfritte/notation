@@ -153,7 +153,9 @@ func NewRouter(d Deps) (http.Handler, error) {
 		// for the whole subtree is safe and centralises the policy.
 		ar.Use(requireCSRF)
 		ar.Get("/me", adminMeHandler())
-		ar.Get("/tts", ahdmin.getTTS)
+		// Voice list is server config (not space data) → stays top-level. The
+		// synth endpoint is space-scoped (below) so each clip is isolated to its
+		// space's cache + inherits the space's access check.
 		ar.Get("/tts/info", ahdmin.getTTSInfo)
 		ar.Get("/spaces", ahdmin.listSpaces)
 		ar.Post("/spaces", ahdmin.createSpace)
@@ -161,6 +163,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 			sr.Get("/", ahdmin.getSpace)
 			sr.Delete("/", ahdmin.deleteSpace)
 			sr.Get("/tree", ahdmin.getTree)
+			sr.Get("/tts", ahdmin.getTTS) // scope = this space → audio isolated per space
 			sr.Get("/export", ahdmin.exportSpace)
 			sr.Post("/mkdir", ahdmin.mkdir)
 			sr.Get("/file/*", ahdmin.getFile)

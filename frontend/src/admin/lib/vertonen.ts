@@ -89,10 +89,11 @@ export type VertonenResult = {
 /** A mutable flag the caller flips to abort between pages/chunks. */
 export type Cancel = { cancelled: boolean }
 
-// Must match sw.js's AUDIO cache name — we peek it to skip clips already cached
-// (e.g. from a previous run or from normal playback), so re-runs are cheap and we
-// don't re-hit the Piper backend or grow the cache needlessly.
-const AUDIO_CACHE = 'notation-audio'
+// Per-space audio cache name — must match sw.js's derivation for
+// /api/admin/spaces/<id>/tts. Audio is isolated per space (never a shared
+// cache), so it's removed with the space and can't be served for another. We
+// peek it to skip clips already cached, so re-runs don't re-hit Piper.
+const audioCacheFor = (spaceID: string) => `notation-audio-${spaceID}`
 
 /**
  * vertonenPages synthesises + caches the audio for each page. Pages are voiced
@@ -118,7 +119,7 @@ export async function vertonenPages(
   // audio doesn't get evicted (and doesn't pressure the shell/offline caches).
   try { await navigator.storage?.persist?.() } catch { /* best-effort */ }
   const audioCache = typeof caches !== 'undefined'
-    ? await caches.open(AUDIO_CACHE).catch(() => null)
+    ? await caches.open(audioCacheFor(spaceID)).catch(() => null)
     : null
 
   let clips = 0
@@ -153,7 +154,7 @@ export async function vertonenPages(
         if (cancel?.cancelled) return // tighten Stoppen: skip not-yet-started fetches
         const text = capText(t)
         if (!text.trim()) return
-        const url = api.ttsURL(voiceId, text, style)
+        const url = api.ttsURL(spaceID, voiceId, text, style)
         // Already cached as a full clip (prior run/playback) → nothing to do; bounds
         // re-runs. Only a 200 counts — a stale 206 (from before the SW range fix)
         // must be re-fetched so it gets overwritten with a complete body.

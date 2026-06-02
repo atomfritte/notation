@@ -24,9 +24,10 @@ export function capText(text: string): string {
 }
 
 /**
- * createServerEngine builds the studio engine. `ttsURL(voiceId, text)` is
- * provided by the host because the admin and share SPAs address the endpoint
- * differently (session vs share token).
+ * createServerEngine builds the studio engine. `ttsURL(voiceId, text, style)` is
+ * provided by the host, which binds the SPACE scope into the URL it returns —
+ * admin → /api/admin/spaces/<id>/tts, share → /s/api/<token>/tts — so each clip is
+ * cached + served strictly per space (the engine itself stays scope-agnostic).
  */
 export function createServerEngine(
   voices: ServerVoice[],

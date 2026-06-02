@@ -15,7 +15,21 @@
  */
 const VERSION = 'v2'
 const SHELL = 'notation-shell-' + VERSION
-const AUDIO = 'notation-audio' // content-addressed; survives version bumps
+
+// Admin read-aloud audio is cached PER SPACE — never in one shared bucket — so a
+// clip is strictly bound to its space: removed when that space's offline copy is
+// removed (offlineSync.unsyncSpace) and never served for another space. Returns
+// the per-space cache name for an admin /tts URL, else null. The id comes straight
+// from the URL the client built from its canonical spaceID, so it matches the
+// bucket the server scopes to + the one unsync deletes.
+//
+// Share (/s/api/<token>/tts) audio is intentionally NOT cached here: shares aren't
+// an offline target, and per-token caches have no revoke/expiry cleanup hook — so
+// share audio stays network-only and can't linger on a device past the share.
+function audioCacheName(url) {
+  const m = url.pathname.match(/^\/api\/admin\/spaces\/([^/]+)\/tts$/)
+  return m ? 'notation-audio-' + decodeURIComponent(m[1]) : null
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -30,7 +44,9 @@ self.addEventListener('activate', (event) => {
       const keys = await caches.keys()
       await Promise.all(
         keys
-          .filter((k) => k.startsWith('notation-shell-') && k !== SHELL)
+          // Old shell versions + the legacy single shared audio cache (audio is
+          // now per-space; the old global bucket is orphaned + must not linger).
+          .filter((k) => (k.startsWith('notation-shell-') && k !== SHELL) || k === 'notation-audio')
           .map((k) => caches.delete(k)),
       )
       await self.clients.claim()
@@ -45,9 +61,11 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
   if (url.pathname === '/sw.js') return // let the browser manage the worker itself
 
-  // Synthesised read-aloud audio — deterministic, immutable → cache-first.
-  if (url.pathname.endsWith('/tts')) {
-    event.respondWith(cacheFirst(AUDIO, req))
+  // Synthesised read-aloud audio (admin) — deterministic, immutable → cache-first
+  // into the per-space audio cache. Share /tts is network-only (see audioCacheName).
+  const audioCache = audioCacheName(url)
+  if (audioCache) {
+    event.respondWith(cacheFirst(audioCache, req))
     return
   }
   // Hashed/static assets — immutable → cache-first.

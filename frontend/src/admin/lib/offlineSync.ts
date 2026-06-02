@@ -128,10 +128,13 @@ export async function syncSpace(
   return { files: synced, failed }
 }
 
-/** unsyncSpace drops a space's offline copy + registry entry. */
+/** unsyncSpace drops a space's offline copy + its synthesised audio + registry
+ *  entry — so removing a space removes ALL of its recordings (they're cached in a
+ *  per-space audio cache, never shared with another space). */
 export async function unsyncSpace(id: string): Promise<void> {
   if (offlineSupported) {
     try { await caches.delete(cacheNameFor(id)) } catch { /* ignore */ }
+    try { await caches.delete(`notation-audio-${id}`) } catch { /* ignore */ }
   }
   const r = registry()
   delete r[id]
