@@ -679,7 +679,10 @@ func writeSpaceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, space.ErrExists):
 		writeError(w, http.StatusConflict, "space already exists")
 	default:
-		writeError(w, http.StatusInternalServerError, err.Error())
+		// Unknown error: log server-side, return a generic message so raw OS
+		// errors (which embed absolute filesystem paths) never reach the client.
+		slog.Default().Error("space error", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
 	}
 }
 
@@ -701,7 +704,8 @@ func writeFileError(w http.ResponseWriter, err error) {
 	case errors.Is(err, fs.ErrExist):
 		writeError(w, http.StatusConflict, "already exists")
 	default:
-		writeError(w, http.StatusInternalServerError, err.Error())
+		slog.Default().Error("file error", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
 	}
 }
 

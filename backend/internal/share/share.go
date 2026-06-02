@@ -34,7 +34,9 @@ func ValidPermission(p Permission) bool {
 	return p == PermissionRead || p == PermissionComment || p == PermissionEdit
 }
 
-func (p Permission) AllowsRead() bool    { return p == PermissionRead || p == PermissionComment || p == PermissionEdit }
+func (p Permission) AllowsRead() bool {
+	return p == PermissionRead || p == PermissionComment || p == PermissionEdit
+}
 func (p Permission) AllowsComment() bool { return p == PermissionComment || p == PermissionEdit }
 func (p Permission) AllowsEdit() bool    { return p == PermissionEdit }
 
@@ -75,6 +77,11 @@ type Share struct {
 	CreatedBy  string     `json:"created_by"`
 	LastUsed   *time.Time `json:"last_used,omitempty"`
 	Features   Features   `json:"features"`
+	// FeaturesSet distinguishes "the admin explicitly chose these features
+	// (possibly all-off)" from a legacy share that predates the features block.
+	// Create() sets it true; only records without it get the all-on backfill,
+	// so an all-features-off share is honored instead of silently re-enabled.
+	FeaturesSet bool `json:"features_set,omitempty"`
 }
 
 // View is the admin-facing shape: identical to Share except Hash is omitted.
@@ -104,9 +111,9 @@ type CreateResult struct {
 }
 
 var (
-	ErrShareNotFound   = errors.New("share not found")
-	ErrShareExpired    = errors.New("share expired")
-	ErrInvalidPerm     = errors.New("invalid permission")
+	ErrShareNotFound = errors.New("share not found")
+	ErrShareExpired  = errors.New("share expired")
+	ErrInvalidPerm   = errors.New("invalid permission")
 )
 
 type Store struct {
@@ -134,11 +141,12 @@ func (s *Store) load(spaceID string) ([]Share, error) {
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, fmt.Errorf("shares.json: %w", err)
 	}
-	// Backfill features for shares written by older versions — they were
-	// "full reader" in the previous UI, so default to all-on instead of the
-	// zero-value all-off (which would silently strip features post-upgrade).
+	// Backfill features only for shares written by older versions (no
+	// FeaturesSet marker) — they were "full reader" in the previous UI, so
+	// default to all-on. A modern share with FeaturesSet=true is honored as-is,
+	// even when every feature is off (the admin deliberately disabled them).
 	for i := range out {
-		if (out[i].Features == Features{}) {
+		if !out[i].FeaturesSet && (out[i].Features == Features{}) {
 			out[i].Features = DefaultFeatures()
 		}
 	}
@@ -181,14 +189,17 @@ func (s *Store) Create(spaceID string, perm Permission, label string, expiresAt 
 	token := generateToken()
 	h := hashToken(token)
 	sh := Share{
-		ID:         "share_" + token[:8],
-		Hash:       h,
-		Permission: perm,
-		Label:      strings.TrimSpace(label),
-		CreatedAt:  time.Now().UTC(),
-		ExpiresAt:  expiresAt,
-		CreatedBy:  createdBy,
-		Features:   features,
+		// ID is independent of the token — it surfaces in audit logs and the
+		// comment Author ("share:<id>:..."), so it must not carry token bytes.
+		ID:          "share_" + randID(12),
+		Hash:        h,
+		Permission:  perm,
+		Label:       strings.TrimSpace(label),
+		CreatedAt:   time.Now().UTC(),
+		ExpiresAt:   expiresAt,
+		CreatedBy:   createdBy,
+		Features:    features,
+		FeaturesSet: true,
 	}
 	shares = append(shares, sh)
 	if err := s.save(spaceID, shares); err != nil {

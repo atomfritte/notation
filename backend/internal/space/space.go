@@ -31,6 +31,12 @@ var (
 // idPattern: lowercase alnum + - + _, length 3-32, must start and end with alnum.
 var idPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9_-]{1,30}[a-z0-9])?$`)
 
+// ValidID reports whether id is a syntactically valid Space id. Exported so
+// other packages that build filesystem paths from a Space id (mcptoken, share)
+// can reject traversal/garbage at their own trust boundary instead of relying
+// solely on the HTTP layer having called Get/Create first.
+func ValidID(id string) bool { return idPattern.MatchString(id) }
+
 type Meta struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`

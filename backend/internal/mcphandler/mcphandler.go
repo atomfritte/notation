@@ -44,16 +44,18 @@ func (s *Server) Handler() http.HandlerFunc {
 			http.Error(w, "missing space id", http.StatusBadRequest)
 			return
 		}
-		if _, err := s.store.Get(spaceID); err != nil {
-			http.Error(w, "space not found", http.StatusNotFound)
-			return
-		}
 		raw := extractBearer(r)
 		if raw == "" {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="notation"`)
 			http.Error(w, "missing bearer token", http.StatusUnauthorized)
 			return
 		}
+		// Validate the token BEFORE disclosing anything about the Space.
+		// tokens.Validate rejects a malformed spaceID and returns the same
+		// "not found" for an unknown Space as for a wrong token — so an
+		// unauthenticated caller can't use the response to probe which Space
+		// ids exist (no 404-vs-401 oracle). A valid token implies the Space
+		// exists, so no separate store.Get is needed.
 		tok, err := s.tokens.Validate(spaceID, raw)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="notation", error="invalid_token"`)

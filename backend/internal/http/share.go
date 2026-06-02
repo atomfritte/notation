@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -283,7 +284,10 @@ func writeCommentError(w http.ResponseWriter, err error) {
 	case errors.Is(err, share.ErrCommentPath):
 		writeError(w, http.StatusBadRequest, "parent comment is on a different file")
 	default:
-		writeError(w, http.StatusInternalServerError, err.Error())
+		// Generic message to the guest; keep the detail (which can embed
+		// absolute filesystem paths) in the server log only.
+		slog.Default().Error("share comment error", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
 	}
 }
 
@@ -296,6 +300,7 @@ func writeShareError(w http.ResponseWriter, err error) {
 	case errors.Is(err, fs.ErrNotExist):
 		writeError(w, http.StatusNotFound, "not found")
 	default:
-		writeError(w, http.StatusInternalServerError, err.Error())
+		slog.Default().Error("share error", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
 	}
 }

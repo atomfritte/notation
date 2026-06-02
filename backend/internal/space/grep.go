@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+// maxPatternLen bounds user-supplied regex / glob patterns so a malicious
+// search can't burn CPU compiling a giant counted-repetition expression.
+const maxPatternLen = 1024
+
 // GrepMatch is one hit returned by Grep. Lines are 1-indexed.
 type GrepMatch struct {
 	Path    string   `json:"path"`
@@ -37,6 +41,13 @@ func (s *Store) Grep(spaceID string, opts GrepOpts) ([]GrepMatch, error) {
 	out := make([]GrepMatch, 0)
 	if opts.Pattern == "" {
 		return out, errors.New("pattern is required")
+	}
+	// Bound the pattern length. RE2 is linear at match time, but compiling a
+	// large counted-repetition pattern (e.g. `a{900}` chained thousands of
+	// times) costs real CPU; reject oversized patterns before regexp.Compile so
+	// a low-privilege search guest can't spend server cores on compilation.
+	if len(opts.Pattern) > maxPatternLen || len(opts.Glob) > maxPatternLen {
+		return out, errors.New("pattern too long")
 	}
 	if opts.MaxResults <= 0 || opts.MaxResults > 1000 {
 		opts.MaxResults = 200
@@ -229,6 +240,9 @@ func (s *Store) Glob(spaceID, pattern string, limit int) ([]string, error) {
 	out := make([]string, 0)
 	if pattern == "" {
 		return out, nil
+	}
+	if len(pattern) > maxPatternLen {
+		return out, errors.New("pattern too long")
 	}
 	if limit <= 0 || limit > 5000 {
 		limit = 1000
