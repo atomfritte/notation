@@ -8,11 +8,11 @@ RUN apt-get update \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-# Supply a GERMAN Kokoro model at /models (see README) — mount it or bake it in.
-ENV KOKORO_MODEL=/models/kokoro.onnx \
-    KOKORO_VOICES=/models/voices.bin \
+COPY app.py download_model.py ./
+ENV KOKORO_MODELS_DIR=/models \
+    KOKORO_HF_REPO=Godelaune/Kokoro-82M-ONNX-German-Martin \
     KOKORO_VOICE=martin \
     KOKORO_LANG=de
 EXPOSE 8080
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+# Download the model on first start (skipped if /models already has one), then serve.
+CMD ["sh", "-c", "python download_model.py && exec uvicorn app:app --host 0.0.0.0 --port 8080"]

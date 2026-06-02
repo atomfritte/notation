@@ -17,14 +17,14 @@ semidark/kokoro-deutsch. Mount the .onnx + voices file into /models and set the
 env vars below (and the internal voice name in VOICE_MAP). See README.md.
 """
 
+import glob
 import os
 
 import numpy as np
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
-MODEL = os.environ.get("KOKORO_MODEL", "/models/kokoro.onnx")
-VOICES = os.environ.get("KOKORO_VOICES", "/models/voices.bin")
+MODELS_DIR = os.environ.get("KOKORO_MODELS_DIR", "/models")
 DEFAULT_VOICE = os.environ.get("KOKORO_VOICE", "martin")
 DEFAULT_LANG = os.environ.get("KOKORO_LANG", "de")
 TARGET_RATE = 24000  # the backend assumes 24 kHz (kokoroRate); keep in sync
@@ -35,17 +35,30 @@ VOICE_MAP = {
     "de_DE-martin-kokoro": DEFAULT_VOICE,
 }
 
-# Lazy import so the container at least starts (and /health can report) even if
-# kokoro-onnx / the model isn't set up yet.
+
+def _find(*globs):
+    for g in globs:
+        m = sorted(glob.glob(os.path.join(MODELS_DIR, g)))
+        if m:
+            return m[0]
+    return None
+
+
+# Lazy init so the container starts (and /health works) even before the model is
+# downloaded; the model + voices files are auto-detected in the models dir.
 _kokoro = None
 
 
 def kokoro():
     global _kokoro
     if _kokoro is None:
+        model = _find("*.onnx")
+        voices = _find("*voices*", "*.bin", "*.npz", "voices*.json")
+        if not model or not voices:
+            raise HTTPException(status_code=503, detail=f"no Kokoro model/voices in {MODELS_DIR}")
         from kokoro_onnx import Kokoro  # type: ignore
 
-        _kokoro = Kokoro(MODEL, VOICES)
+        _kokoro = Kokoro(model, voices)
     return _kokoro
 
 
