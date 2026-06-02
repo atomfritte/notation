@@ -13,7 +13,7 @@
  * Bump VERSION to invalidate the shell/asset caches on deploy. Audio is content-
  * addressed, so it's kept across versions.
  */
-const VERSION = 'v1'
+const VERSION = 'v2'
 const SHELL = 'notation-shell-' + VERSION
 const AUDIO = 'notation-audio' // content-addressed; survives version bumps
 
@@ -60,8 +60,29 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirst(SHELL, req))
     return
   }
-  // Otherwise: network only (API data; offline data sync is Phase 2).
+  // Spaces list + identity → network-first (always fresh online) + cache, so the
+  // app can still boot offline and show which spaces are available.
+  if (url.pathname === '/api/admin/spaces' || url.pathname === '/api/admin/me') {
+    event.respondWith(networkFirst(SHELL, req))
+    return
+  }
+  // Per-space data (tree/files/…) → always fresh online; offline, serve from the
+  // explicitly-synced offline cache if it's there. We never cache on success
+  // here — offlineSync.ts owns those caches (opt-in per space, no bloat).
+  if (url.pathname.startsWith('/api/admin/spaces/')) {
+    event.respondWith(networkThenCache(req))
+    return
+  }
+  // Otherwise: network only.
 })
+
+async function networkThenCache(req) {
+  try {
+    return await fetch(req)
+  } catch (err) {
+    return (await caches.match(req)) || Response.error()
+  }
+}
 
 async function cacheFirst(cacheName, req) {
   const cache = await caches.open(cacheName)

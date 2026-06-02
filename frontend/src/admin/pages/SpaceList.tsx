@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Moon, Sun, Trash2, FolderOpen, Sparkles, LogOut, X, Palette } from 'lucide-react'
+import { Plus, Search, Moon, Sun, Trash2, FolderOpen, Sparkles, LogOut, X, Palette, CloudDownload, Cloud, CloudOff, RefreshCw, Loader2 } from 'lucide-react'
 import * as api from '../lib/api'
 import { logout } from '../lib/auth'
+import * as offline from '../lib/offlineSync'
 import { ThemePalette } from '../components/ThemePalette'
 
 /**
@@ -29,6 +30,14 @@ export function SpaceList() {
   const [creating, setCreating] = useState(false)
   const [themeOpen, setThemeOpen] = useState(false)
 
+  const [online, setOnline] = useState(() => navigator.onLine)
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('notation_theme') as 'light' | 'dark') || 'dark'
   })
@@ -50,6 +59,7 @@ export function SpaceList() {
     if (!window.confirm(`Delete space "${id}" and all its files? This cannot be undone.`)) return
     try {
       await api.deleteSpace(id)
+      await offline.unsyncSpace(id) // drop any offline copy too
       refresh()
     } catch (e) {
       setErr(String(e))
@@ -147,6 +157,13 @@ export function SpaceList() {
           </button>
         </div>
 
+        {!online && (
+          <div className="mb-6 p-3 rounded-md bg-[color:var(--notation-accent-10)] border border-[color:var(--notation-accent-40)] text-sm text-[var(--notation-fg)] flex items-center gap-2">
+            <CloudOff size={16} className="text-[color:var(--notation-accent)] flex-shrink-0" />
+            <span>You’re offline — only spaces marked for offline can be opened.</span>
+          </div>
+        )}
+
         {err && (
           <div className="mb-6 p-3 rounded-md bg-[var(--notation-danger)]/10 dark:bg-[var(--notation-danger)]/30 text-[var(--notation-danger)] dark:text-[var(--notation-danger)] text-sm border border-[var(--notation-danger)] dark:border-[var(--notation-danger)]/30 flex items-start justify-between gap-3">
             <span>{err}</span>
@@ -163,7 +180,7 @@ export function SpaceList() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(s => (
-              <SpaceCard key={s.id} space={s} onDelete={() => onDelete(s.id)} />
+              <SpaceCard key={s.id} space={s} onDelete={() => onDelete(s.id)} online={online} />
             ))}
             <CreateCard onClick={() => setCreating(true)} />
           </div>
@@ -203,54 +220,123 @@ export function SpaceList() {
 
 // ---- Card --------------------------------------------------------------
 
-function SpaceCard({ space, onDelete }: { space: api.Meta; onDelete: () => void }) {
+function SpaceCard({ space, onDelete, online }: { space: api.Meta; onDelete: () => void; online: boolean }) {
   const hue = useMemo(() => hueFromString(space.id), [space.id])
   const hue2 = (hue + 40) % 360
   const initial = (space.name || space.id).charAt(0).toUpperCase()
 
+  const [synced, setSynced] = useState(() => offline.isOffline(space.id))
+  const [info, setInfo] = useState(() => offline.offlineInfo(space.id))
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [oerr, setOErr] = useState<string | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const busy = progress !== null
+  // Offline + not synced = can't open it; dim + block navigation.
+  const blocked = !online && !synced
+
+  // Close the offline menu on an outside click, or when connectivity / sync
+  // state changes underneath it.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDoc = (e: MouseEvent) => { if (rootRef.current && !rootRef.current.contains(e.target as Node)) setMenuOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [menuOpen])
+  useEffect(() => { setMenuOpen(false) }, [online, synced])
+
+  async function doSync() {
+    setMenuOpen(false)
+    setOErr(null)
+    setProgress({ done: 0, total: 0 })
+    try {
+      await offline.syncSpace(space.id, space.name || space.id, (done, total) => setProgress({ done, total }))
+      setSynced(true)
+      setInfo(offline.offlineInfo(space.id))
+    } catch (e) {
+      setOErr(String((e as Error)?.message ?? e))
+    } finally {
+      setProgress(null)
+    }
+  }
+  async function removeOffline() {
+    setMenuOpen(false)
+    await offline.unsyncSpace(space.id)
+    setSynced(false)
+    setInfo(undefined)
+  }
+
   return (
-    <div className="group relative">
+    <div className="group relative" ref={rootRef}>
       <Link
         to={`/admin/spaces/${encodeURIComponent(space.id)}`}
-        className="block rounded-xl border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] overflow-hidden shadow-sm hover:border-[color:var(--notation-accent-40)] hover:shadow-xl hover:shadow-black/5 dark:hover:shadow-black/40 hover:-translate-y-0.5 transition-all duration-200"
+        onClick={(e) => { if (blocked) e.preventDefault() }}
+        aria-disabled={blocked}
+        className={
+          'block rounded-xl border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] overflow-hidden shadow-sm transition-all duration-200 ' +
+          (blocked ? 'opacity-40 cursor-not-allowed' : 'hover:border-[color:var(--notation-accent-40)] hover:shadow-xl hover:shadow-black/5 dark:hover:shadow-black/40 hover:-translate-y-0.5')
+        }
       >
         <div
           className="h-20 flex items-center justify-center relative"
-          style={{
-            background: `linear-gradient(135deg, hsl(${hue}, 64%, 52%) 0%, hsl(${hue2}, 70%, 40%) 100%)`,
-          }}
+          style={{ background: `linear-gradient(135deg, hsl(${hue}, 64%, 52%) 0%, hsl(${hue2}, 70%, 40%) 100%)` }}
         >
-          <span className="text-3xl font-bold text-white drop-shadow-md select-none relative z-10">
-            {initial}
-          </span>
-          {/* Top highlight + grounded bottom scrim so the colour reads as a
-              surface (not a flat block) and the letter stays legible. */}
+          <span className="text-3xl font-bold text-white drop-shadow-md select-none relative z-10">{initial}</span>
           <div className="absolute inset-0 bg-gradient-to-b from-white/15 via-transparent to-black/30 pointer-events-none" />
         </div>
         <div className="p-4">
-          <div className="font-semibold text-[var(--notation-fg)] truncate">
-            {space.name || space.id}
-          </div>
-          <div className="text-xs text-[var(--notation-fg-muted)] mt-0.5 font-mono truncate">
-            /{space.id}
-          </div>
-          <div className="text-[11px] text-[var(--notation-fg-muted)] mt-3 flex items-center gap-1">
-            {space.created_at && <span>Created {formatDate(space.created_at)}</span>}
+          <div className="font-semibold text-[var(--notation-fg)] truncate">{space.name || space.id}</div>
+          <div className="text-xs text-[var(--notation-fg-muted)] mt-0.5 font-mono truncate">/{space.id}</div>
+          <div className="text-[11px] text-[var(--notation-fg-muted)] mt-3 flex items-center gap-2">
+            {busy ? (
+              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)]">
+                <Loader2 size={12} className="animate-spin" />
+                Syncing {progress!.total ? `${progress!.done}/${progress!.total}` : '…'}
+              </span>
+            ) : oerr ? (
+              <span className="text-[var(--notation-danger)] truncate" title={oerr}>Offline sync failed</span>
+            ) : synced ? (
+              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)]">
+                <Cloud size={12} fill="currentColor" /> Offline{info ? ` · ${formatDate(new Date(info.syncedAt).toISOString())}` : ''}
+                {info && info.failed > 0 && <span className="text-[var(--notation-danger)]"> · {info.failed} failed</span>}
+              </span>
+            ) : space.created_at ? (
+              <span>Created {formatDate(space.created_at)}</span>
+            ) : null}
           </div>
         </div>
       </Link>
+
+      {/* Offline control (top-left) */}
       <button
-        onClick={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          onDelete()
-        }}
-        className="absolute top-2 right-2 p-1.5 rounded-md bg-black/30 backdrop-blur-sm text-white/80 hover:bg-[var(--notation-danger)]/90 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-        title="Delete space"
-        aria-label={`Delete ${space.id}`}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (busy) return; if (synced) setMenuOpen(o => !o); else void doSync() }}
+        disabled={busy}
+        className={
+          'absolute top-2 left-2 p-1.5 rounded-md backdrop-blur-sm transition-opacity ' +
+          (synced || busy ? 'bg-black/30 text-white opacity-100' : 'bg-black/30 text-white/80 opacity-0 group-hover:opacity-100 hover:text-white')
+        }
+        title={synced ? 'Offline — manage' : 'Make available offline'}
+        aria-label={synced ? `Manage offline copy of ${space.id}` : `Make ${space.id} available offline`}
       >
-        <Trash2 size={13} />
+        {busy ? <Loader2 size={13} className="animate-spin" /> : synced ? <Cloud size={13} fill="currentColor" /> : <CloudDownload size={13} />}
       </button>
+      {menuOpen && synced && !busy && (
+        <div className="absolute top-10 left-2 z-10 w-40 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] shadow-xl py-1 text-sm" onClick={e => e.preventDefault()}>
+          <button onClick={(e) => { e.stopPropagation(); void doSync() }} className="w-full text-left px-3 py-1.5 hover:bg-[var(--notation-bg-alt)] flex items-center gap-2"><RefreshCw size={13} /> Update now</button>
+          <button onClick={(e) => { e.stopPropagation(); void removeOffline() }} className="w-full text-left px-3 py-1.5 hover:bg-[var(--notation-bg-alt)] text-[var(--notation-danger)] flex items-center gap-2"><CloudOff size={13} /> Remove offline</button>
+        </div>
+      )}
+
+      {!online ? null : (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete() }}
+          className="absolute top-2 right-2 p-1.5 rounded-md bg-black/30 backdrop-blur-sm text-white/80 hover:bg-[var(--notation-danger)]/90 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Delete space"
+          aria-label={`Delete ${space.id}`}
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
     </div>
   )
 }
