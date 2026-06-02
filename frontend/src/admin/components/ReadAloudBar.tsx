@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Headphones, Play, Pause, SkipBack, SkipForward, X, Lock, ChevronDown } from 'lucide-react'
+import { Headphones, Play, Pause, SkipBack, SkipForward, X, Lock, ChevronDown, Download, Sparkles, AlertCircle } from 'lucide-react'
 import {
-  extractSentences, availableEngines, loadReadPos, saveReadPos,
+  extractSentences, systemEngine, loadReadPos, saveReadPos,
   type Sentence, type TtsEngine, type TtsVoice,
 } from '../lib/readAloud'
+import { createNeuralEngine, neuralModelReady, downloadNeuralModel } from '../lib/neuralTts'
 
 type Status = 'idle' | 'playing' | 'paused'
+type EngineId = 'system' | 'neural'
+type NeuralState = 'checking' | 'need-download' | 'downloading' | 'ready' | 'error'
 
 const PAGE_PAUSE_MS = 1200 // beat between pages, like turning a page
 const RATES = [0.75, 1, 1.25, 1.5, 1.75]
@@ -29,7 +32,17 @@ export function ReadAloudBar({
   storageKey: string
   onClose: () => void
 }) {
-  const [engine] = useState<TtsEngine | null>(() => availableEngines()[0] ?? null)
+  const [systemEng] = useState<TtsEngine | null>(() => systemEngine())
+  const [engineId, setEngineId] = useState<EngineId>(() =>
+    (localStorage.getItem('notation_readaloud_engine') as EngineId) === 'neural' ? 'neural' : 'system')
+  const [neuralEng, setNeuralEng] = useState<TtsEngine | null>(null)
+  const [neuralState, setNeuralState] = useState<NeuralState>('checking')
+  const [dlPct, setDlPct] = useState(0)
+  const [neuralErr, setNeuralErr] = useState<string | null>(null)
+  // The engine actually used for synthesis. Neural is null until its model is
+  // downloaded; until then the setup UI is shown instead of the play controls.
+  const engine = engineId === 'neural' ? neuralEng : systemEng
+
   const [voices, setVoices] = useState<TtsVoice[]>([])
   const [voiceId, setVoiceId] = useState<string>(() => localStorage.getItem('notation_readaloud_voice') || '')
   const [rate, setRate] = useState<number>(() => Number(localStorage.getItem('notation_readaloud_rate')) || 1)
@@ -94,6 +107,29 @@ export function ReadAloudBar({
 
   useEffect(() => { if (voiceId) localStorage.setItem('notation_readaloud_voice', voiceId) }, [voiceId])
   useEffect(() => { localStorage.setItem('notation_readaloud_rate', String(rate)) }, [rate])
+  useEffect(() => { localStorage.setItem('notation_readaloud_engine', engineId) }, [engineId])
+
+  // ---- neural engine readiness ----
+  // When the studio voice is selected, check whether its model is already
+  // cached; if so build the engine, otherwise offer the one-time download.
+  useEffect(() => {
+    if (engineId !== 'neural' || neuralEng) return
+    let cancelled = false
+    setNeuralState('checking')
+    neuralModelReady().then(ready => {
+      if (cancelled) return
+      if (ready) { setNeuralEng(createNeuralEngine()); setNeuralState('ready') }
+      else setNeuralState('need-download')
+    }).catch(() => { if (!cancelled) setNeuralState('need-download') })
+    return () => { cancelled = true }
+  }, [engineId, neuralEng])
+
+  const startDownload = useCallback(() => {
+    setNeuralErr(null); setNeuralState('downloading'); setDlPct(0)
+    downloadNeuralModel(p => setDlPct(p))
+      .then(() => { setNeuralEng(createNeuralEngine()); setNeuralState('ready') })
+      .catch(e => { setNeuralErr(String((e as Error)?.message ?? e)); setNeuralState('error') })
+  }, [])
 
   // ---- highlight (CSS Custom Highlight API; degrades to scroll-only) ----
   const highlight = useCallback((range: Range | null) => {
@@ -134,6 +170,13 @@ export function ReadAloudBar({
     setStat('idle')
     setCurText('')
   }, [cancelSpeech, highlight, releaseWake])
+
+  const switchEngine = useCallback((id: EngineId) => {
+    if (id === engineId) return
+    finish()
+    setProgress({ i: 0, n: 0 })
+    setEngineId(id)
+  }, [engineId, finish])
 
   // Speak sentence i of the current page, chaining to i+1 on completion.
   const speakFrom = useCallback((i: number) => {
@@ -237,17 +280,31 @@ export function ReadAloudBar({
     } catch { /* unsupported handler — ignore */ }
   }, [curText, currentFile, status, play, pause, jumpPage])
 
+  // If the browser has no system speech engine at all, the studio voice is the
+  // only option — switch to it automatically.
+  useEffect(() => { if (!systemEng && engineId === 'system') setEngineId('neural') }, [engineId])
+
   const playing = status === 'playing'
-  const unsupported = !engine
-  const noVoices = !!engine && voices.length === 0
+  const sysUnsupported = engineId === 'system' && !systemEng
+  const noVoices = engineId === 'system' && !!systemEng && voices.length === 0
+  const neuralSetup = engineId === 'neural' && neuralState !== 'ready'
+  const engineOptions = [
+    ...(systemEng ? [{ value: 'system', label: 'System' }] : []),
+    { value: 'neural', label: 'Studio · DE' },
+  ]
 
   return (
     <div className="no-print fixed bottom-0 inset-x-0 z-40 flex justify-center px-3 pb-3 pointer-events-none">
       <div className="pointer-events-auto w-full max-w-2xl surface-elevated bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl px-3 py-2 flex items-center gap-2">
         <Headphones size={18} className="text-[color:var(--notation-accent)] flex-shrink-0" />
 
-        {unsupported ? (
-          <span className="flex-1 text-sm text-[var(--notation-fg-muted)]">Read-aloud isn’t available in this browser.</span>
+        <Dropdown value={engineId} onChange={v => switchEngine(v as EngineId)} title="Voice engine"
+          options={engineOptions} />
+
+        {sysUnsupported ? (
+          <span className="flex-1 text-sm text-[var(--notation-fg-muted)]">No system voice here — pick the studio voice.</span>
+        ) : neuralSetup ? (
+          <NeuralSetup state={neuralState} pct={dlPct} err={neuralErr} onDownload={startDownload} />
         ) : noVoices ? (
           <span className="flex-1 text-sm text-[var(--notation-fg-muted)]">No on-device voices installed. Add a system voice to listen.</span>
         ) : (
@@ -285,13 +342,15 @@ export function ReadAloudBar({
               )}
             </div>
 
-            <Dropdown value={voiceId} onChange={setVoiceId} title="Voice"
-              options={voices.map(v => ({ value: v.id, label: `${v.label}${v.lang ? ' · ' + v.lang : ''}` }))} compact />
+            {engineId === 'system' && (
+              <Dropdown value={voiceId} onChange={setVoiceId} title="Voice"
+                options={voices.map(v => ({ value: v.id, label: `${v.label}${v.lang ? ' · ' + v.lang : ''}` }))} compact />
+            )}
             <Dropdown value={String(rate)} onChange={(v) => setRate(Number(v))} title="Speed"
               options={RATES.map(r => ({ value: String(r), label: `${r}×` }))} />
 
             <span className="hidden sm:flex items-center gap-1 text-[10px] text-[var(--notation-fg-muted)] px-1" title="Audio is generated on your device — text never leaves it.">
-              <Lock size={11} /> on-device
+              {engineId === 'neural' ? <Sparkles size={11} /> : <Lock size={11} />} on-device
             </span>
           </>
         )}
@@ -331,6 +390,47 @@ function Dropdown({
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--notation-fg-muted)]" />
+    </div>
+  )
+}
+
+// NeuralSetup — the inline UI shown while the studio (neural) voice isn't ready:
+// a one-time model download with progress, then it hands off to the player.
+function NeuralSetup({
+  state, pct, err, onDownload,
+}: {
+  state: NeuralState
+  pct: number
+  err: string | null
+  onDownload: () => void
+}) {
+  if (state === 'checking') {
+    return <span className="flex-1 text-sm text-[var(--notation-fg-muted)] px-1">Preparing studio voice…</span>
+  }
+  if (state === 'downloading') {
+    return (
+      <div className="flex-1 min-w-0 px-1">
+        <div className="text-xs text-[var(--notation-fg)] mb-1">Downloading German voice… {pct}%</div>
+        <div className="h-1.5 rounded-full bg-[var(--notation-border)] overflow-hidden">
+          <div className="h-full bg-[var(--notation-accent)] transition-[width] duration-200" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    )
+  }
+  // need-download or error
+  return (
+    <div className="flex-1 min-w-0 flex items-center gap-2 px-1">
+      <button
+        onClick={onDownload}
+        className="inline-flex items-center gap-1.5 rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] text-xs font-medium px-2.5 py-1.5 hover:opacity-90 flex-shrink-0"
+      >
+        <Download size={14} /> Download German voice
+      </button>
+      <span className="text-[10px] text-[var(--notation-fg-muted)] truncate">
+        {state === 'error'
+          ? <span className="inline-flex items-center gap-1 text-[color:var(--notation-danger,#dc2626)]"><AlertCircle size={11} /> {err || 'Download failed'} — retry</span>
+          : '≈113 MB, one-time. Stays on your device — text never leaves it.'}
+      </span>
     </div>
   )
 }
