@@ -218,9 +218,11 @@ export type ServerVoice = { id: string; label: string; lang: string }
 export const ttsInfo = () =>
   fetchJSON<{ available: boolean; voices: ServerVoice[] }>('/api/admin/tts/info')
 
-/** Audio URL for one chunk; deterministic + immutable so the browser caches it. */
-export const ttsURL = (voiceId: string, text: string, style?: string) =>
-  `/api/admin/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}` +
+/** Audio URL for one chunk; deterministic + immutable so the browser caches it.
+ *  Space-scoped: the clip is keyed + cached per space (server scope + per-space SW
+ *  cache), so a recording can never be served for, or bleed into, another space. */
+export const ttsURL = (spaceId: string, voiceId: string, text: string, style?: string) =>
+  `/api/admin/spaces/${encodeURIComponent(spaceId)}/tts?voice=${encodeURIComponent(voiceId)}&text=${encodeURIComponent(text)}` +
   (style ? `&style=${encodeURIComponent(style)}` : '')
 
 /** Direct URL for the whole-Space ZIP export (attachment download). */

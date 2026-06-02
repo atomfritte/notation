@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/yoogie27/notation/internal/tts"
 )
 
@@ -87,7 +88,22 @@ func (h *adminHandlers) getTTSInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandlers) getTTS(w http.ResponseWriter, r *http.Request) {
-	serveTTS(h.tts, "admin", w, r)
+	// Scope the cache key to THIS space (not a shared "admin" scope) so a clip
+	// synthesised for one space can never be served for, or bleed into, another.
+	// Validating the space also makes audio inherit the same access check as the
+	// space's files. The clip text only ever encodes content of this space.
+	//
+	// Use the CANONICAL id from the store (m.ID is lowercased/trimmed at create
+	// time), not the raw URL segment — so the scope (→ disk-cache key + per-space
+	// SW bucket name) is stable regardless of URL casing and matches the id the
+	// client uses to evict the cache on unsync.
+	id := chi.URLParam(r, "spaceID")
+	m, err := h.store.Get(id)
+	if err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	serveTTS(h.tts, m.ID, w, r)
 }
 
 // ---- share ----

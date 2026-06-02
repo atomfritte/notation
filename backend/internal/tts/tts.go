@@ -205,9 +205,10 @@ func (s *Synth) resolveVoice(id string) (*voiceModel, error) {
 	return nil, ErrNoVoice
 }
 
-// cacheKey is the content-addressed key (hex) for scope+voice+text, also the
-// ETag. The scope (e.g. "admin" or a spaceID) isolates each caller's entries so
-// a share guest can't pollute or evict another context's cached audio.
+// cacheKey is the content-addressed key (hex) for scope+voice+style+text, also
+// the ETag. The scope is ALWAYS the (canonical) spaceID — both the admin and the
+// share handler pass it — so a clip is isolated per space and can never be served
+// for, pollute, or evict another space's cached audio.
 func cacheKey(scope, voiceID, style, text string) string {
 	h := sha256.Sum256([]byte(scope + "\x00" + voiceID + "\x00" + style + "\x00" + strings.TrimSpace(text)))
 	return hex.EncodeToString(h[:])
