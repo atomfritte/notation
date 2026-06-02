@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Headphones, Play, Pause, SkipBack, SkipForward, X, Lock, ChevronDown, Download, Sparkles, AlertCircle } from 'lucide-react'
 import {
-  extractSentences, systemEngine, loadReadPos, saveReadPos,
-  type Sentence, type TtsEngine, type TtsVoice,
+  extractSentences, groupChunks, chunkIndexForSentence, systemEngine, loadReadPos, saveReadPos,
+  type Sentence, type Chunk, type TtsEngine, type TtsVoice,
 } from '../lib/readAloud'
 import { createNeuralEngine, neuralModelReady, downloadNeuralModel } from '../lib/neuralTts'
 
@@ -15,10 +15,12 @@ const RATES = [0.75, 1, 1.25, 1.5, 1.75]
 
 /**
  * ReadAloudBar — a fully on-device audiobook player for the current Space.
- * Reads a page's prose sentence-by-sentence (skipping tables/code), highlights
- * the current sentence, pauses at the end of a page, then auto-advances to the
- * next page in menu order. The reading position is saved per Space (the
- * storageKey is per-user for admin / per-share-token for guests) and restored.
+ * Reads a page's prose (skipping tables/code) in synthesis chunks: one sentence
+ * at a time for the system voice, a paragraph at a time for the neural voice
+ * (which prefetches the next paragraph so playback is gapless). Highlights the
+ * current sentence, pauses at the end of a page, then auto-advances to the next
+ * page in menu order. The reading position is saved per Space (the storageKey is
+ * per-user for admin / per-share-token for guests) and restored.
  *
  * No text ever leaves the device: the engine is restricted to on-device voices.
  */
@@ -51,13 +53,19 @@ export function ReadAloudBar({
   const [progress, setProgress] = useState<{ i: number; n: number }>({ i: 0, n: 0 })
 
   const sentencesRef = useRef<Sentence[]>([])
-  const indexRef = useRef(0)
+  const chunksRef = useRef<Chunk[]>([])
+  const chunkRef = useRef(0) // current chunk index
+  const hlSentRef = useRef(-1) // currently highlighted flat-sentence index (in-chunk)
   const handleRef = useRef<{ cancel: () => void } | null>(null)
   const pendingRef = useRef<number | null>(null) // resume-at-sentence after a page change
   const statusRef = useRef<Status>('idle')
   const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const highlightRef = useRef<{ clear: () => void; add: (r: Range) => void } | null>(null)
   const fileRef = useRef(currentFile)
+  const engineRef = useRef<TtsEngine | null>(engine)
+  engineRef.current = engine
+  const neuralEngRef = useRef<TtsEngine | null>(neuralEng)
+  neuralEngRef.current = neuralEng
   fileRef.current = currentFile
 
   const setStat = (s: Status) => { statusRef.current = s; setStatus(s) }
@@ -148,13 +156,30 @@ export function ReadAloudBar({
 
   const getArticle = () => document.querySelector<HTMLElement>('article.prose')
 
-  const extractCurrent = useCallback((): Sentence[] => {
+  // Re-read the rendered page into the flat sentence list + the engine's chunks.
+  const extractCurrent = useCallback((): Chunk[] => {
     const article = getArticle()
     const s = article ? extractSentences(article) : []
     sentencesRef.current = s
+    hlSentRef.current = -1 // ranges are stale after a re-read
+    const mode = engineRef.current?.chunking === 'block' ? 'block' : 'sentence'
+    const ch = groupChunks(s, mode)
+    chunksRef.current = ch
     setProgress(p => ({ ...p, n: s.length }))
-    return s
+    return ch
   }, [])
+
+  // Highlight one flat-sentence (by its index within `sentencesRef`), scrolling
+  // to it only when it actually changes (timeupdate fires several times/sec).
+  const highlightSentence = useCallback((sentenceIndex: number) => {
+    if (sentenceIndex === hlSentRef.current) return
+    hlSentRef.current = sentenceIndex
+    const s = sentencesRef.current[sentenceIndex]
+    if (!s) { highlight(null); return }
+    highlight(s.range)
+    setProgress({ i: sentenceIndex + 1, n: sentencesRef.current.length })
+    try { s.range.startContainer.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' }) } catch { /* ignore */ }
+  }, [highlight])
 
   const cancelSpeech = useCallback(() => {
     if (pauseTimer.current) { clearTimeout(pauseTimer.current); pauseTimer.current = null }
@@ -166,6 +191,7 @@ export function ReadAloudBar({
   const finish = useCallback(() => {
     cancelSpeech()
     highlight(null)
+    hlSentRef.current = -1
     releaseWake()
     setStat('idle')
     setCurText('')
@@ -174,17 +200,29 @@ export function ReadAloudBar({
   const switchEngine = useCallback((id: EngineId) => {
     if (id === engineId) return
     finish()
+    // Free the neural engine's audio element + cached paragraph WAVs when leaving
+    // it; re-selecting rebuilds cheaply (model already stored).
+    if (engineId === 'neural' && neuralEngRef.current) {
+      neuralEngRef.current.dispose?.()
+      setNeuralEng(null)
+      setNeuralState('checking')
+    }
     setProgress({ i: 0, n: 0 })
     setEngineId(id)
   }, [engineId, finish])
 
-  // Speak sentence i of the current page, chaining to i+1 on completion.
-  const speakFrom = useCallback((i: number) => {
-    if (!engine) return
-    const list = sentencesRef.current
-    if (i >= list.length) {
+  // Speak chunk `c` of the current page, chaining to c+1 on completion. The
+  // neural engine gets the next chunk prefetched so the handoff is gapless, and
+  // reports playback progress so the highlight tracks sentences within a chunk.
+  const speakChunk = useCallback((c: number) => {
+    const eng = engineRef.current
+    if (!eng) return
+    const chunks = chunksRef.current
+    chunkRef.current = c
+    if (c >= chunks.length) {
       // End of page → brief pause, then advance to the next page.
       highlight(null)
+      hlSentRef.current = -1
       const idx = navFiles.indexOf(fileRef.current)
       const next = idx >= 0 && idx < navFiles.length - 1 ? navFiles[idx + 1] : null
       if (!next) { finish(); saveReadPos(storageKey, null); return }
@@ -196,37 +234,85 @@ export function ReadAloudBar({
       }, PAGE_PAUSE_MS)
       return
     }
-    indexRef.current = i
-    const s = list[i]
-    setProgress({ i: i + 1, n: list.length })
-    setCurText(s.text)
-    highlight(s.range)
-    try { s.range.startContainer.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' }) } catch { /* ignore */ }
-    saveReadPos(storageKey, { file: fileRef.current, sentence: i })
-    handleRef.current = engine.speak(s.text, { voiceId, rate }, () => {
-      if (statusRef.current === 'playing') speakFrom(i + 1)
-    }, () => { /* skip unreadable chunk */ if (statusRef.current === 'playing') speakFrom(i + 1) })
-  }, [engine, voiceId, rate, navFiles, onNavigate, storageKey, highlight, finish])
+    const chunk = chunks[c]
+    setCurText(chunk.text)
+    highlightSentence(chunk.startIndex)
+    saveReadPos(storageKey, { file: fileRef.current, sentence: chunk.startIndex })
+
+    // Warm the NEXT chunk so there's no gap while it synthesises (neural only),
+    // but only once THIS chunk is actually playing — issuing it earlier would
+    // make a seek during this chunk's own synth wait behind a now-useless
+    // prefetch (predict() can't be cancelled). onProgress fires only after
+    // playback starts, so triggering from there guarantees that ordering.
+    let prefetched = false
+    const doPrefetch = () => {
+      if (prefetched) return
+      prefetched = true
+      if (eng.prefetch && c + 1 < chunks.length) eng.prefetch(chunks[c + 1].text, { voiceId, rate })
+    }
+
+    // chunk.text joins sentences with single spaces (see groupChunks), so the
+    // synthesised audio is longer than the bare sentence chars by one space per
+    // boundary — count those so the in-chunk highlight lands on time.
+    const joins = Math.max(0, chunk.sentences.length - 1)
+    const total = chunk.sentences.reduce((a, s) => a + s.text.length, 0) + joins || 1
+    let started = false // did this chunk actually produce audio?
+    const advance = () => { if (statusRef.current === 'playing') speakChunk(c + 1) }
+    const onErr = () => {
+      if (statusRef.current !== 'playing') return
+      // A neural chunk that errors before any audio played is a blocked/failed
+      // START (e.g. autoplay), not a bad chunk — park rather than racing through
+      // the whole document. The system engine has no such state, so it skips.
+      if (eng.id === 'neural' && !started) { cancelSpeech(); releaseWake(); setStat('paused'); return }
+      advance() // skip a chunk that glitched mid-playback rather than stalling
+    }
+    handleRef.current?.cancel() // neutralise any still-pending prior synth (no overlap on the shared audio)
+    handleRef.current = eng.speak(
+      chunk.text, { voiceId, rate },
+      advance,
+      onErr,
+      (frac) => {
+        if (statusRef.current !== 'playing') return
+        started = true
+        doPrefetch()
+        if (chunk.sentences.length <= 1) return
+        // Map playback fraction → sentence within the chunk by cumulative length.
+        const pos = frac * total
+        let acc = 0, k = chunk.sentences.length - 1
+        for (let j = 0; j < chunk.sentences.length; j++) {
+          acc += chunk.sentences[j].text.length + (j > 0 ? 1 : 0) // + join space before this sentence
+          if (pos <= acc) { k = j; break }
+        }
+        highlightSentence(chunk.startIndex + k)
+      },
+    )
+  }, [voiceId, rate, navFiles, onNavigate, storageKey, highlight, highlightSentence, finish, cancelSpeech, releaseWake])
 
   // When the page changes while playing (auto-advance OR manual navigation),
   // re-extract the new page and resume from the pending sentence (0 by default).
   useEffect(() => {
-    if (statusRef.current !== 'playing') return
+    if (statusRef.current !== 'playing') {
+      // If we were paused, the buffered chunk belongs to the old page — drop it
+      // so pressing play starts fresh on this page rather than resuming stale audio.
+      if (statusRef.current === 'paused') { cancelSpeech(); highlight(null); hlSentRef.current = -1; setStat('idle') }
+      return
+    }
     const resumeAt = pendingRef.current ?? 0
     pendingRef.current = null
     cancelSpeech()
     // Let the new content paint before reading from the DOM.
     const t = setTimeout(() => {
       if (statusRef.current !== 'playing') return
-      const list = extractCurrent()
-      if (list.length === 0) {
+      const chunks = extractCurrent()
+      if (chunks.length === 0) {
         // Nothing readable here (e.g. a form/binary page) — skip to next page.
         const idx = navFiles.indexOf(fileRef.current)
         const next = idx >= 0 && idx < navFiles.length - 1 ? navFiles[idx + 1] : null
         if (next) { pendingRef.current = 0; onNavigate(next) } else finish()
         return
       }
-      speakFrom(Math.min(resumeAt, list.length - 1))
+      const sentence = Math.min(resumeAt, sentencesRef.current.length - 1)
+      speakChunk(chunkIndexForSentence(chunks, sentence))
     }, 120)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -236,7 +322,18 @@ export function ReadAloudBar({
   const play = useCallback(() => {
     if (!engine) return
     void acquireWake()
-    if (statusRef.current === 'paused') { setStat('playing'); speakFrom(indexRef.current); return }
+    if (statusRef.current === 'paused') {
+      setStat('playing')
+      // Engines without in-place resume (system) restart the chunk: reset the
+      // highlight tracker so the current sentence is re-highlighted + re-scrolled.
+      if (!engine.resume) hlSentRef.current = -1
+      // Resume in place if the engine supports it (neural). If its play() can't
+      // restart (autoplay blocked), park back at paused so the user can re-tap —
+      // never skip ahead. Engines without resume restart the chunk.
+      const onResumeFail = () => { releaseWake(); setStat('paused') }
+      if (!(engine.resume && engine.resume(onResumeFail))) speakChunk(chunkRef.current)
+      return
+    }
     // Starting fresh: resume the saved position if it points elsewhere.
     const saved = loadReadPos(storageKey)
     setStat('playing')
@@ -245,11 +342,20 @@ export function ReadAloudBar({
       onNavigate(saved.file)
       return
     }
-    const list = extractCurrent()
-    speakFrom(saved && saved.file === fileRef.current ? Math.min(saved.sentence, Math.max(0, list.length - 1)) : 0)
-  }, [engine, storageKey, navFiles, onNavigate, extractCurrent, speakFrom, acquireWake])
+    const chunks = extractCurrent()
+    const sentence = saved && saved.file === fileRef.current ? Math.min(saved.sentence, Math.max(0, sentencesRef.current.length - 1)) : 0
+    speakChunk(chunkIndexForSentence(chunks, sentence))
+  }, [engine, storageKey, navFiles, onNavigate, extractCurrent, speakChunk, acquireWake, releaseWake])
 
-  const pause = useCallback(() => { cancelSpeech(); releaseWake(); setStat('paused') }, [cancelSpeech, releaseWake])
+  const pause = useCallback(() => {
+    if (pauseTimer.current) { clearTimeout(pauseTimer.current); pauseTimer.current = null }
+    // In-place pause keeps the buffered audio + highlight; engines without it
+    // (system) cancel and restart the chunk on resume.
+    if (engine?.pause) engine.pause()
+    else cancelSpeech()
+    releaseWake()
+    setStat('paused')
+  }, [engine, cancelSpeech, releaseWake])
 
   const jumpPage = useCallback((dir: -1 | 1) => {
     const idx = navFiles.indexOf(fileRef.current)
@@ -260,7 +366,7 @@ export function ReadAloudBar({
   }, [navFiles, onNavigate])
 
   // Cleanup on unmount.
-  useEffect(() => () => { cancelSpeech(); highlight(null); releaseWake() }, [cancelSpeech, highlight, releaseWake])
+  useEffect(() => () => { cancelSpeech(); highlight(null); releaseWake(); neuralEngRef.current?.dispose?.() }, [cancelSpeech, highlight, releaseWake])
 
   // MediaSession: surface play/pause + page skip on the lock screen / headset,
   // and reflect what's being read. (Lock-screen controls only appear once the
@@ -278,6 +384,16 @@ export function ReadAloudBar({
       ms.setActionHandler('previoustrack', () => jumpPage(-1))
       ms.setActionHandler('nexttrack', () => jumpPage(1))
     } catch { /* unsupported handler — ignore */ }
+    // Tear down the GLOBAL mediaSession on unmount so the lock screen / headset
+    // can't drive stale closures (re-acquiring the wake lock, restarting audio)
+    // after read-aloud is closed.
+    return () => {
+      try {
+        for (const a of ['play', 'pause', 'previoustrack', 'nexttrack']) ms.setActionHandler(a, null)
+        ms.playbackState = 'none'
+        ms.metadata = null
+      } catch { /* ignore */ }
+    }
   }, [curText, currentFile, status, play, pause, jumpPage])
 
   // If the browser has no system speech engine at all, the studio voice is the
