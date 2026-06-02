@@ -7,6 +7,7 @@ import { FileTree } from '../components/FileTree'
 import { MarkdownView, stripMdExt } from '../components/MarkdownView'
 import { FormView } from '../components/FormView'
 import { ReadAloudBar } from '../components/ReadAloudBar'
+import { HeaderActionBtn, HeaderOverflowMenu, useHeaderWidth, headerIsCompact, type HeaderAction } from '../components/HeaderActions'
 // Monaco is heavy (~3MB). Load it only when the user actually starts editing.
 const Editor = lazy(() => import('../components/Editor'))
 import { SharePanel } from '../components/SharePanel'
@@ -120,6 +121,7 @@ export function SpaceView() {
   const isForm = !!formEntry?.form
   const [formData, setFormData] = useState<api.FormData | null>(null)
   const [readAloud, setReadAloud] = useState(false)
+  const { ref: headerRef, width: headerWidth } = useHeaderWidth()
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('notation_theme') as 'light' | 'dark') || 'dark'
@@ -680,6 +682,23 @@ export function SpaceView() {
   const displayTitle = stripMdExt(file.split('/').pop() || '')
   const pathParts = file ? file.split('/') : []
 
+  // Header tools as one list driving both the inline icons and the overflow
+  // ("tool") menu — so on a narrow window every tool stays reachable.
+  const headerActions: HeaderAction[] = [
+    { key: 'search', label: 'Search', icon: <Search size={18} />, onClick: () => setSearchOpen(true) },
+  ]
+  if (isMarkdownFile(file) && !isForm) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
+  if (!isForm) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { setHistoryMode(v => !v); setEditing(false) } })
+  if (!isForm) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove favorite' : 'Add favorite', icon: <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />, active: isBookmarked, onClick: () => toggleBookmark(file) })
+  if (!isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: comments.length, onClick: () => setShowComments(v => !v) })
+  if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={18} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
+  if (isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={18} />, onClick: () => window.print() })
+  headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={18} />, onClick: () => setThemeOpen(true) })
+  headerActions.push({ key: 'help', label: 'Keyboard shortcuts', icon: <HelpCircle size={18} />, onClick: () => setHelpOpen(true) })
+  headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
+  const editVisible = isTextFile(file) && !historyMode && !isForm
+  const compactHeader = headerIsCompact(headerWidth, headerActions.length, 120 + (editVisible ? 64 : 0), isMobile)
+
   return (
     <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
@@ -899,7 +918,7 @@ export function SpaceView() {
             {uploadStatus}
           </div>
         )}
-        <header className={`h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 backdrop-blur-sm ${
+        <header ref={headerRef} className={`h-12 flex justify-between items-center px-4 flex-shrink-0 z-10 sticky top-0 backdrop-blur-sm ${
           headerStyle === 'chrome'
             ? 'surface-elevated bg-[color:var(--notation-bg-elevated)]/90 border-b border-[var(--notation-border)]'
             : 'bg-[color:var(--notation-bg)]/90'
@@ -960,84 +979,15 @@ export function SpaceView() {
           </div>
 
           {file && (
-            <div className="flex items-center gap-1">
-              <button onClick={() => setSearchOpen(true)} className="p-1.5 rounded-md transition-colors text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]" title="Search (Cmd/Ctrl + Shift + F)">
-                <Search size={18} />
-              </button>
-              {isMarkdownFile(file) && (
-                <button onClick={() => setShowOutline(v => !v)} className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${showOutline ? 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`} title="Outline">
-                  <List size={18} />
-                </button>
-              )}
-              {!isForm && (
-                <button
-                  onClick={() => { setHistoryMode(v => !v); setEditing(false) }}
-                  className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${historyMode ? 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}
-                  title="Version history"
-                >
-                  <History size={18} />
-                </button>
-              )}
-              {isTextFile(file) && !historyMode && !isForm && (
-                <button onClick={() => setEditing(v => !v)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)] dark:bg-[color:var(--notation-accent-10)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {compactHeader
+                ? <HeaderOverflowMenu actions={headerActions} />
+                : headerActions.map(act => <HeaderActionBtn key={act.key} action={act} />)}
+              {editVisible && (
+                <button onClick={() => setEditing(v => !v)} title={editing ? 'Preview' : 'Edit'} className={`ml-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)] dark:bg-[color:var(--notation-accent-10)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}>
                   {editing ? <Eye size={16} /> : <Edit3 size={16} />}
                 </button>
               )}
-              <button onClick={() => toggleBookmark(file)} className={`hidden md:inline-flex p-1.5 rounded-md transition-colors ${isBookmarked ? 'text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`} title="Favorite">
-                <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />
-              </button>
-              {!isForm && (
-                <button onClick={() => setShowComments(!showComments)} className={`p-1.5 rounded-md transition-colors flex items-center gap-1 ${showComments ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`} title="Comments">
-                  <MessageSquare size={18} />
-                  {comments.length > 0 && <span className="text-xs font-bold text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]">{comments.length}</span>}
-                </button>
-              )}
-              
-              {isMarkdownFile(file) && !editing && !isForm && (
-                <button
-                  onClick={() => setReadAloud(v => !v)}
-                  className={`p-1.5 rounded-md transition-colors ${readAloud ? 'bg-[var(--notation-border)] text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}
-                  title="Read aloud"
-                  aria-pressed={readAloud}
-                >
-                  <Headphones size={18} />
-                </button>
-              )}
-
-              {isMarkdownFile(file) && !editing && (
-                <button
-                  onClick={() => window.print()}
-                  className="hidden md:inline-flex p-1.5 rounded-md transition-colors text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]"
-                  title="Print this page"
-                >
-                  <Printer size={18} />
-                </button>
-              )}
-
-              <button
-                onClick={() => setThemeOpen(true)}
-                className="hidden md:inline-flex p-1.5 rounded-md transition-colors text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]"
-                title="Accent colour"
-              >
-                <Palette size={18} />
-              </button>
-
-              <button
-                onClick={() => setHelpOpen(true)}
-                className="p-1.5 rounded-md transition-colors text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]"
-                title="Keyboard shortcuts (?)"
-                aria-label="Keyboard shortcuts"
-              >
-                <HelpCircle size={18} />
-              </button>
-
-              <button
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="p-1.5 rounded-md transition-colors text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]"
-                title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
-              >
-                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
             </div>
           )}
         </header>
