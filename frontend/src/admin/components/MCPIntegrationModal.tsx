@@ -61,7 +61,7 @@ curl -X POST '${url}' \\
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-150 flex flex-col max-h-[90vh]"
+        className="w-full max-w-2xl bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-150 flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--notation-border)]">
@@ -84,7 +84,7 @@ curl -X POST '${url}' \\
 
         <div className="overflow-y-auto px-5 py-4 space-y-4">
           {fresh && (
-            <div className="border border-[var(--notation-warning)] dark:border-[var(--notation-warning)]/50 bg-[var(--notation-warning)] dark:bg-[var(--notation-warning)]/30 rounded-md p-3">
+            <div className="border border-[var(--notation-warning)] dark:border-[var(--notation-warning)]/50 bg-[var(--notation-warning)]/10 dark:bg-[var(--notation-warning)]/15 rounded-md p-3">
               <div className="flex items-start gap-2">
                 <AlertTriangle size={14} className="text-[var(--notation-warning)] dark:text-[var(--notation-warning)] mt-0.5 flex-shrink-0" />
                 <div className="text-xs">
@@ -225,7 +225,7 @@ function CopyButton({ value }: { value: string }) {
   return (
     <button
       onClick={onCopy}
-      className="p-1.5 bg-[var(--notation-bg-alt)] bg-[var(--notation-bg-alt)] text-[var(--notation-fg-muted)] hover:text-white rounded-md transition-colors"
+      className="p-1.5 bg-[var(--notation-bg-alt)] text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] rounded-md transition-colors"
       aria-label="Copy"
     >
       {copied ? <Check size={14} /> : <Copy size={14} />}

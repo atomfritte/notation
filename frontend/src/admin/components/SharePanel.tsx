@@ -129,11 +129,11 @@ export function SharePanel({ spaceID }: Props) {
       </form>
 
       {created && (
-        <div className="mb-3 p-2 bg-[var(--notation-warning)] border border-[var(--notation-warning)] rounded text-xs">
+        <div className="mb-3 p-2 bg-[var(--notation-warning)]/10 border border-[var(--notation-warning)]/40 rounded text-xs">
           <p className="font-semibold text-[var(--notation-warning)] mb-1">
             Save this URL now — token cannot be recovered:
           </p>
-          <code className="block break-all bg-white p-2 rounded mb-2 select-all">
+          <code className="block break-all bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] p-2 rounded mb-2 select-all">
             {created.url}
           </code>
           <div className="flex gap-2">
@@ -152,12 +152,12 @@ export function SharePanel({ spaceID }: Props) {
       ) : (
         <ul className="space-y-1 text-xs">
           {shares.map(s => (
-            <li key={s.id} className="p-2 bg-white border rounded">
+            <li key={s.id} className="p-2 bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded">
               <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-mono">{s.id}</span>
-                    <span className="px-1.5 py-0.5 bg-gray-200 rounded">{s.permission}</span>
+                    <span className="px-1.5 py-0.5 bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] rounded">{s.permission}</span>
                   </div>
                   {s.label && <div className="text-gray-700 mt-0.5">{s.label}</div>}
                   {s.expires_at && (

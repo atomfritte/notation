@@ -66,11 +66,11 @@ export function SpaceList() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-white dark:from-[#0a0a0a] dark:to-[#0d0d0d] text-[var(--notation-fg)] selection:bg-[color:var(--notation-accent-30)]">
-      <header className="sticky top-0 z-30 border-b border-[var(--notation-border)] bg-white/70 bg-[var(--notation-bg-elevated)]/70 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-[var(--notation-border)] bg-[var(--notation-bg-elevated)]/70 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link to="/admin" className="flex items-center gap-2 group">
             <div className="w-7 h-7 rounded-md bg-[var(--notation-bg-alt)] dark:bg-[color:var(--notation-accent)] flex items-center justify-center transition-transform group-hover:scale-105">
-              <FolderOpen size={14} className="text-white dark:text-[var(--notation-fg)]" strokeWidth={2.5} />
+              <FolderOpen size={14} className="text-[var(--notation-fg)] dark:text-[var(--notation-fg)]" strokeWidth={2.5} />
             </div>
             <span className="font-bold text-base tracking-tight">notation</span>
           </Link>
@@ -128,7 +128,7 @@ export function SpaceList() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search spaces…"
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-[var(--notation-border)] bg-white bg-[var(--notation-bg-alt)]/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-alt)]/50 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
             />
           </div>
           <button
@@ -204,7 +204,7 @@ function SpaceCard({ space, onDelete }: { space: api.Meta; onDelete: () => void 
     <div className="group relative">
       <Link
         to={`/admin/spaces/${encodeURIComponent(space.id)}`}
-        className="block rounded-xl border border-[var(--notation-border)]/60 bg-white bg-[var(--notation-bg-alt)]/40 overflow-hidden hover:border-[var(--notation-border)] dark:hover:border-[var(--notation-border)] hover:shadow-lg dark:hover:shadow-black/20 hover:-translate-y-0.5 transition-all duration-200"
+        className="block rounded-xl border border-[var(--notation-border)]/60 bg-[var(--notation-bg-alt)]/40 overflow-hidden hover:border-[var(--notation-border)] dark:hover:border-[var(--notation-border)] hover:shadow-lg dark:hover:shadow-black/20 hover:-translate-y-0.5 transition-all duration-200"
       >
         <div
           className="h-20 flex items-center justify-center relative"
@@ -326,7 +326,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
       onClick={onClose}
     >
       <div
-        className="bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-150"
+        className="bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">
@@ -353,7 +353,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               required
               pattern="[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]"
               autoFocus
-              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-white bg-[var(--notation-bg-elevated)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
+              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
               placeholder="my-project"
             />
             <p className="text-[11px] text-[var(--notation-fg-muted)] mt-1">
@@ -367,7 +367,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-white bg-[var(--notation-bg-elevated)] text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
+              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
               placeholder="My Project"
             />
           </div>

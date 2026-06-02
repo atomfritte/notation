@@ -31,6 +31,44 @@ export type Entry = {
   size: number
   modified: string
   children?: Entry[]
+  /** A directory containing a _form.md template — rendered as a form, not a
+   *  file listing. `entries` is the submission count. */
+  form?: boolean
+  entries?: number
+}
+
+export type FormFieldType =
+  | 'string' | 'text' | 'integer' | 'number' | 'bool'
+  | 'date' | 'time' | 'datetime' | 'select' | 'email' | 'url'
+
+export type FormField = {
+  key: string
+  label: string
+  type: FormFieldType
+  required: boolean
+  options?: string[]
+  default?: string
+}
+
+export type FormSchema = {
+  title: string
+  title_field: string
+  fields: FormField[]
+}
+
+export type FormEntry = {
+  id: string
+  path: string
+  created_at: string
+  title: string
+  values: Record<string, unknown>
+}
+
+export type FormData = {
+  folder: string
+  schema: FormSchema
+  entries: FormEntry[]
+  can_submit: boolean
 }
 
 export type Commit = {
@@ -89,6 +127,16 @@ export const deleteSpace = (id: string) =>
 
 export const getTree = (id: string) =>
   fetchJSON<Entry[]>(`/api/admin/spaces/${encodeURIComponent(id)}/tree`)
+
+export const getForm = (id: string, folder: string) =>
+  fetchJSON<FormData>(`/api/admin/spaces/${encodeURIComponent(id)}/form/${encodePath(folder)}`)
+
+export const submitForm = (id: string, folder: string, values: Record<string, unknown>) =>
+  fetchJSON<FormEntry>(`/api/admin/spaces/${encodeURIComponent(id)}/form/${encodePath(folder)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  })
 
 export const readFile = async (id: string, path: string): Promise<{content: string, etag: string | null}> => {
   const r = await fetch(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`)

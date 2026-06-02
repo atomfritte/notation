@@ -182,7 +182,7 @@ export function WikiLinkPicker({
   return (
     <div
       ref={containerRef}
-      className="fixed z-[100] w-80 bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-md shadow-2xl overflow-hidden flex flex-col max-h-80"
+      className="fixed z-[100] w-80 surface-elevated bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-md shadow-2xl overflow-hidden flex flex-col max-h-80"
       style={{ left, top }}
       onMouseDown={e => e.stopPropagation()}
       onKeyDown={onKey}

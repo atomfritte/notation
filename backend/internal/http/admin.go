@@ -709,6 +709,38 @@ func writeFileError(w http.ResponseWriter, err error) {
 	}
 }
 
+// ---- forms ----
+
+func (h *adminHandlers) getForm(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	resp, err := buildFormResponse(h.store, id, chi.URLParam(r, "*"), true)
+	if err != nil {
+		writeFormError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *adminHandlers) postFormEntry(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	folder := chi.URLParam(r, "*")
+	entry, err := submitFormEntry(h.store, h.cfg, id, folder, w, r)
+	if err != nil {
+		writeFormError(w, err)
+		return
+	}
+	h.git.Schedule(id, adminAuthor(r))
+	writeJSON(w, http.StatusCreated, entry)
+}
+
 // ---- comments ----
 
 func (h *adminHandlers) listComments(w http.ResponseWriter, r *http.Request) {

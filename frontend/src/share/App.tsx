@@ -9,6 +9,7 @@ import { ShareCommentsPanel } from './ShareCommentsPanel'
 import { FileTree } from '../admin/components/FileTree'
 import { FileViewer } from '../admin/components/FileViewer'
 import { MarkdownView, stripMdExt } from '../admin/components/MarkdownView'
+import { FormView } from '../admin/components/FormView'
 import { CommentThread } from '../admin/components/CommentThread'
 import { Outline } from '../admin/components/Outline'
 import { CommandPalette } from '../admin/components/CommandPalette'
@@ -39,6 +40,11 @@ function ShareUI() {
   const features = info?.features
   const canEdit = info?.permission === 'edit'
   const canComment = info?.permission === 'comment' || info?.permission === 'edit'
+
+  // Form folders render the FormView instead of being read as a file.
+  const formEntry = useMemo(() => findFormEntry(tree, file), [tree, file])
+  const isForm = !!formEntry?.form
+  const [formData, setFormData] = useState<api.FormData | null>(null)
 
   // Theme: we still seed from prefers-color-scheme but only allow the user
   // to override it when features.theme is on. initTheme() repaints the
@@ -194,6 +200,13 @@ function ShareUI() {
       setEditBuffer('')
       return
     }
+    // A form folder is handled by the form-fetch effect — don't read the
+    // directory as a file.
+    if (isForm) {
+      setContent('')
+      setEditBuffer('')
+      return
+    }
     let cancelled = false
     if (isTextFile(file)) {
       api.readFile(file).then(c => {
@@ -209,7 +222,18 @@ function ShareUI() {
     // Guard against out-of-order responses when navigating quickly: a late
     // resolve from the previous file must not clobber the current one.
     return () => { cancelled = true }
-  }, [file, refreshComments])
+  }, [file, refreshComments, isForm])
+
+  // Load a form folder's schema + entries when one is opened.
+  useEffect(() => {
+    if (!file || !isForm) { setFormData(null); return }
+    let cancelled = false
+    setFormData(null)
+    api.getForm(file)
+      .then(d => { if (!cancelled) setFormData(d) })
+      .catch(e => { if (!cancelled) setErr(String(e)) })
+    return () => { cancelled = true }
+  }, [file, isForm])
 
   useEffect(() => {
     if (!activeCommentId) return
@@ -356,7 +380,7 @@ function ShareUI() {
   const headerActions: HeaderAction[] = []
   if (features?.search) headerActions.push({ key: 'search', label: 'Search', icon: <Search size={16} />, onClick: () => setSearchOpen(true) })
   if (features?.outline && !isMobile && isMarkdownFile(file)) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={16} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
-  if (canComment) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={16} />, active: showComments, badge: comments.length, onClick: () => { openedBySelectionRef.current = false; setShowComments(v => !v) } })
+  if (canComment && !isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={16} />, active: showComments, badge: comments.length, onClick: () => { openedBySelectionRef.current = false; setShowComments(v => !v) } })
   if (features?.bookmarks) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove bookmark' : 'Bookmark this page', icon: <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />, active: !!isBookmarked, onClick: () => toggleBookmark(file) })
   if (features?.print && isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={16} />, onClick: () => window.print() })
   if (features?.theme) headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={16} />, onClick: () => setThemeOpen(true) })
@@ -365,7 +389,7 @@ function ShareUI() {
 
   // Collapse to the hamburger when the icons (~34px each) would crowd the title
   // or the Edit button. Before the first measurement, fall back to isMobile.
-  const editVisible = canEdit && isTextFile(file)
+  const editVisible = canEdit && isTextFile(file) && !isForm
   const reservedW = 40 /* sidebar toggle */ + 72 /* title min */ + (editVisible ? 76 : 0)
   const compactHeader = headerWidth === 0 ? isMobile : headerActions.length * 34 > headerWidth - reservedW
 
@@ -395,7 +419,7 @@ function ShareUI() {
         >
         <div className="p-4 border-b border-[var(--notation-border)]">
           <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium">
-            <div className="w-5 h-5 rounded bg-[var(--notation-bg-alt)] text-white dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase">
+            <div className="w-5 h-5 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase">
               {info.space.id.charAt(0)}
             </div>
             <span className="truncate">{info.space.name}</span>
@@ -542,7 +566,20 @@ function ShareUI() {
 
             <div className="flex-1 flex min-h-0">
               <div className="flex-1 flex flex-col min-w-0">
-                {editing ? (
+                {isForm ? (
+                  formData ? (
+                    <FormView
+                      data={formData}
+                      onSubmit={async (values) => {
+                        await api.submitForm(file, values)
+                        const fresh = await api.getForm(file)
+                        setFormData(fresh)
+                      }}
+                    />
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">Loading form…</div>
+                  )
+                ) : editing ? (
                   <div className="flex-1 flex flex-col">
                     <div className="px-3 py-2 border-b border-[var(--notation-border)] flex gap-3 items-center text-sm">
                       <button
@@ -696,6 +733,20 @@ function ShareUI() {
 
 // Returns true when the keydown target is a text-entry element so bare-key
 // shortcuts (like `?`) don't intercept real keystrokes inside the editor.
+// Depth-first lookup of a tree entry (form folders are present in the tree with
+// their children omitted, so this still finds the folder node).
+function findFormEntry(entries: api.Entry[], path: string): api.Entry | null {
+  if (!path) return null
+  for (const e of entries) {
+    if (e.path === path) return e
+    if (e.is_dir && e.children) {
+      const hit = findFormEntry(e.children, path)
+      if (hit) return hit
+    }
+  }
+  return null
+}
+
 function isTypingTarget(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false
   const tag = t.tagName

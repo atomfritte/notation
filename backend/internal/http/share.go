@@ -275,6 +275,55 @@ func (h *shareHandlers) listComments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
+// getForm returns a form folder's schema + entries to a share guest. Any
+// reader can view; only comment/edit guests get can_submit=true.
+func (h *shareHandlers) getForm(w http.ResponseWriter, r *http.Request) {
+	spaceID, sh, err := h.resolve(r)
+	if err != nil {
+		writeShareError(w, err)
+		return
+	}
+	if !sh.Permission.AllowsRead() {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	resp, err := buildFormResponse(h.store, spaceID, chi.URLParam(r, "*"), sh.Permission.AllowsComment())
+	if err != nil {
+		writeFormError(w, err)
+		return
+	}
+	h.audit1(spaceID, "read.form", chi.URLParam(r, "*"), sh, r, nil)
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// postFormEntry lets a comment/edit guest submit a form entry. The server
+// validates against the schema and names the file itself, so a guest can only
+// create a valid entry inside the form folder — not write arbitrary paths.
+func (h *shareHandlers) postFormEntry(w http.ResponseWriter, r *http.Request) {
+	spaceID, sh, err := h.resolve(r)
+	if err != nil {
+		writeShareError(w, err)
+		return
+	}
+	if !sh.Permission.AllowsComment() {
+		writeError(w, http.StatusForbidden, "comment permission required")
+		return
+	}
+	folder := chi.URLParam(r, "*")
+	entry, err := submitFormEntry(h.store, h.cfg, spaceID, folder, w, r)
+	if err != nil {
+		h.audit1(spaceID, "form.submit", folder, sh, r, err)
+		writeFormError(w, err)
+		return
+	}
+	h.git.Schedule(spaceID, gitrepo.Author{
+		Name:  "guest:" + sh.ID,
+		Email: sh.ID + "@notation.share",
+	})
+	h.audit1(spaceID, "form.submit", folder, sh, r, nil)
+	writeJSON(w, http.StatusCreated, entry)
+}
+
 func writeCommentError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, share.ErrCommentNotFound):

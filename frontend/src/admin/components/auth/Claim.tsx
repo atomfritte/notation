@@ -43,7 +43,7 @@ export function Claim({ onDone }: Props) {
           spellCheck={false}
           autoComplete="off"
           placeholder="paste token here"
-          className="w-full bg-white bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-[var(--notation-border)] dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-zinc-300 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 font-mono text-sm text-[var(--notation-fg)] placeholder-zinc-400"
+          className="w-full bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-[var(--notation-border)] dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-zinc-300 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md px-3 py-2 font-mono text-sm text-[var(--notation-fg)] placeholder-zinc-400"
         />
         <button
           type="submit"

@@ -576,7 +576,7 @@ export function MarkdownView({
           paper. */}
       {hoverTip && hoverTip.comment.text && (
         <div
-          className="fixed z-50 pointer-events-none px-3 py-2 max-w-sm rounded-md shadow-lg bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-xs no-print"
+          className="fixed z-50 pointer-events-none px-3 py-2 max-w-sm rounded-md shadow-lg bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-xs no-print"
           style={{ left: hoverTip.x, top: hoverTip.y }}
         >
           <div className="flex items-baseline gap-2 mb-1">

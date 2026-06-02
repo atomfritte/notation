@@ -81,7 +81,7 @@ export function MCPPanel({ spaceID }: Props) {
             <input
               value={label}
               onChange={e => setLabel(e.target.value)}
-              className="border border-[var(--notation-border)] bg-white bg-[var(--notation-bg-alt)] px-2 py-1.5 rounded-md text-xs w-full text-[var(--notation-fg)] placeholder-zinc-400"
+              className="border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] px-2 py-1.5 rounded-md text-xs w-full text-[var(--notation-fg)] placeholder-zinc-400"
               placeholder="Label (e.g. claude-laptop)"
               autoFocus
             />
@@ -114,7 +114,7 @@ export function MCPPanel({ spaceID }: Props) {
               <li
                 key={t.id}
                 onClick={() => setModal({ url: inferredURL })}
-                className="p-2 bg-white bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-md hover:border-[var(--notation-border)] dark:hover:border-[var(--notation-border)] cursor-pointer transition-colors"
+                className="p-2 bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-md hover:border-[var(--notation-border)] dark:hover:border-[var(--notation-border)] cursor-pointer transition-colors"
               >
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0 flex-1">
