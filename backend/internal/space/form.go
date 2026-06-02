@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -33,6 +34,13 @@ const (
 	FieldSelect   FieldType = "select"
 	FieldEmail    FieldType = "email"
 	FieldURL      FieldType = "url"
+	// Richer inputs.
+	FieldButtons FieldType = "buttons"     // single choice, rendered as buttons
+	FieldMulti   FieldType = "multiselect" // multiple choice, stored as []string
+	FieldSmiley  FieldType = "smiley"      // mood scale 1..5, stored as int
+	FieldRating  FieldType = "rating"      // star rating 1..Levels, stored as int
+	FieldSlider  FieldType = "slider"      // numeric range, stored as number
+	FieldImage   FieldType = "image"       // image upload, stored as []string of paths
 )
 
 // FormField is one parsed field of a form template.
@@ -41,8 +49,12 @@ type FormField struct {
 	Label    string    `json:"label"`
 	Type     FieldType `json:"type"`
 	Required bool      `json:"required"`
-	Options  []string  `json:"options,omitempty"`
+	Options  []string  `json:"options,omitempty"` // select / buttons / multiselect
 	Default  string    `json:"default,omitempty"`
+	Min      *float64  `json:"min,omitempty"`    // slider
+	Max      *float64  `json:"max,omitempty"`    // slider
+	Step     *float64  `json:"step,omitempty"`   // slider
+	Levels   int       `json:"levels,omitempty"` // smiley / rating scale max
 }
 
 // FormSchema is a parsed `_form.md` template.
@@ -121,11 +133,12 @@ func ParseFormSchema(md string) FormSchema {
 		prevLabel = ""
 
 		field := FormField{Type: typ, Label: label}
+		isChoice := typ == FieldSelect || typ == FieldButtons || typ == FieldMulti
 
-		// Modifiers + select options live in trailing (...) groups and/or the
-		// inline `[select: ...]` argument.
+		// Choice options live in trailing (...) groups and/or the inline
+		// `[select: a, b, c]` argument; slider/rating carry numeric args instead.
 		var optionSrc []string
-		if inlineArgs != "" {
+		if inlineArgs != "" && isChoice {
 			optionSrc = splitCSV(inlineArgs)
 		}
 		for _, pg := range parenRe.FindAllStringSubmatch(line[loc[1]:], -1) {
@@ -137,15 +150,16 @@ func ParseFormSchema(md string) FormSchema {
 				case strings.HasPrefix(low, "default:"):
 					field.Default = strings.TrimSpace(tok[len("default:"):])
 				default:
-					if typ == FieldSelect {
+					if isChoice {
 						optionSrc = append(optionSrc, tok)
 					}
 				}
 			}
 		}
-		if typ == FieldSelect {
+		if isChoice {
 			field.Options = optionSrc
 		}
+		applyNumericArgs(&field, inlineArgs)
 
 		field.Key = uniqueSlug(label, seen)
 		schema.Fields = append(schema.Fields, field)
@@ -203,6 +217,18 @@ func normalizeType(t string) FieldType {
 		return FieldDateTime
 	case "select", "choice", "dropdown", "enum", "option":
 		return FieldSelect
+	case "buttons", "radio", "toggle", "choices", "pills":
+		return FieldButtons
+	case "multiselect", "multi", "checklist", "tags", "checkboxes", "multichoice":
+		return FieldMulti
+	case "smiley", "smileys", "mood", "emoji":
+		return FieldSmiley
+	case "rating", "stars", "star":
+		return FieldRating
+	case "slider", "range":
+		return FieldSlider
+	case "image", "images", "photo", "photos", "picture", "pic":
+		return FieldImage
 	case "email", "mail":
 		return FieldEmail
 	case "url", "link":
@@ -210,6 +236,49 @@ func normalizeType(t string) FieldType {
 	default:
 		return FieldString
 	}
+}
+
+// applyNumericArgs fills slider bounds / scale levels from a field's inline args.
+func applyNumericArgs(f *FormField, args string) {
+	nums := parseFloats(args)
+	switch f.Type {
+	case FieldSlider:
+		min, max, step := 0.0, 100.0, 1.0
+		if len(nums) >= 1 {
+			min = nums[0]
+		}
+		if len(nums) >= 2 {
+			max = nums[1]
+		}
+		if len(nums) >= 3 && nums[2] > 0 {
+			step = nums[2]
+		}
+		if max <= min {
+			max = min + 1
+		}
+		f.Min, f.Max, f.Step = &min, &max, &step
+	case FieldRating:
+		levels := 5
+		if len(nums) >= 1 && int(nums[0]) > 0 {
+			levels = int(nums[0])
+		}
+		if levels > 20 {
+			levels = 20
+		}
+		f.Levels = levels
+	case FieldSmiley:
+		f.Levels = 5
+	}
+}
+
+func parseFloats(s string) []float64 {
+	var out []float64
+	for _, p := range splitCSV(s) {
+		if v, err := strconv.ParseFloat(strings.TrimSpace(p), 64); err == nil {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // uniqueSlug derives a stable field key from a label, deduplicating collisions.

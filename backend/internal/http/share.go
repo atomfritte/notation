@@ -287,7 +287,8 @@ func (h *shareHandlers) getForm(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
-	resp, err := buildFormResponse(h.store, spaceID, chi.URLParam(r, "*"), sh.Permission.AllowsComment())
+	// Guests may submit (with comment/edit) but never edit/delete entries.
+	resp, err := buildFormResponse(h.store, spaceID, chi.URLParam(r, "*"), sh.Permission.AllowsComment(), false)
 	if err != nil {
 		writeFormError(w, err)
 		return
@@ -322,6 +323,34 @@ func (h *shareHandlers) postFormEntry(w http.ResponseWriter, r *http.Request) {
 	})
 	h.audit1(spaceID, "form.submit", folder, sh, r, nil)
 	writeJSON(w, http.StatusCreated, entry)
+}
+
+// postFormImage lets a comment/edit guest upload an image attachment for a form
+// (so they can fill an image field). Gated like submission, not general file
+// writes — a comment guest can attach to a form without full edit rights.
+func (h *shareHandlers) postFormImage(w http.ResponseWriter, r *http.Request) {
+	spaceID, sh, err := h.resolve(r)
+	if err != nil {
+		writeShareError(w, err)
+		return
+	}
+	if !sh.Permission.AllowsComment() {
+		writeError(w, http.StatusForbidden, "comment permission required")
+		return
+	}
+	folder := chi.URLParam(r, "*")
+	path, err := uploadFormImage(h.store, h.cfg, spaceID, folder, w, r)
+	if err != nil {
+		h.audit1(spaceID, "form.image", folder, sh, r, err)
+		writeFormError(w, err)
+		return
+	}
+	h.git.Schedule(spaceID, gitrepo.Author{
+		Name:  "guest:" + sh.ID,
+		Email: sh.ID + "@notation.share",
+	})
+	h.audit1(spaceID, "form.image", folder, sh, r, nil)
+	writeJSON(w, http.StatusCreated, map[string]string{"path": path})
 }
 
 func writeCommentError(w http.ResponseWriter, err error) {

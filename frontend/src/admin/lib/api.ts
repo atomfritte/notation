@@ -40,6 +40,7 @@ export type Entry = {
 export type FormFieldType =
   | 'string' | 'text' | 'integer' | 'number' | 'bool'
   | 'date' | 'time' | 'datetime' | 'select' | 'email' | 'url'
+  | 'buttons' | 'multiselect' | 'smiley' | 'rating' | 'slider' | 'image'
 
 export type FormField = {
   key: string
@@ -48,6 +49,10 @@ export type FormField = {
   required: boolean
   options?: string[]
   default?: string
+  min?: number
+  max?: number
+  step?: number
+  levels?: number
 }
 
 export type FormSchema = {
@@ -69,6 +74,7 @@ export type FormData = {
   schema: FormSchema
   entries: FormEntry[]
   can_submit: boolean
+  can_edit?: boolean
 }
 
 export type Commit = {
@@ -137,6 +143,33 @@ export const submitForm = (id: string, folder: string, values: Record<string, un
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ values }),
   })
+
+export const updateForm = (id: string, folder: string, entryID: string, values: Record<string, unknown>) =>
+  fetchJSON<FormEntry>(`/api/admin/spaces/${encodeURIComponent(id)}/form/${encodePath(folder)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: entryID, values }),
+  })
+
+export const deleteFormEntry = (id: string, folder: string, entryID: string) =>
+  fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/form/${encodePath(folder)}?id=${encodeURIComponent(entryID)}`, {
+    method: 'DELETE',
+  })
+
+/** Upload one image attachment for a form; returns its stored path. */
+export const uploadFormImage = async (id: string, folder: string, blob: Blob): Promise<string> => {
+  const headers: Record<string, string> = { 'Content-Type': blob.type || 'application/octet-stream' }
+  const csrf = getCSRF()
+  if (csrf) headers['X-CSRF-Token'] = csrf
+  const r = await fetch(`/api/admin/spaces/${encodeURIComponent(id)}/form-upload/${encodePath(folder)}`, {
+    method: 'POST',
+    headers,
+    body: blob,
+  })
+  if (r.status === 401) window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+  if (!r.ok) throw await asError(r)
+  return (await r.json() as { path: string }).path
+}
 
 export const readFile = async (id: string, path: string): Promise<{content: string, etag: string | null}> => {
   const r = await fetch(`/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`)
