@@ -370,8 +370,15 @@ export type CommentItem = {
   anchor?: CommentAnchor
 }
 
+// URL builders shared by the fetchers + offline sync, so the cached URL is
+// byte-identical to the one requested at read time.
+export const commentsURL = (id: string, path: string) =>
+  `/api/admin/spaces/${encodeURIComponent(id)}/comments/${encodePath(path)}`
+export const allCommentsURL = (id: string) =>
+  `/api/admin/spaces/${encodeURIComponent(id)}/all-comments`
+
 export const getComments = (id: string, path: string) =>
-  fetchJSON<CommentItem[]>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/${encodePath(path)}`)
+  fetchJSON<CommentItem[]>(commentsURL(id, path))
 
 // AllCommentItem extends CommentItem with the path field that the
 // space-wide listing carries — needed so the "All comments" tab can group
@@ -379,7 +386,7 @@ export const getComments = (id: string, path: string) =>
 export type AllCommentItem = CommentItem & { path: string }
 
 export const getAllComments = (id: string) =>
-  fetchJSON<AllCommentItem[]>(`/api/admin/spaces/${encodeURIComponent(id)}/all-comments`)
+  fetchJSON<AllCommentItem[]>(allCommentsURL(id))
 
 export const deleteComment = (id: string, commentID: string) =>
   fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/by-id/${encodeURIComponent(commentID)}`, {
