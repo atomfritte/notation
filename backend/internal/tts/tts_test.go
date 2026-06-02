@@ -161,8 +161,16 @@ func TestSynth_Style(t *testing.T) {
 	if styleFor("meditation").lengthScale <= 1 || styleFor("meditation").sentenceSilence <= 0 {
 		t.Errorf("meditation should be slower with pauses: %+v", styleFor("meditation"))
 	}
-	if styleFor("").lengthScale != 0 || styleFor("nope").lengthScale != 0 {
-		t.Error("default/unknown style must not override piper defaults")
+	if styleFor("meditation.v2").lengthScale != styleFor("meditation").lengthScale {
+		t.Error("versioned meditation token must map to the same params")
+	}
+	// Normal voice keeps Piper's natural pace (no length scaling) but gets a gentle
+	// inter-sentence pause so paragraphs don't run together.
+	if styleFor("").lengthScale != 0 || styleFor("v2").lengthScale != 0 {
+		t.Error("normal style must not slow speech down")
+	}
+	if styleFor("").sentenceSilence <= 0 || styleFor("v2").sentenceSilence <= 0 {
+		t.Error("normal style should still breathe between sentences")
 	}
 	s := newTestSynth(t)
 	var calls int32

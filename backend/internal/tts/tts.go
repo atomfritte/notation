@@ -221,13 +221,17 @@ type styleParams struct {
 }
 
 // styleFor maps a style name to synthesis params. "meditation" reads slowly with
-// long pauses; anything else is normal.
+// long pauses; anything else is normal — but still with a gentle pause between
+// sentences so paragraphs don't run together (Piper uses --sentence_silence;
+// Kokoro gets the value via the sidecar). The frontend appends a ".v2"-style
+// revision to the token (see ttsStyleForPath) purely to bust caches when the
+// synthesised audio changes; both the versioned and bare names map here.
 func styleFor(name string) styleParams {
 	switch name {
-	case "meditation":
+	case "meditation", "meditation.v2":
 		return styleParams{lengthScale: 1.45, sentenceSilence: 1.0}
-	default:
-		return styleParams{}
+	default: // "", "v2", … → normal voice with a short inter-sentence breath
+		return styleParams{sentenceSilence: 0.35}
 	}
 }
 
@@ -352,7 +356,7 @@ func (s *Synth) runKokoro(ctx context.Context, vm *voiceModel, p styleParams, te
 	if p.lengthScale > 0 {
 		speed = 1.0 / p.lengthScale // meditation (1.45) → ~0.69, slower
 	}
-	body, _ := json.Marshal(map[string]any{"voice": vm.ID, "text": text, "speed": speed})
+	body, _ := json.Marshal(map[string]any{"voice": vm.ID, "text": text, "speed": speed, "sentence_silence": p.sentenceSilence})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.cfg.KokoroURL, "/")+"/synthesize", bytes.NewReader(body))
 	if err != nil {
 		return nil, err

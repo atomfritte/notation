@@ -237,6 +237,7 @@ function SpaceCard({ space, onDelete, online, voices }: { space: api.Meta; onDel
   const [op, setOp] = useState<'sync' | 'voice'>('sync')
   const [oerr, setOErr] = useState<string | null>(null)
   const [voiceMsg, setVoiceMsg] = useState<string | null>(null)
+  const [voiceFailed, setVoiceFailed] = useState<string[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const voiceCancel = useRef<Cancel>({ cancelled: false })
@@ -289,6 +290,7 @@ function SpaceCard({ space, onDelete, online, voices }: { space: api.Meta; onDel
     setMenuOpen(false)
     setOErr(null)
     setVoiceMsg(null)
+    setVoiceFailed([])
     const voiceId = defaultVoice(voices)
     if (!voiceId) return
     setOp('voice')
@@ -299,10 +301,16 @@ function SpaceCard({ space, onDelete, online, voices }: { space: api.Meta; onDel
       const pages = markdownPagesUnder(tree, '')
       const r = await vertonenPages(space.id, pages, voiceId, p => { if (alive.current) setProgress({ done: p.done, total: p.total }) }, voiceCancel.current, true)
       if (!alive.current) return
+      const failed = [...r.failedPages, ...r.failedClips]
+      setVoiceFailed(failed)
       // Surface what happened — a cache-only run on a space with nothing prepared
       // pulls 0 clips (all 404 → skipped), which would otherwise look identical to
       // success and leave airplane-mode playback silently empty.
-      setVoiceMsg(r.clips > 0 ? `${r.clips} Audios offline` : 'Noch nichts vertont — erst „Audio vorbereiten" im Space')
+      setVoiceMsg(
+        r.clips > 0
+          ? `${r.clips} Audios offline${failed.length ? ` · ${failed.length} fehlgeschlagen` : ''}`
+          : 'Noch nichts vertont — erst „Audio vorbereiten" im Space',
+      )
     } catch (e) {
       if (alive.current) setOErr(String((e as Error)?.message ?? e))
     } finally {
@@ -340,13 +348,18 @@ function SpaceCard({ space, onDelete, online, voices }: { space: api.Meta; onDel
             ) : oerr ? (
               <span className="text-[var(--notation-danger)] truncate" title={oerr}>Offline sync failed</span>
             ) : voiceMsg ? (
-              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)] truncate" title={voiceMsg}>
+              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)] truncate"
+                title={voiceFailed.length ? 'Fehlgeschlagen:\n' + voiceFailed.join('\n') : voiceMsg}>
                 <Headphones size={12} className="flex-shrink-0" /> <span className="truncate">{voiceMsg}</span>
               </span>
             ) : synced ? (
               <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)]">
                 <Cloud size={12} fill="currentColor" /> Offline{info ? ` · ${formatDate(new Date(info.syncedAt).toISOString())}` : ''}
-                {info && info.failed > 0 && <span className="text-[var(--notation-danger)]"> · {info.failed} failed</span>}
+                {info && info.failed > 0 && (
+                  <span className="text-[var(--notation-danger)]"
+                    title={info.failedPaths?.length ? 'Nicht gecacht:\n' + info.failedPaths.join('\n') + (info.failed > info.failedPaths.length ? `\n… (+${info.failed - info.failedPaths.length})` : '') : undefined}>
+                    {' · '}{info.failed} failed</span>
+                )}
               </span>
             ) : space.created_at ? (
               <span>Created {formatDate(space.created_at)}</span>
