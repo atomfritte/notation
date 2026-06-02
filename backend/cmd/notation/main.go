@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -77,6 +78,8 @@ func main() {
 		Bitrate:       cfg.TTSBitrate,
 		CacheDir:      cfg.TTSCacheDir(),
 		CacheMaxBytes: cfg.TTSCacheMB << 20,
+		KokoroURL:     cfg.TTSKokoroURL,
+		KokoroVoices:  strings.Fields(cfg.TTSKokoroVoices),
 	})
 	if synth.Available() {
 		ids := make([]string, 0)

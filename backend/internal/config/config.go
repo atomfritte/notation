@@ -46,6 +46,9 @@ type Config struct {
 	TTSOpusEnc    string
 	TTSBitrate    int
 	TTSCacheMB    int64
+	// Optional Kokoro ONNX sidecar (higher-quality voice). Empty URL = off.
+	TTSKokoroURL    string
+	TTSKokoroVoices string
 }
 
 func Load() (*Config, error) {
@@ -71,6 +74,8 @@ func Load() (*Config, error) {
 		TTSOpusEnc:        getEnv("NOTATION_TTS_OPUSENC", "opusenc"),
 		TTSBitrate:        int(getEnvInt64("NOTATION_TTS_BITRATE", 32)),
 		TTSCacheMB:        getEnvInt64("NOTATION_TTS_CACHE_MB", 512),
+		TTSKokoroURL:      getEnv("NOTATION_TTS_KOKORO_URL", ""),
+		TTSKokoroVoices:   getEnv("NOTATION_TTS_KOKORO_VOICES", "de_DE-martin-kokoro"),
 	}
 	if !strings.HasPrefix(cfg.SharePath, "/") || cfg.SharePath == "/" {
 		return nil, fmt.Errorf("NOTATION_SHARE_PATH must be a non-root absolute path, got %q", cfg.SharePath)

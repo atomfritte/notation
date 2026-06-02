@@ -185,6 +185,29 @@ func TestSynth_PanicReleasesWaiters(t *testing.T) {
 	}
 }
 
+func TestSynth_KokoroVoices(t *testing.T) {
+	bin := t.TempDir()
+	// No piper/models — only opusenc + a Kokoro sidecar URL.
+	s := New(Config{
+		OpusEnc:      fakeBin(t, bin, "opusenc"),
+		ModelDir:     t.TempDir(),
+		CacheDir:     t.TempDir(),
+		KokoroURL:    "http://127.0.0.1:9/",
+		KokoroVoices: []string{"de_DE-martin-kokoro"},
+	})
+	if !s.Available() {
+		t.Fatal("kokoro-only config should be available")
+	}
+	vs := s.Voices()
+	if len(vs) != 1 || vs[0].ID != "de_DE-martin-kokoro" || vs[0].Lang != "de" {
+		t.Fatalf("voices = %+v", vs)
+	}
+	vm, err := s.resolveVoice("de_DE-martin-kokoro")
+	if err != nil || vm.engine != engineKokoro || vm.sampleRate != kokoroRate {
+		t.Fatalf("vm = %+v err=%v", vm, err)
+	}
+}
+
 func TestSynth_Unavailable(t *testing.T) {
 	s := New(Config{PiperBin: "/nonexistent/piper", OpusEnc: "/nonexistent/opusenc", ModelDir: t.TempDir(), CacheDir: t.TempDir()})
 	if s.Available() {
