@@ -3,8 +3,9 @@
 // cached responses when the network is down (airplane mode), so the space can be
 // browsed + read offline. A small localStorage registry tracks what's synced.
 //
-// Bookmarks are already offline (they live in localStorage). Comments + audio
-// come in later phases. Forms are skipped (interactive, fetched separately).
+// Caches the tree, every file, and comments (space-wide + per-file). Bookmarks
+// are already offline (localStorage). Audio comes in a later phase; forms are
+// skipped (interactive, fetched separately).
 
 import * as api from './api'
 
@@ -84,15 +85,30 @@ export async function syncSpace(
   const tree = (await treeRes.json()) as api.Entry[]
   const files = flattenFiles(tree)
 
+  // The space-wide comment list (sidebar) + each file's comments are cached too,
+  // so comments are readable offline. Bookmarks already live in localStorage.
+  await fetchAndCache(cache, api.allCommentsURL(id))
+
   // Track everything we want cached (absolute URLs) so we can prune the rest.
-  const wanted = new Set([treeURL, ...files.map(p => api.fileURL(id, p))].map(u => new URL(u, location.origin).href))
+  const abs = (u: string) => new URL(u, location.origin).href
+  const wanted = new Set([
+    treeURL,
+    api.allCommentsURL(id),
+    ...files.flatMap(p => [api.fileURL(id, p), api.commentsURL(id, p)]),
+  ].map(abs))
 
   let done = 0
   let failed = 0
   onProgress?.(0, files.length)
   for (let i = 0; i < files.length; i += SYNC_CONCURRENCY) {
     const batch = files.slice(i, i + SYNC_CONCURRENCY)
-    const results = await Promise.all(batch.map(p => fetchAndCache(cache, api.fileURL(id, p))))
+    const results = await Promise.all(batch.map(async (p) => {
+      const [file] = await Promise.all([
+        fetchAndCache(cache, api.fileURL(id, p)),
+        fetchAndCache(cache, api.commentsURL(id, p)), // comments are optional — don't count as a failure
+      ])
+      return file
+    }))
     for (const r of results) {
       if (!r) failed++
       done++
