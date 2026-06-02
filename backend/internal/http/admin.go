@@ -717,7 +717,7 @@ func (h *adminHandlers) getForm(w http.ResponseWriter, r *http.Request) {
 		writeSpaceError(w, err)
 		return
 	}
-	resp, err := buildFormResponse(h.store, id, chi.URLParam(r, "*"), true)
+	resp, err := buildFormResponse(h.store, id, chi.URLParam(r, "*"), true, true)
 	if err != nil {
 		writeFormError(w, err)
 		return
@@ -739,6 +739,51 @@ func (h *adminHandlers) postFormEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	h.git.Schedule(id, adminAuthor(r))
 	writeJSON(w, http.StatusCreated, entry)
+}
+
+func (h *adminHandlers) putFormEntry(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	entry, err := updateFormEntry(h.store, h.cfg, id, chi.URLParam(r, "*"), w, r)
+	if err != nil {
+		writeFormError(w, err)
+		return
+	}
+	h.git.Schedule(id, adminAuthor(r))
+	writeJSON(w, http.StatusOK, entry)
+}
+
+func (h *adminHandlers) deleteFormEntry(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	folder := chi.URLParam(r, "*")
+	if err := h.store.DeleteFormEntry(id, folder, r.URL.Query().Get("id")); err != nil {
+		writeFormError(w, err)
+		return
+	}
+	h.git.Schedule(id, adminAuthor(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *adminHandlers) postFormImage(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	path, err := uploadFormImage(h.store, h.cfg, id, chi.URLParam(r, "*"), w, r)
+	if err != nil {
+		writeFormError(w, err)
+		return
+	}
+	h.git.Schedule(id, adminAuthor(r))
+	writeJSON(w, http.StatusCreated, map[string]string{"path": path})
 }
 
 // ---- comments ----

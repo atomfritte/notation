@@ -41,6 +41,7 @@ export type Entry = {
 export type FormFieldType =
   | 'string' | 'text' | 'integer' | 'number' | 'bool'
   | 'date' | 'time' | 'datetime' | 'select' | 'email' | 'url'
+  | 'buttons' | 'multiselect' | 'smiley' | 'rating' | 'slider' | 'image'
 
 export type FormField = {
   key: string
@@ -49,6 +50,10 @@ export type FormField = {
   required: boolean
   options?: string[]
   default?: string
+  min?: number
+  max?: number
+  step?: number
+  levels?: number
 }
 
 export type FormSchema = {
@@ -70,6 +75,7 @@ export type FormData = {
   schema: FormSchema
   entries: FormEntry[]
   can_submit: boolean
+  can_edit?: boolean
 }
 
 export type CommentAnchor = {
@@ -165,6 +171,18 @@ export async function submitForm(folder: string, values: Record<string, unknown>
   })
   if (!r.ok) throw await asError(r)
   return r.json()
+}
+
+/** Upload one image attachment for a form (comment/edit guests); returns its
+ * stored path. Gated server-side like submission, not full file writes. */
+export async function uploadFormImage(folder: string, blob: Blob): Promise<string> {
+  const r = await fetch(`${API}/form-upload/${encodePath(folder)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+    body: blob,
+  })
+  if (!r.ok) throw await asError(r)
+  return (await r.json() as { path: string }).path
 }
 
 export async function postComment(

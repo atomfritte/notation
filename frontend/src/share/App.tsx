@@ -570,6 +570,8 @@ function ShareUI() {
                         const fresh = await api.getForm(file)
                         setFormData(fresh)
                       }}
+                      uploadImage={(blob) => api.uploadFormImage(file, blob)}
+                      imageURL={(path) => api.fileURLForShare(path)}
                     />
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">Loading form…</div>

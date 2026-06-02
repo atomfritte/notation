@@ -1027,6 +1027,17 @@ export function SpaceView() {
                       setFormData(fresh)
                       refreshTree()
                     }}
+                    onUpdate={async (entryID, values) => {
+                      await api.updateForm(spaceID, file, entryID, values)
+                      setFormData(await api.getForm(spaceID, file))
+                    }}
+                    onDelete={async (entryID) => {
+                      await api.deleteFormEntry(spaceID, file, entryID)
+                      setFormData(await api.getForm(spaceID, file))
+                      refreshTree()
+                    }}
+                    uploadImage={(blob) => api.uploadFormImage(spaceID, file, blob)}
+                    imageURL={(path) => api.fileURL(spaceID, path)}
                     onEditTemplate={() => setSearchParams({ file: `${file}/_form.md` })}
                   />
                 ) : (
