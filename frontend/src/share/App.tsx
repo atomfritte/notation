@@ -54,7 +54,7 @@ function ShareUI() {
     api.ttsInfo().then(r => { if (!cancelled) setTtsVoices(r.available ? r.voices : []) }).catch(() => { if (!cancelled) setTtsVoices([]) })
     return () => { cancelled = true }
   }, [])
-  const ttsURL = useCallback((voiceId: string, text: string) => api.ttsURL(voiceId, text), [])
+  const ttsURL = useCallback((voiceId: string, text: string, style?: string) => api.ttsURL(voiceId, text, style), [])
 
   // Theme: we still seed from prefers-color-scheme but only allow the user
   // to override it when features.theme is on. initTheme() repaints the

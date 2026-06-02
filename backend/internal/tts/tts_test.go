@@ -71,13 +71,13 @@ func TestSynth_DiscoveryAndVoices(t *testing.T) {
 func TestSynth_CacheAndKeys(t *testing.T) {
 	s := newTestSynth(t)
 	var calls int32
-	s.synthFn = func(_ context.Context, vm *voiceModel, text string) ([]byte, error) {
+	s.synthFn = func(_ context.Context, vm *voiceModel, _ styleParams, text string) ([]byte, error) {
 		atomic.AddInt32(&calls, 1)
 		return []byte("audio:" + vm.ID + ":" + text), nil
 	}
 	ctx := context.Background()
 
-	a1, etag, err := s.Get(ctx, "test", "de_DE-thorsten-high", "Hallo Welt")
+	a1, etag, err := s.Get(ctx, "test", "de_DE-thorsten-high", "", "Hallo Welt")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -85,34 +85,55 @@ func TestSynth_CacheAndKeys(t *testing.T) {
 		t.Fatalf("a1 = %q etag=%q", a1, etag)
 	}
 	// Cache hit: no new synth.
-	if _, _, err := s.Get(ctx, "test", "de_DE-thorsten-high", "Hallo Welt"); err != nil {
+	if _, _, err := s.Get(ctx, "test", "de_DE-thorsten-high", "", "Hallo Welt"); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
 		t.Fatalf("calls = %d after cache hit, want 1", calls)
 	}
 	// Different voice → different key → new synth.
-	if _, _, err := s.Get(ctx, "test", "en_US-lessac-medium", "Hallo Welt"); err != nil {
+	if _, _, err := s.Get(ctx, "test", "en_US-lessac-medium", "", "Hallo Welt"); err != nil {
 		t.Fatal(err)
 	}
 	// Different text → new synth.
-	if _, _, err := s.Get(ctx, "test", "de_DE-thorsten-high", "Andere"); err != nil {
+	if _, _, err := s.Get(ctx, "test", "de_DE-thorsten-high", "", "Andere"); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 3 {
 		t.Fatalf("calls = %d, want 3", calls)
 	}
 	// Empty voice → falls back to the first voice (no error).
-	if _, _, err := s.Get(ctx, "test", "", "x"); err != nil {
+	if _, _, err := s.Get(ctx, "test", "", "", "x"); err != nil {
 		t.Fatalf("empty voice should fall back: %v", err)
 	}
 	// Unknown voice → error.
-	if _, _, err := s.Get(ctx, "test", "xx_XX-nope", "x"); err == nil {
+	if _, _, err := s.Get(ctx, "test", "xx_XX-nope", "", "x"); err == nil {
 		t.Error("unknown voice should error")
 	}
 	// Empty text → error.
-	if _, _, err := s.Get(ctx, "test", "de_DE-thorsten-high", "   "); err == nil {
+	if _, _, err := s.Get(ctx, "test", "de_DE-thorsten-high", "", "   "); err == nil {
 		t.Error("empty text should error")
+	}
+}
+
+func TestSynth_Style(t *testing.T) {
+	if styleFor("meditation").lengthScale <= 1 || styleFor("meditation").sentenceSilence <= 0 {
+		t.Errorf("meditation should be slower with pauses: %+v", styleFor("meditation"))
+	}
+	if styleFor("").lengthScale != 0 || styleFor("nope").lengthScale != 0 {
+		t.Error("default/unknown style must not override piper defaults")
+	}
+	s := newTestSynth(t)
+	var calls int32
+	s.synthFn = func(_ context.Context, _ *voiceModel, _ styleParams, _ string) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		return []byte("a"), nil
+	}
+	ctx := context.Background()
+	_, _, _ = s.Get(ctx, "test", "de_DE-thorsten-high", "", "same text")
+	_, _, _ = s.Get(ctx, "test", "de_DE-thorsten-high", "meditation", "same text") // different style → new key
+	if calls != 2 {
+		t.Errorf("style must be part of the cache key: %d synth calls, want 2", calls)
 	}
 }
 
@@ -120,7 +141,7 @@ func TestSynth_SingleFlight(t *testing.T) {
 	s := newTestSynth(t)
 	var calls int32
 	release := make(chan struct{})
-	s.synthFn = func(_ context.Context, _ *voiceModel, _ string) ([]byte, error) {
+	s.synthFn = func(_ context.Context, _ *voiceModel, _ styleParams, _ string) ([]byte, error) {
 		atomic.AddInt32(&calls, 1)
 		<-release // hold the flight open so concurrent callers pile up
 		return []byte("x"), nil
@@ -128,7 +149,7 @@ func TestSynth_SingleFlight(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); _, _, _ = s.Get(context.Background(), "test", "de_DE-thorsten-high", "shared") }()
+		go func() { defer wg.Done(); _, _, _ = s.Get(context.Background(), "test", "de_DE-thorsten-high", "", "shared") }()
 	}
 	time.Sleep(30 * time.Millisecond)
 	close(release)
@@ -143,17 +164,17 @@ func TestSynth_PanicReleasesWaiters(t *testing.T) {
 	s := newTestSynth(t)
 	enter := make(chan struct{})
 	release := make(chan struct{})
-	s.synthFn = func(_ context.Context, _ *voiceModel, _ string) ([]byte, error) {
+	s.synthFn = func(_ context.Context, _ *voiceModel, _ styleParams, _ string) ([]byte, error) {
 		close(enter)
 		<-release
 		panic("boom")
 	}
-	go func() { defer func() { _ = recover() }(); _, _, _ = s.Get(context.Background(), "test", "de_DE-thorsten-high", "x") }()
+	go func() { defer func() { _ = recover() }(); _, _, _ = s.Get(context.Background(), "test", "de_DE-thorsten-high", "", "x") }()
 	<-enter // leader is inside fn, holding the flight open
 	waiterDone := make(chan struct{})
 	go func() {
 		defer func() { _ = recover(); close(waiterDone) }()
-		_, _, _ = s.Get(context.Background(), "test", "de_DE-thorsten-high", "x")
+		_, _, _ = s.Get(context.Background(), "test", "de_DE-thorsten-high", "", "x")
 	}()
 	time.Sleep(30 * time.Millisecond) // let the waiter reach wg.Wait()
 	close(release)                    // leader panics → deferred Done must wake the waiter
@@ -169,7 +190,7 @@ func TestSynth_Unavailable(t *testing.T) {
 	if s.Available() {
 		t.Fatal("expected unavailable without binaries")
 	}
-	if _, _, err := s.Get(context.Background(), "test", "", "x"); err != ErrUnavailable {
+	if _, _, err := s.Get(context.Background(), "test", "", "", "x"); err != ErrUnavailable {
 		t.Errorf("err = %v, want ErrUnavailable", err)
 	}
 }
