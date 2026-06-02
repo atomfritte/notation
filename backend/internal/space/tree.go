@@ -22,7 +22,7 @@ type Entry struct {
 }
 
 // Tree returns a recursive listing of the Space's files directory. Dotfiles
-// and symlinks are skipped silently. Entries are sorted: directories first,
+// and symlinks are skipped silently. Entries are sorted: files first,
 // then by name (case-insensitive).
 func (s *Store) Tree(spaceID string) ([]Entry, error) {
 	root, err := s.openRoot(spaceID)
@@ -108,7 +108,9 @@ func readDirInRoot(root *os.Root, dir string) ([]Entry, error) {
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].IsDir != out[j].IsDir {
-			return out[i].IsDir
+			// Files before subfolders: a reader sees this folder's own pages
+			// first, then descends into nested folders.
+			return !out[i].IsDir
 		}
 		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
 	})
