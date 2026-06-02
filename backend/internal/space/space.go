@@ -23,9 +23,10 @@ import (
 )
 
 var (
-	ErrNotFound  = errors.New("space not found")
-	ErrExists    = errors.New("space already exists")
-	ErrInvalidID = errors.New("invalid space id")
+	ErrNotFound     = errors.New("space not found")
+	ErrExists       = errors.New("space already exists")
+	ErrInvalidID    = errors.New("invalid space id")
+	ErrInvalidBoard = errors.New("invalid board status")
 )
 
 // idPattern: lowercase alnum + - + _, length 3-32, must start and end with alnum.
@@ -43,11 +44,37 @@ type Meta struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Owner     string    `json:"owner"`
+	// Status is the Kanban column the space lives in on the landing-page board.
+	// Empty means "untriaged" — the frontend renders those in the Inbox column.
+	Status string `json:"status,omitempty"`
+	// Order is the manual sort rank within a column (ascending). 0 is the
+	// default for never-dragged spaces; the frontend tie-breaks equal ranks by
+	// created_at descending so freshly created spaces float to the top.
+	Order int `json:"order,omitempty"`
+}
+
+// boardStatuses is the closed set of Kanban columns a space may be assigned to.
+// The empty string is also accepted (it means "untriaged" → Inbox).
+var boardStatuses = map[string]bool{"": true, "inbox": true, "backlog": true, "active": true, "archive": true}
+
+// ValidBoardStatus reports whether s is an allowed Kanban column. Exported so the
+// HTTP layer can reject garbage before it ever reaches the store.
+func ValidBoardStatus(s string) bool { return boardStatuses[s] }
+
+// BoardUpdate is one card's new column + sort rank, applied by SetBoardBatch.
+type BoardUpdate struct {
+	ID     string
+	Status string
+	Order  int
 }
 
 type Store struct {
 	root string
-	mu   sync.Mutex // serializes create/delete; per-file ops use OS atomicity
+	// mu guards metadata consistency: writers (Create/Delete/SetBoardBatch) take
+	// the write lock; readers (List/Get) take the read lock so a concurrent batch
+	// board update can't expose a half-applied view. Per-file content ops still
+	// rely on OS atomicity, not this lock.
+	mu sync.RWMutex
 }
 
 func NewStore(rootDir string) *Store {
@@ -55,6 +82,8 @@ func NewStore(rootDir string) *Store {
 }
 
 func (s *Store) List() ([]Meta, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	entries, err := os.ReadDir(s.root)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -129,7 +158,57 @@ func (s *Store) Get(id string) (Meta, error) {
 	if !idPattern.MatchString(id) {
 		return Meta{}, ErrInvalidID
 	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.readMeta(id)
+}
+
+// SetBoardBatch atomically-ish applies a set of Kanban column/order changes
+// (one drag on the landing page typically touches the source + target columns).
+// It validates every update — id syntax, known status, and that the space still
+// exists — in a first pass before writing anything, so a single bad entry can't
+// leave the board half-updated. UpdatedAt is bumped on every touched space.
+func (s *Store) SetBoardBatch(updates []BoardUpdate) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	metas := make([]Meta, len(updates))
+	seen := make(map[string]bool, len(updates))
+	for i, u := range updates {
+		id := strings.ToLower(strings.TrimSpace(u.ID))
+		if !idPattern.MatchString(id) {
+			return ErrInvalidID
+		}
+		if !ValidBoardStatus(u.Status) {
+			return ErrInvalidBoard
+		}
+		// Negative ranks would sort ahead of untriaged (order 0) cards and have no
+		// legitimate use; reject so a hand-crafted request can't scramble the board.
+		if u.Order < 0 {
+			return ErrInvalidBoard
+		}
+		// A single batch addressing the same space twice would silently last-write-
+		// wins; reject it so the caller's intent is never ambiguous.
+		if seen[id] {
+			return ErrInvalidID
+		}
+		seen[id] = true
+		m, err := s.readMeta(id)
+		if err != nil {
+			return err
+		}
+		m.Status = u.Status
+		m.Order = u.Order
+		metas[i] = m
+	}
+	now := time.Now().UTC()
+	for i := range metas {
+		metas[i].UpdatedAt = now
+		if err := s.writeMeta(metas[i].ID, metas[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) readMeta(id string) (Meta, error) {
