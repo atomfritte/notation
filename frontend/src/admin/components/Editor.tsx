@@ -18,6 +18,42 @@ import * as api from '../lib/api'
 type IEditor = MonacoNS.editor.IStandaloneCodeEditor
 type IMonaco = typeof MonacoNS
 
+// Static editor options. Hoisted to module scope so the object identity is
+// stable across renders — @monaco-editor/react re-runs editor.updateOptions()
+// whenever this prop's identity changes, so an inline literal would fire it on
+// every keystroke. Nothing here depends on props/state (theme is a separate
+// prop), so a module constant is the right home.
+const EDITOR_OPTIONS: MonacoNS.editor.IStandaloneEditorConstructionOptions = {
+  fontSize: 14,
+  // Use the same monospace stack as the markdown viewer's code blocks — keeps
+  // fenced code legible inside the editor and matches the look of what the
+  // reader will eventually see. Monaco doesn't read CSS vars, so the stack is
+  // duplicated here (kept in sync with --notation-code-font in shared/index.css).
+  fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', 'Courier New', monospace",
+  lineNumbers: 'on',
+  lineNumbersMinChars: 3,
+  renderLineHighlight: 'all',
+  wordWrap: 'on',
+  wrappingIndent: 'same',
+  minimap: { enabled: false },
+  scrollBeyondLastLine: false,
+  padding: { top: 12, bottom: 80 },
+  automaticLayout: true,
+  renderWhitespace: 'none',
+  smoothScrolling: true,
+  cursorBlinking: 'smooth',
+  cursorSmoothCaretAnimation: 'on',
+  mouseWheelZoom: false,
+  stickyScroll: { enabled: false },
+  tabSize: 2,
+  insertSpaces: true,
+  quickSuggestions: { other: true, comments: false, strings: true },
+  suggestOnTriggerCharacters: true,
+  acceptSuggestionOnEnter: 'on',
+  scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+  unicodeHighlight: { ambiguousCharacters: false, invisibleCharacters: false },
+}
+
 type Props = {
   spaceID: string
   path: string
@@ -54,11 +90,27 @@ export default function Editor({
   useEffect(() => { pathRef.current = path }, [path])
   useEffect(() => { onCommentRequestRef.current = onCommentRequest }, [onCommentRequest])
 
-  // Reset content + etag when the user navigates to a different file.
+  // Adopt the parent's `initial` as the editor buffer on a genuine file switch,
+  // or while the buffer is still pristine (so a late first load can fill an
+  // untouched editor). We deliberately do NOT re-apply `initial` once the user
+  // has unsaved edits: SpaceView paints from the content cache and then
+  // revalidates against the server (stale-while-revalidate), so a background
+  // fetch can hand us a fresh `initial` mid-edit. Re-feeding Monaco's
+  // controlled `value` runs a full-range executeEdits with forceMoveMarkers,
+  // which snaps the caret to the document end (and discards the in-flight
+  // edit) — that was the "cursor jumps to the end while typing" bug.
+  const baselineRef = useRef(initial)
+  const syncedPathRef = useRef(path)
   useEffect(() => {
-    setContent(initial)
-    setCurrentEtag(etag)
-  }, [initial, path, etag])
+    const fileSwitched = syncedPathRef.current !== path
+    const pristine = content === baselineRef.current
+    baselineRef.current = initial
+    syncedPathRef.current = path
+    if (fileSwitched || pristine) {
+      setContent(initial)
+      setCurrentEtag(etag)
+    }
+  }, [content, initial, path, etag])
 
   // ---- save ----------------------------------------------------------------
   const save = useCallback(async () => {
@@ -436,37 +488,7 @@ export default function Editor({
           onChange={(v) => setContent(v ?? '')}
           onMount={handleMount}
           theme={theme === 'dark' ? 'notation-dark' : 'notation-light'}
-          options={{
-            fontSize: 14,
-            // Use the same monospace stack as the markdown viewer's code
-            // blocks — keeps fenced code legible inside the editor and
-            // matches the look of what the reader will eventually see.
-            // Monaco doesn't read CSS vars, so the stack is duplicated here
-            // (kept in sync with --notation-code-font in shared/index.css).
-            fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', 'Courier New', monospace",
-            lineNumbers: 'on',
-            lineNumbersMinChars: 3,
-            renderLineHighlight: 'all',
-            wordWrap: 'on',
-            wrappingIndent: 'same',
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            padding: { top: 12, bottom: 80 },
-            automaticLayout: true,
-            renderWhitespace: 'none',
-            smoothScrolling: true,
-            cursorBlinking: 'smooth',
-            cursorSmoothCaretAnimation: 'on',
-            mouseWheelZoom: false,
-            stickyScroll: { enabled: false },
-            tabSize: 2,
-            insertSpaces: true,
-            quickSuggestions: { other: true, comments: false, strings: true },
-            suggestOnTriggerCharacters: true,
-            acceptSuggestionOnEnter: 'on',
-            scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
-            unicodeHighlight: { ambiguousCharacters: false, invisibleCharacters: false },
-          }}
+          options={EDITOR_OPTIONS}
         />
       </div>
 

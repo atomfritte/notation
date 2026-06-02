@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones } from 'lucide-react'
 import * as api from '../lib/api'
+import { getCachedFile, setCachedFile, prefetchFile } from '../lib/contentCache'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
 import { FileTree } from '../components/FileTree'
 import { MarkdownView, stripMdExt } from '../components/MarkdownView'
@@ -42,6 +43,11 @@ function isTypingTarget(t: EventTarget | null): boolean {
   if (t.closest('.monaco-editor')) return true
   return false
 }
+
+// Cache key for a file's text body. NUL-separated so it can't collide with a
+// path that happens to contain the separator, and `a`-prefixed so the admin
+// SPA never reads the share SPA's entries in the same browser.
+const contentKey = (spaceID: string, path: string) => `a\u0000${spaceID}\u0000${path}`
 
 export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
@@ -500,6 +506,19 @@ export function SpaceView() {
     [setSearchParams, isMobile],
   )
 
+  // Warm a page's text into the cache on hover (file tree, in-document links,
+  // prev/next) so the click that follows paints from cache instead of waiting
+  // on the network. Best-effort and deduped — see contentCache.
+  const warmFile = useCallback(
+    (p: string) => {
+      if (!spaceID || !p || !isTextFile(p)) return
+      prefetchFile(contentKey(spaceID, p), () =>
+        api.readFile(spaceID, p).then(res => ({ content: res.content, etag: res.etag })),
+      )
+    },
+    [spaceID],
+  )
+
   async function onNewFile() {
     const path = window.prompt('New page path (e.g. notes/meeting):')?.trim()
     if (!path) return
@@ -580,11 +599,26 @@ export function SpaceView() {
     }
     let cancelled = false
     if (isTextFile(file)) {
+      // Cache-first (stale-while-revalidate): if we've opened this file before
+      // — or it was prefetched on hover — paint its text immediately so the
+      // switch feels instant, then revalidate against the server below.
+      const ck = contentKey(spaceID, file)
+      const cached = getCachedFile(ck)
+      if (cached) {
+        setContent(cached.content)
+        setEtag(cached.etag)
+      }
       api.readFile(spaceID, file)
         .then(res => {
           if (cancelled) return
-          setContent(res.content)
-          setEtag(res.etag)
+          setCachedFile(ck, res.content, res.etag)
+          // Skip the redundant state churn when the server agrees with what we
+          // already painted from cache — that no-op would otherwise reset an
+          // editor the user may have just opened on the cached text.
+          if (!cached || cached.content !== res.content) {
+            setContent(res.content)
+            setEtag(res.etag)
+          }
         })
         // A 400 usually means the path is a directory — e.g. a form folder the
         // tree hasn't classified yet. Don't flash an error; once the tree loads
@@ -783,6 +817,7 @@ export function SpaceView() {
                 entries={tree}
                 current={file}
                 onSelect={selectFile}
+                onPrefetch={warmFile}
                 onContextMenu={handleFileContextMenu}
                 onBackgroundContextMenu={handleTreeBackgroundContextMenu}
                 onMove={movePathToDir}
@@ -1028,6 +1063,7 @@ export function SpaceView() {
                   // Refresh content + tree after a restore.
                   if (isTextFile(file)) {
                     api.readFile(spaceID, file).then(res => {
+                      setCachedFile(contentKey(spaceID, file), res.content, res.etag)
                       setContent(res.content)
                       setEtag(res.etag)
                     }).catch(e => setErr(String(e)))
@@ -1097,6 +1133,9 @@ export function SpaceView() {
                       theme={theme}
                       allFiles={allFiles}
                       onSaved={(c, newEtag) => {
+                        // Keep the cache in step with the save so navigating away
+                        // and back paints the just-saved text, not a stale body.
+                        setCachedFile(contentKey(spaceID, file), c, newEtag)
                         setContent(c)
                         setEtag(newEtag)
                         refreshTree()
@@ -1129,6 +1168,7 @@ export function SpaceView() {
                         currentFile={file}
                         navFiles={allFiles}
                         onNavigate={selectFile}
+                        onPrefetch={warmFile}
                       />
                     ) : (
                       <FileViewer spaceID={spaceID} path={file} content={content} theme={theme} />
