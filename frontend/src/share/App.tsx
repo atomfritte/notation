@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import {
   PanelLeft, List, MessageSquare, Search, Printer, Sun, Moon, Palette,
-  Bookmark, FileText, Folder, HelpCircle, Menu, X, Check, Headphones,
+  Bookmark, FileText, Folder, HelpCircle, X, Headphones,
 } from 'lucide-react'
 import * as api from './lib/api'
 import { ShareCommentsPanel } from './ShareCommentsPanel'
+import { HeaderActionBtn, HeaderOverflowMenu, useHeaderWidth, headerIsCompact, type HeaderAction } from '../admin/components/HeaderActions'
 import { FileTree } from '../admin/components/FileTree'
 import { FileViewer } from '../admin/components/FileViewer'
 import { MarkdownView, stripMdExt } from '../admin/components/MarkdownView'
@@ -114,19 +115,8 @@ function ShareUI() {
   const [sidebarTab, setSidebarTab] = useState<'files' | 'bookmarks' | 'comments'>('files')
 
   // Responsive header: when the action icons can't fit, collapse them into a
-  // single overflow ("hamburger") menu. We watch the header's width and switch
-  // once the icons would need more room than is available.
-  const headerRef = useRef<HTMLElement>(null)
-  const [headerWidth, setHeaderWidth] = useState(0)
-  useEffect(() => {
-    const el = headerRef.current
-    if (!el || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(entries => {
-      for (const e of entries) setHeaderWidth(e.contentRect.width)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [file])
+  // single overflow ("hamburger") menu (shared with the admin header).
+  const { ref: headerRef, width: headerWidth } = useHeaderWidth()
 
   // Comment coordination — viewer ↔ thread
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
@@ -396,7 +386,7 @@ function ShareUI() {
   // or the Edit button. Before the first measurement, fall back to isMobile.
   const editVisible = canEdit && isTextFile(file) && !isForm
   const reservedW = 40 /* sidebar toggle */ + 72 /* title min */ + (editVisible ? 76 : 0)
-  const compactHeader = headerWidth === 0 ? isMobile : headerActions.length * 34 > headerWidth - reservedW
+  const compactHeader = headerIsCompact(headerWidth, headerActions.length, reservedW, isMobile)
 
   return (
     <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
@@ -768,100 +758,6 @@ function isTypingTarget(t: EventTarget | null): boolean {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
   if (t.isContentEditable) return true
   return false
-}
-
-function HeaderBtn({
-  children, title, onClick, active,
-}: {
-  children: React.ReactNode
-  title: string
-  onClick: () => void
-  active?: boolean
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className={
-        'p-1.5 rounded-md transition-colors flex items-center ' +
-        (active
-          ? 'bg-[var(--notation-border)] text-[color:var(--notation-accent)]'
-          : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-border)]')
-      }
-    >
-      {children}
-    </button>
-  )
-}
-
-type HeaderAction = {
-  key: string
-  label: string
-  icon: React.ReactNode
-  onClick: () => void
-  active?: boolean
-  badge?: number
-}
-
-// A single header action rendered inline (icon + optional count badge).
-function HeaderActionBtn({ action }: { action: HeaderAction }) {
-  return (
-    <HeaderBtn title={action.label} active={action.active} onClick={action.onClick}>
-      {action.icon}
-      {action.badge ? <span className="ml-1 text-[10px] font-bold">{action.badge}</span> : null}
-    </HeaderBtn>
-  )
-}
-
-// Hamburger menu that holds every header action when they don't fit inline.
-function HeaderOverflowMenu({ actions }: { actions: HeaderAction[] }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey) }
-  }, [open])
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(v => !v)}
-        title="More"
-        aria-label="More actions"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="p-1.5 rounded-md transition-colors flex items-center text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-border)]"
-      >
-        <Menu size={18} />
-      </button>
-      {open && (
-        <div role="menu" className="surface-elevated absolute right-0 top-full mt-1 min-w-[210px] bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-md shadow-xl py-1 z-50">
-          {actions.map(a => (
-            <button
-              key={a.key}
-              role="menuitem"
-              onClick={() => { a.onClick(); setOpen(false) }}
-              className={
-                'w-full flex items-center gap-2.5 px-3 py-1.5 text-sm transition-colors hover:bg-[var(--notation-border)] ' +
-                (a.active ? 'text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg)]')
-              }
-            >
-              <span className="flex-shrink-0 flex items-center">{a.icon}</span>
-              <span className="flex-1 text-left truncate">{a.label}</span>
-              {a.badge ? (
-                <span className="text-[10px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full">{a.badge}</span>
-              ) : a.active ? (
-                <Check size={14} className="text-[color:var(--notation-accent)] flex-shrink-0" />
-              ) : null}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 export function App() {
