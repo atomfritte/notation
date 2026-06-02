@@ -103,6 +103,55 @@ func (h *adminHandlers) deleteSpace(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type boardUpdateReq struct {
+	Moves []struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+		Order  int    `json:"order"`
+	} `json:"moves"`
+}
+
+// updateBoard persists Kanban column + ordering changes for the landing-page
+// board. One drag usually sends every card in the affected column(s) with fresh
+// ranks; the store applies them as a validated batch. Board state lives in each
+// space's meta.json (not git-tracked) so it stays consistent across the admin's
+// devices without polluting file history.
+func (h *adminHandlers) updateBoard(w http.ResponseWriter, r *http.Request) {
+	var req boardUpdateReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256*1024)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(req.Moves) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	// Belt-and-suspenders: the 256KB body cap above already bounds this well
+	// below 5000 for real space ids; the count cap just makes the limit explicit.
+	if len(req.Moves) > 5000 {
+		writeError(w, http.StatusBadRequest, "too many moves")
+		return
+	}
+	updates := make([]space.BoardUpdate, len(req.Moves))
+	for i, m := range req.Moves {
+		updates[i] = space.BoardUpdate{ID: m.ID, Status: m.Status, Order: m.Order}
+	}
+	if err := h.store.SetBoardBatch(updates); err != nil {
+		switch {
+		case errors.Is(err, space.ErrInvalidID):
+			writeError(w, http.StatusBadRequest, "invalid space id")
+		case errors.Is(err, space.ErrInvalidBoard):
+			writeError(w, http.StatusBadRequest, "invalid status (inbox|backlog|active|archive)")
+		case errors.Is(err, space.ErrNotFound):
+			writeError(w, http.StatusNotFound, "space not found")
+		default:
+			writeInternal(w, r, "spaces.board", err)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *adminHandlers) getSpace(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "spaceID")
 	m, err := h.store.Get(id)

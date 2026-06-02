@@ -16,13 +16,22 @@ function attachCSRF(init: RequestInit | undefined): RequestInit {
   return out
 }
 
+/** Kanban columns on the landing-page board. `''`/undefined = untriaged → Inbox. */
+export type BoardColumn = 'inbox' | 'backlog' | 'active' | 'archive'
+
 export type Meta = {
   id: string
   name: string
   created_at: string
   updated_at: string
   owner: string
+  /** Kanban column; absent/'' means untriaged (rendered in Inbox). */
+  status?: BoardColumn | ''
+  /** Manual sort rank within a column (ascending); absent = 0. */
+  order?: number
 }
+
+export type BoardMove = { id: string; status: BoardColumn; order: number }
 
 export type Entry = {
   name: string
@@ -130,6 +139,15 @@ export const createSpace = (id: string, name?: string) =>
 
 export const deleteSpace = (id: string) =>
   fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/** Persist Kanban column + ordering for one or more spaces in a single batch
+ *  (one drag typically reindexes the source + target columns). */
+export const updateBoard = (moves: BoardMove[]) =>
+  fetchJSON<void>('/api/admin/board', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ moves }),
+  })
 
 export const getTree = (id: string) =>
   fetchJSON<Entry[]>(`/api/admin/spaces/${encodeURIComponent(id)}/tree`)

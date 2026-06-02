@@ -159,6 +159,9 @@ func NewRouter(d Deps) (http.Handler, error) {
 		ar.Get("/tts/info", ahdmin.getTTSInfo)
 		ar.Get("/spaces", ahdmin.listSpaces)
 		ar.Post("/spaces", ahdmin.createSpace)
+		// Landing-page Kanban board: batch-update column + ordering across spaces.
+		// Top-level (not under /spaces/{spaceID}) since one drag spans many spaces.
+		ar.Patch("/board", ahdmin.updateBoard)
 		ar.Route("/spaces/{spaceID}", func(sr chi.Router) {
 			sr.Get("/", ahdmin.getSpace)
 			sr.Delete("/", ahdmin.deleteSpace)
