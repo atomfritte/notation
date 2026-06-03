@@ -90,27 +90,33 @@ export default function Editor({
   useEffect(() => { pathRef.current = path }, [path])
   useEffect(() => { onCommentRequestRef.current = onCommentRequest }, [onCommentRequest])
 
-  // Adopt the parent's `initial` as the editor buffer on a genuine file switch,
-  // or while the buffer is still pristine (so a late first load can fill an
-  // untouched editor). We deliberately do NOT re-apply `initial` once the user
-  // has unsaved edits: SpaceView paints from the content cache and then
-  // revalidates against the server (stale-while-revalidate), so a background
-  // fetch can hand us a fresh `initial` mid-edit. Re-feeding Monaco's
-  // controlled `value` runs a full-range executeEdits with forceMoveMarkers,
-  // which snaps the caret to the document end (and discards the in-flight
-  // edit) — that was the "cursor jumps to the end while typing" bug.
+  // The Monaco editor is UNCONTROLLED: we hand it its text once via
+  // `defaultValue` and let it own the buffer. We deliberately do NOT pass a
+  // `value` prop — @monaco-editor/react re-applies a controlled `value` to the
+  // model with a full-range executeEdits(forceMoveMarkers) on every render
+  // where it differs from the model, and because React state lags fast
+  // keystrokes the value it re-applies is briefly stale → the caret snaps to
+  // the document end mid-word. `content` is still mirrored from the model via
+  // onChange (for the dirty flag, save, and the wiki-link picker) but never fed
+  // back into Monaco.
+  //
+  // External content still has to reach the model: a real file switch remounts
+  // the editor (key={path} below); a late first load or a stale-while-
+  // revalidate fetch that resolves after mount is pushed in here imperatively —
+  // but only while the buffer is still pristine, so an edit in progress is never
+  // clobbered (and the caret is never moved while the user is typing).
   const baselineRef = useRef(initial)
-  const syncedPathRef = useRef(path)
   useEffect(() => {
-    const fileSwitched = syncedPathRef.current !== path
-    const pristine = content === baselineRef.current
-    baselineRef.current = initial
-    syncedPathRef.current = path
-    if (fileSwitched || pristine) {
-      setContent(initial)
-      setCurrentEtag(etag)
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!editor || !model) return
+    const pristine = model.getValue() === baselineRef.current
+    if (pristine && model.getValue() !== initial) {
+      editor.setValue(initial) // fires onChange → keeps `content` in sync
     }
-  }, [content, initial, path, etag])
+    if (pristine) setCurrentEtag(etag)
+    baselineRef.current = initial
+  }, [initial, etag])
 
   // ---- save ----------------------------------------------------------------
   const save = useCallback(async () => {
@@ -482,9 +488,14 @@ export default function Editor({
 
       <div className="flex-1 min-h-0">
         <MonacoEditor
+          // Remount on a real file switch so the new file's text loads via
+          // defaultValue; within a file the same instance is kept.
+          key={path}
           height="100%"
           defaultLanguage="markdown"
-          value={content}
+          // Uncontrolled: seed once, then the editor owns the buffer. See the
+          // baselineRef effect above for why we never pass a controlled `value`.
+          defaultValue={initial}
           onChange={(v) => setContent(v ?? '')}
           onMount={handleMount}
           theme={theme === 'dark' ? 'notation-dark' : 'notation-light'}
