@@ -112,6 +112,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// An admin session cookie without Secure is one downgraded request away
+	// from theft — and it unlocks every space. Only an explicit plain-HTTP
+	// config gets here; make sure it was a choice, not an oversight.
+	if !cfg.CookieSecure() && !cfg.DevBypassAuth {
+		logger.Warn("session cookie is NOT marked Secure (plain-HTTP config); set NOTATION_COOKIE_SECURE=1 or an https:// NOTATION_BASE_URL if this instance is reachable via TLS")
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Bind,
 		Handler:           handler,
