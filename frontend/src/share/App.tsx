@@ -21,6 +21,7 @@ import { ThemePalette } from '../admin/components/ThemePalette'
 import { HelpPanel } from '../admin/components/HelpPanel'
 import { initTheme } from '../admin/lib/theme'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../admin/lib/fileTypes'
+import { useNewPages } from '../admin/lib/newPages'
 
 // Cache key for a shared file's body. NUL-separated (can't appear in a token or
 // path) and `s`-prefixed so the share SPA never reads the admin SPA's entries.
@@ -204,6 +205,13 @@ function ShareUI() {
   // treat it as a focused single-page reader: open it immediately and start
   // with the sidebar closed (one entry is no navigation).
   const singlePage = tree.length === 1 && (!tree[0].is_dir || !!tree[0].form)
+
+  // "New since last visit" badges — a returning guest spots pages that were
+  // added after their previous visit. Keyed by the hashed share id, so the
+  // raw token never lands in localStorage.
+  const { newPaths, markAllSeen } = useNewPages(
+    `notation_new_pages_${STORAGE_ID}`, tree, file,
+  )
 
   // Auto-pick a default file (readme/index/home/first-md) when the share
   // URL doesn't specify one. Same algorithm as the admin SpaceView so
@@ -556,6 +564,8 @@ function ShareUI() {
               onSelect={select}
               onPrefetch={warmFile}
               collapseStorageKey={`notation_share_tree_collapsed_${info.space.id}`}
+              newPaths={newPaths}
+              onMarkAllSeen={markAllSeen}
             />
           )}
           {canComment && sidebarTab === 'comments' && (

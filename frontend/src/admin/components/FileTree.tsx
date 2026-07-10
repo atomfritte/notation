@@ -30,6 +30,12 @@ type Props = {
   /** localStorage key for persisting the collapsed-folders map. Optional;
    *  if omitted the state stays in-memory only. */
   collapseStorageKey?: string
+  /** Paths considered "new since last visit" (files and form folders — see
+   *  lib/newPages). New files get a pill, folders containing them get a dot. */
+  newPaths?: Set<string>
+  /** Clears every new-page badge at once; renders a slim header row above the
+   *  tree while there is something to clear. Root instance only. */
+  onMarkAllSeen?: () => void
   depth?: number
 }
 
@@ -60,6 +66,8 @@ export function FileTree({
   onMove,
   onExternalDrop,
   collapseStorageKey,
+  newPaths,
+  onMarkAllSeen,
   depth = 0,
 }: Props) {
   // Single per-tree-instance "which row is the active drop target" state.
@@ -141,7 +149,24 @@ export function FileTree({
   // catch them. (isRoot already declared earlier for the collapse-storage
   // wiring — reuse here.)
 
+  const newCount = isRoot && newPaths ? newPaths.size : 0
+
   return (
+    <>
+    {newCount > 0 && onMarkAllSeen && (
+      <div className="flex items-center justify-between px-2 pb-1.5 text-[10px]">
+        <span className="font-semibold text-[color:var(--notation-accent)]">
+          {newCount} new
+        </span>
+        <button
+          onClick={onMarkAllSeen}
+          className="text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:underline"
+          title="Clear all new-page badges"
+        >
+          mark all seen
+        </button>
+      </div>
+    )}
     <ul
       className="text-sm select-none"
       onContextMenu={isRoot ? (e) => {
@@ -182,6 +207,7 @@ export function FileTree({
               onExternalDrop={onExternalDrop}
               dropTarget={dropTarget}
               setDropTarget={setDropTarget}
+              newPaths={newPaths}
             />
           : <FileRow
               key={e.path}
@@ -191,16 +217,29 @@ export function FileTree({
               onSelect={onSelect}
               onPrefetch={onPrefetch}
               onContextMenu={onContextMenu}
+              isNew={!!newPaths?.has(e.path)}
             />
       ))}
     </ul>
+    </>
   )
+}
+
+// True when any file (or form folder) below this directory is in newPaths —
+// surfaces "there's something new in here" on collapsed folders.
+function hasNewDescendant(e: Entry, newPaths?: Set<string>): boolean {
+  if (!newPaths || newPaths.size === 0 || !e.children) return false
+  for (const c of e.children) {
+    if (newPaths.has(c.path)) return true
+    if (c.is_dir && hasNewDescendant(c, newPaths)) return true
+  }
+  return false
 }
 
 // ---- Row components ----------------------------------------------------
 
 function FileRow({
-  entry, current, depth, onSelect, onPrefetch, onContextMenu,
+  entry, current, depth, onSelect, onPrefetch, onContextMenu, isNew,
 }: {
   entry: Entry
   current: string
@@ -208,6 +247,7 @@ function FileRow({
   onSelect: (path: string) => void
   onPrefetch?: (path: string) => void
   onContextMenu?: (e: React.MouseEvent, path: string, isDir: boolean) => void
+  isNew?: boolean
 }) {
   const isActive = current === entry.path
   // Keep the active row in view when navigation happens elsewhere (prev/next,
@@ -245,7 +285,12 @@ function FileRow({
         title={entry.path}
       >
         <FileText size={14} className={isActive ? 'text-[color:var(--notation-accent)]' : 'opacity-70'} />
-        <span className="truncate">{entry.name.replace(/\.md$/i, '')}</span>
+        <span className="truncate flex-1">{entry.name.replace(/\.md$/i, '')}</span>
+        {isNew && (
+          <span className="text-[9px] font-bold uppercase bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full flex-shrink-0">
+            new
+          </span>
+        )}
       </button>
     </li>
   )
@@ -255,7 +300,7 @@ function DirRow({
   entry, current, depth, collapsed, onToggle,
   onSelect, onPrefetch, onContextMenu, onBackgroundContextMenu,
   onMove, onExternalDrop,
-  dropTarget, setDropTarget,
+  dropTarget, setDropTarget, newPaths,
 }: {
   entry: Entry
   current: string
@@ -270,6 +315,7 @@ function DirRow({
   onExternalDrop?: (files: FileList, toDir: string) => void
   dropTarget: string | null
   setDropTarget: Dispatch<SetStateAction<string | null>>
+  newPaths?: Set<string>
 }) {
   const isDropTarget = dropTarget === entry.path
   const dragDepthRef = useRef(0)
@@ -299,6 +345,11 @@ function DirRow({
         >
           <ClipboardList size={14} className={current === entry.path ? 'text-[color:var(--notation-accent)]' : 'opacity-70'} />
           <span className="truncate flex-1">{entry.name}</span>
+          {newPaths?.has(entry.path) && (
+            <span className="text-[9px] font-bold uppercase bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full flex-shrink-0">
+              new
+            </span>
+          )}
           {entry.entries ? (
             <span className="text-[9px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full flex-shrink-0">{entry.entries}</span>
           ) : null}
@@ -385,6 +436,12 @@ function DirRow({
           ? <Folder size={14} className="opacity-70" />
           : <FolderOpen size={14} className="opacity-70" />}
         <span className="font-medium text-[var(--notation-fg)] truncate flex-1">{entry.name}</span>
+        {hasNewDescendant(entry, newPaths) && (
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-[color:var(--notation-accent)] flex-shrink-0"
+            title="New pages inside"
+          />
+        )}
       </div>
       {!collapsed && entry.children && (
         <FileTree
@@ -396,6 +453,7 @@ function DirRow({
           onBackgroundContextMenu={onBackgroundContextMenu}
           onMove={onMove}
           onExternalDrop={onExternalDrop}
+          newPaths={newPaths}
           depth={depth + 1}
         />
       )}

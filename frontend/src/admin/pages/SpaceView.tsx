@@ -4,6 +4,7 @@ import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePl
 import * as api from '../lib/api'
 import { getCachedFile, setCachedFile, prefetchFile } from '../lib/contentCache'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
+import { useNewPages } from '../lib/newPages'
 import { FileTree } from '../components/FileTree'
 import { MarkdownView, stripMdExt } from '../components/MarkdownView'
 import { FormView } from '../components/FormView'
@@ -59,6 +60,12 @@ export function SpaceView() {
   const [etag, setEtag] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  // "New since last visit" badges in the tree — pages that appeared while
+  // this client wasn't looking (MCP agents, share guests, form entries).
+  const { newPaths, markAllSeen } = useNewPages(
+    spaceID ? `notation_new_pages_${spaceID}` : null, tree, file,
+  )
   
   // Mobile detection drives the sidebar UX: on mobile the aside slides in
   // as a drawer (off-screen by default) instead of taking up document
@@ -823,6 +830,8 @@ export function SpaceView() {
                 onMove={movePathToDir}
                 onExternalDrop={uploadInto}
                 collapseStorageKey={`notation_tree_collapsed_${spaceID}`}
+                newPaths={newPaths}
+                onMarkAllSeen={markAllSeen}
               />
             )}
             
