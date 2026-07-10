@@ -17,13 +17,25 @@ export function Mermaid({ chart, theme }: Props) {
     setErr(null)
     void import('mermaid').then(({ default: mermaid }) => {
       if (cancelled) return
+      // Mermaid's colour parser can't read a raw `var(--x)` string — it throws
+      // "Unsupported color format" and the whole diagram fails to render. So we
+      // resolve the accent variable to its computed hex before handing it over.
+      const accent =
+        getComputedStyle(document.documentElement)
+          .getPropertyValue('--notation-accent')
+          .trim() || '#65A30D'
       mermaid.initialize({
         startOnLoad: false,
         theme: theme === 'dark' ? 'dark' : 'default',
         securityLevel: 'strict', // disallow click handlers in diagrams
+        // Render labels as real SVG <text>, not HTML in <foreignObject>. Chrome
+        // drops foreignObject content when printing to PDF, so html labels make
+        // the whole diagram come out blank on paper; SVG text prints reliably.
+        htmlLabels: false,
+        flowchart: { htmlLabels: false, useMaxWidth: true },
         themeVariables:
           theme === 'dark'
-            ? { primaryColor: 'var(--notation-accent)', primaryTextColor: '#0a0a0a' }
+            ? { primaryColor: accent, primaryTextColor: '#0a0a0a' }
             : { primaryColor: '#0a0a0a', primaryTextColor: '#ffffff' },
       })
       const id = 'mermaid-' + Math.random().toString(36).slice(2, 11)
@@ -32,6 +44,20 @@ export function Mermaid({ chart, theme }: Props) {
         .then(({ svg }) => {
           if (cancelled || !ref.current) return
           ref.current.innerHTML = svg
+          // Mermaid sizes the SVG with width="100%" + a max-width style. That
+          // has no intrinsic pixel size, and Chrome fails to paint such an SVG
+          // when printing to PDF (the diagram comes out blank). Give it explicit
+          // width/height from the viewBox so it has real intrinsic dimensions,
+          // then let inline max-width:100% + height:auto keep it responsive on
+          // screen and scaled-to-fit on paper.
+          const el = ref.current.querySelector('svg')
+          const vb = el?.getAttribute('viewBox')?.split(/\s+/).map(Number)
+          if (el && vb && vb.length === 4 && vb[2] > 0 && vb[3] > 0) {
+            el.setAttribute('width', String(vb[2]))
+            el.setAttribute('height', String(vb[3]))
+            el.style.maxWidth = '100%'
+            el.style.height = 'auto'
+          }
         })
         .catch((e: unknown) => {
           if (cancelled) return

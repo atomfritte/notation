@@ -556,8 +556,40 @@ export function MarkdownView({
   // would only risk scrollbar jitter. See `.cv-auto` in shared/index.css.
   const longDoc = content.length > 12000
 
+  // ---- Print document header ----------------------------------------------
+  // A `.print-only` masthead rendered above the article: folder breadcrumb +
+  // print date, and — unless the body already opens with its own H1 — a serif
+  // title derived from the file name. Hidden on screen (display:none), revealed
+  // only under `@media print` (see shared/index.css). Keeps the title logic in
+  // the DOM where we actually have the file name, rather than in CSS ::before.
+  const docTitle = currentFile ? pageLabel(currentFile) : ''
+  const docDir = currentFile && currentFile.includes('/')
+    ? currentFile.slice(0, currentFile.lastIndexOf('/')).split('/').join(' / ')
+    : ''
+  // Does the markdown open with a single-`#` H1? If so it IS the title, so we
+  // don't repeat the file name — the masthead is just the breadcrumb + date.
+  const bodyHasLeadingH1 = /^\uFEFF?\s*#\s+\S/.test(content)
+  const printDate = useMemo(
+    () => new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }),
+    [],
+  )
+
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
+      {/* Print-only document masthead: breadcrumb + date, plus a serif title
+          when the body has no leading H1 of its own. Sits above the article so
+          it lands at the very top of page one; display:none on screen so it
+          never touches the reading view (and stays out of the article's
+          nth-child page-reveal animation). See `.print-doc-*` in shared/index.css. */}
+      {docTitle && (
+        <div className="print-doc-header print-only" aria-hidden="true">
+          <div className="print-doc-meta">
+            <span className="print-doc-path">{docDir || ' '}</span>
+            <span className="print-doc-date">Printed {printDate}</span>
+          </div>
+          {!bodyHasLeadingH1 && <h1 className="print-doc-title">{docTitle}</h1>}
+        </div>
+      )}
       {/* The article element stays stable (its hover/click/keydown listeners are
           bound to it directly), but renderedMarkdown is keyed on content so React
           REPLACES the whole prose subtree on a page change instead of diffing it.
