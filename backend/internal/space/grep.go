@@ -31,6 +31,17 @@ type GrepOpts struct {
 	ContextBefore int
 	ContextAfter  int
 	MaxResults    int
+	// PathPrefix confines the walk to one file or subtree (slash-delimited,
+	// pre-normalized by the caller). Unlike Glob this is an access boundary,
+	// not a convenience filter: files outside it are never opened, so a
+	// scoped share's search cannot observe anything about them.
+	PathPrefix string
+}
+
+// underPrefix reports whether p equals prefix or lies inside it,
+// segment-aware ("notes" does not admit "notes2/x").
+func underPrefix(p, prefix string) bool {
+	return p == prefix || strings.HasPrefix(p, prefix+"/")
 }
 
 // Grep walks the Space's file tree (through the os.Root sandbox), applies
@@ -96,9 +107,18 @@ func (s *Store) Grep(spaceID string, opts GrepOpts) ([]GrepMatch, error) {
 			if strings.HasPrefix(d.Name(), ".") && p != "." {
 				return fs.SkipDir
 			}
+			// Prune directories that neither contain the prefix nor lie
+			// inside it — their contents are out of bounds by construction.
+			if opts.PathPrefix != "" && p != "." &&
+				!underPrefix(p, opts.PathPrefix) && !underPrefix(opts.PathPrefix, p) {
+				return fs.SkipDir
+			}
 			return nil
 		}
 		if strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
+		if opts.PathPrefix != "" && !underPrefix(p, opts.PathPrefix) {
 			return nil
 		}
 		if globRe != nil && !globRe.MatchString(p) {

@@ -171,15 +171,30 @@ function ShareUI() {
     api.getTree().then(setTree).catch(e => setErr(String(e)))
   }, [])
 
+  // A page-scoped share exposes exactly one node (file or form folder) —
+  // treat it as a focused single-page reader: open it immediately and start
+  // with the sidebar closed (one entry is no navigation).
+  const singlePage = tree.length === 1 && (!tree[0].is_dir || !!tree[0].form)
+
   // Auto-pick a default file (readme/index/home/first-md) when the share
   // URL doesn't specify one. Same algorithm as the admin SpaceView so
-  // guests land on something instead of an empty viewer.
+  // guests land on something instead of an empty viewer. Single-page scopes
+  // open their one node even when it isn't markdown.
   useEffect(() => {
     if (file) return
     if (!tree || tree.length === 0) return
-    const landing = findDefaultFile(tree)
+    const landing = singlePage ? tree[0] : findDefaultFile(tree)
     if (landing) setSearchParams({ file: landing.path }, { replace: true })
-  }, [file, tree, setSearchParams])
+  }, [file, tree, singlePage, setSearchParams])
+
+  // Collapse the sidebar once when a single-page share loads (desktop too —
+  // there's nothing to navigate). The guest can still reopen it manually.
+  const collapsedForSinglePageRef = useRef(false)
+  useEffect(() => {
+    if (!singlePage || collapsedForSinglePageRef.current) return
+    collapsedForSinglePageRef.current = true
+    setSidebarOpen(false)
+  }, [singlePage])
 
   const refreshComments = useCallback(() => {
     if (!file) { setComments([]); return }
@@ -466,6 +481,11 @@ function ShareUI() {
             >
               {info.permission}
             </span>
+            {info.scope && (
+              <span className="truncate font-mono" title={`This link is limited to ${info.scope}`}>
+                ⌖ {info.scope}
+              </span>
+            )}
             {info.label && <span className="truncate">{info.label}</span>}
           </p>
         </div>

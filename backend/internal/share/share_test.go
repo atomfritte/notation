@@ -11,7 +11,7 @@ import (
 // the all-on backfill is only for legacy shares that predate the features block.
 func TestCreate_AllFeaturesOff_Honored(t *testing.T) {
 	st := NewStore(t.TempDir())
-	res, err := st.Create("myspace", PermissionRead, "ro", nil, "admin", Features{})
+	res, err := st.Create("myspace", PermissionRead, "", "ro", nil, "admin", Features{})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestLoad_LegacyShare_BackfilledAllOn(t *testing.T) {
 // logs / comment authors).
 func TestCreate_IDDoesNotLeakToken(t *testing.T) {
 	st := NewStore(t.TempDir())
-	res, err := st.Create("myspace", PermissionEdit, "", nil, "admin", DefaultFeatures())
+	res, err := st.Create("myspace", PermissionEdit, "", "", nil, "admin", DefaultFeatures())
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -71,6 +71,66 @@ func TestCreate_IDDoesNotLeakToken(t *testing.T) {
 		prefix := res.Token[:8]
 		if filepath.Base(res.Share.ID) == "share_"+prefix || contains(res.Share.ID, prefix) {
 			t.Errorf("share ID %q embeds token prefix %q", res.Share.ID, prefix)
+		}
+	}
+}
+
+// A scoped share must round-trip through disk + Resolve, and legacy records
+// (no scope field) must read back as whole-space access.
+func TestCreate_ScopeRoundTrip(t *testing.T) {
+	st := NewStore(t.TempDir())
+	res, err := st.Create("myspace", PermissionRead, "/notes//weekly/../weekly/page.md", "", nil, "admin", DefaultFeatures())
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if res.Share.Scope != "notes/weekly/page.md" {
+		t.Errorf("scope not normalized on create: %q", res.Share.Scope)
+	}
+	_, sh, err := st.Resolve(res.Token)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if sh.Scope != "notes/weekly/page.md" {
+		t.Errorf("scope lost on resolve: %q", sh.Scope)
+	}
+}
+
+func TestCreate_InvalidScopeRejected(t *testing.T) {
+	st := NewStore(t.TempDir())
+	for _, scope := range []string{"..", "../x", "a/../../b", ".notation/shares.json", "a/.hidden/b", `a\b`, "a/\x00b"} {
+		if _, err := st.Create("myspace", PermissionRead, scope, "", nil, "admin", DefaultFeatures()); err == nil {
+			t.Errorf("scope %q accepted, want ErrInvalidScope", scope)
+		}
+	}
+}
+
+func TestScopeAllows(t *testing.T) {
+	cases := []struct {
+		scope, path string
+		want        bool
+	}{
+		{"", "anything/at/all.md", true},
+		{"notes", "notes/a.md", true},
+		{"notes", "notes", true},
+		{"notes", "notes2/a.md", false}, // segment-aware, no prefix confusion
+		{"notes", "Notes/a.md", false},  // case-sensitive like the FS
+		{"notes/page.md", "notes/page.md", true},
+		{"notes/page.md", "notes/page.md.bak", false},
+		{"notes/page.md", "notes/other.md", false},
+		{"notes", "notes/../secret.md", false}, // traversal normalized away
+		{"notes", "notes/sub/../a.md", true},   // normalizes to notes/a.md
+		{"notes", "../notes/a.md", false},
+		{"notes", "/notes/a.md", true}, // leading slash trimmed, still inside
+		{"notes", "", false},
+		{"notes", ".", false},
+		{"notes", "notes/.notation/x", false}, // dot segments always denied
+		{"notes", " notes/a.md", false},       // padded path aliases a literal " notes" dir — deny
+		{"notes", "notes/a.md ", false},
+	}
+	for _, c := range cases {
+		sh := Share{Scope: c.scope}
+		if got := sh.ScopeAllows(c.path); got != c.want {
+			t.Errorf("ScopeAllows(scope=%q, path=%q) = %v, want %v", c.scope, c.path, got, c.want)
 		}
 	}
 }

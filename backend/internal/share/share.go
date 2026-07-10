@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -71,12 +72,18 @@ type Share struct {
 	ID         string     `json:"id"`
 	Hash       string     `json:"hash"` // hex-encoded SHA-256 of the token
 	Permission Permission `json:"permission"`
-	Label      string     `json:"label"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	CreatedBy  string     `json:"created_by"`
-	LastUsed   *time.Time `json:"last_used,omitempty"`
-	Features   Features   `json:"features"`
+	// Scope restricts the share to a single page or subtree. Empty means the
+	// whole Space (every share written before this field existed reads back as
+	// "", so legacy links keep their full access). Non-empty scopes are stored
+	// normalized (see NormalizeScope) and enforced server-side on every share
+	// endpoint via ScopeAllows — never only hidden in the reader UI.
+	Scope     string     `json:"scope,omitempty"`
+	Label     string     `json:"label"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedBy string     `json:"created_by"`
+	LastUsed  *time.Time `json:"last_used,omitempty"`
+	Features  Features   `json:"features"`
 	// FeaturesSet distinguishes "the admin explicitly chose these features
 	// (possibly all-off)" from a legacy share that predates the features block.
 	// Create() sets it true; only records without it get the all-on backfill,
@@ -88,6 +95,7 @@ type Share struct {
 type View struct {
 	ID         string     `json:"id"`
 	Permission Permission `json:"permission"`
+	Scope      string     `json:"scope,omitempty"`
 	Label      string     `json:"label"`
 	CreatedAt  time.Time  `json:"created_at"`
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
@@ -98,7 +106,7 @@ type View struct {
 
 func (s Share) View() View {
 	return View{
-		ID: s.ID, Permission: s.Permission, Label: s.Label,
+		ID: s.ID, Permission: s.Permission, Scope: s.Scope, Label: s.Label,
 		CreatedAt: s.CreatedAt, ExpiresAt: s.ExpiresAt, CreatedBy: s.CreatedBy,
 		LastUsed: s.LastUsed, Features: s.Features,
 	}
@@ -114,7 +122,60 @@ var (
 	ErrShareNotFound = errors.New("share not found")
 	ErrShareExpired  = errors.New("share expired")
 	ErrInvalidPerm   = errors.New("invalid permission")
+	ErrInvalidScope  = errors.New("invalid scope path")
+	// ErrScopeDenied marks a request for a path outside a share's scope. Kept
+	// as a sentinel so handlers can audit-log the denial distinctly.
+	ErrScopeDenied = errors.New("outside share scope")
 )
+
+// NormalizeScope validates and canonicalizes a scope path. "" (whole Space)
+// is valid and returns "". The rules mirror space.SafeJoin's string-level
+// checks — relative, slash-delimited, no traversal, no dot segments, no
+// backslashes or NUL — but are pure string work: existence is the caller's
+// concern (the admin API stats the path; enforcement must not depend on the
+// filesystem's current state).
+func NormalizeScope(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", nil
+	}
+	if strings.ContainsRune(s, 0) || strings.Contains(s, "\\") {
+		return "", ErrInvalidScope
+	}
+	s = strings.Trim(s, "/")
+	p := path.Clean(s)
+	if p == "" || p == "." || p == ".." || strings.HasPrefix(p, "../") {
+		return "", ErrInvalidScope
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "" || strings.HasPrefix(seg, ".") {
+			return "", ErrInvalidScope
+		}
+	}
+	return p, nil
+}
+
+// ScopeAllows reports whether userPath (a raw, guest-supplied file path) falls
+// inside the share's scope. The path is normalized with the same rules as the
+// stored scope before comparing, so "a/../b" can't sidestep the check, and the
+// comparison is segment-aware ("notes" does not admit "notes2/x").
+func (s Share) ScopeAllows(userPath string) bool {
+	if s.Scope == "" {
+		return true
+	}
+	// SafeJoin (the filesystem gate) does NOT trim whitespace — " notes/x"
+	// names a literal " notes" directory. NormalizeScope's TrimSpace would
+	// alias such a path into the scope, so reject padded paths outright
+	// instead of letting the two normalizations diverge.
+	if strings.TrimSpace(userPath) != userPath {
+		return false
+	}
+	p, err := NormalizeScope(userPath)
+	if err != nil || p == "" {
+		return false
+	}
+	return p == s.Scope || strings.HasPrefix(p, s.Scope+"/")
+}
 
 type Store struct {
 	spacesDir string
@@ -176,9 +237,13 @@ func (s *Store) List(spaceID string) ([]View, error) {
 	return out, nil
 }
 
-func (s *Store) Create(spaceID string, perm Permission, label string, expiresAt *time.Time, createdBy string, features Features) (CreateResult, error) {
+func (s *Store) Create(spaceID string, perm Permission, scope, label string, expiresAt *time.Time, createdBy string, features Features) (CreateResult, error) {
 	if !ValidPermission(perm) {
 		return CreateResult{}, ErrInvalidPerm
+	}
+	normScope, err := NormalizeScope(scope)
+	if err != nil {
+		return CreateResult{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -194,6 +259,7 @@ func (s *Store) Create(spaceID string, perm Permission, label string, expiresAt 
 		ID:          "share_" + randID(12),
 		Hash:        h,
 		Permission:  perm,
+		Scope:       normScope,
 		Label:       strings.TrimSpace(label),
 		CreatedAt:   time.Now().UTC(),
 		ExpiresAt:   expiresAt,

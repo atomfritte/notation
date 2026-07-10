@@ -15,6 +15,9 @@ export type Features = {
 export type SpaceInfo = {
   space: { id: string; name: string }
   permission: Permission
+  // Page/folder this link is limited to; '' = whole space. Informational for
+  // the UI — the server enforces the scope on every endpoint regardless.
+  scope: string
   label: string
   features: Features
 }

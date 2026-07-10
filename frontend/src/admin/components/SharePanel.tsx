@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import * as api from '../lib/api'
 
 type Permission = api.SharePermission
@@ -16,16 +16,34 @@ export function SharePanel({ spaceID }: Props) {
   const [shares, setShares] = useState<api.Share[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [perm, setPerm] = useState<Permission>('read')
+  const [scope, setScope] = useState('')
   const [label, setLabel] = useState('')
   const [expiresIn, setExpiresIn] = useState('')
   const [features, setFeatures] = useState<api.ShareFeatures>(api.DEFAULT_SHARE_FEATURES)
   const [created, setCreated] = useState<api.ShareCreated | null>(null)
+  // Space tree feeds the scope input's autocomplete (pages + folders).
+  const [tree, setTree] = useState<api.Entry[]>([])
 
   const refresh = useCallback(() => {
     api.listShares(spaceID).then(setShares).catch(e => setErr(String(e)))
   }, [spaceID])
 
   useEffect(refresh, [refresh])
+  useEffect(() => {
+    api.getTree(spaceID).then(setTree).catch(() => setTree([]))
+  }, [spaceID])
+
+  const scopeOptions = useMemo(() => {
+    const out: string[] = []
+    function walk(es: api.Entry[]) {
+      for (const e of es) {
+        out.push(e.path)
+        if (e.is_dir && e.children) walk(e.children)
+      }
+    }
+    walk(tree)
+    return out
+  }, [tree])
 
   async function onCreate(e: FormEvent) {
     e.preventDefault()
@@ -34,11 +52,13 @@ export function SharePanel({ spaceID }: Props) {
     try {
       const data = await api.createShare(spaceID, {
         permission: perm,
+        scope: scope.trim() || undefined,
         label,
         expires_in: expiresIn || undefined,
         features,
       })
       setCreated(data)
+      setScope('')
       setLabel('')
       setExpiresIn('')
       setFeatures(api.DEFAULT_SHARE_FEATURES)
@@ -78,6 +98,23 @@ export function SharePanel({ spaceID }: Props) {
             <option value="comment">comment</option>
             <option value="edit">edit</option>
           </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">Scope</label>
+          <input
+            value={scope}
+            onChange={e => setScope(e.target.value)}
+            list="share-scope-options"
+            className="border px-2 py-1 rounded text-sm w-full"
+            placeholder="whole space — or a page/folder path"
+          />
+          <datalist id="share-scope-options">
+            {scopeOptions.map(p => <option key={p} value={p} />)}
+          </datalist>
+          <p className="text-[10px] text-gray-500 mt-0.5">
+            Guests only ever see this page or folder — enforced on the server.
+            Media referenced from outside the scope stays blocked; share the folder for pages with attachments.
+          </p>
         </div>
         <div>
           <label className="block text-xs text-gray-600 mb-1">Label</label>
@@ -159,6 +196,11 @@ export function SharePanel({ spaceID }: Props) {
                     <span className="font-mono">{s.id}</span>
                     <span className="px-1.5 py-0.5 bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] rounded">{s.permission}</span>
                   </div>
+                  {s.scope && (
+                    <div className="mt-0.5 text-[color:var(--notation-accent)] font-mono truncate" title={`Limited to ${s.scope}`}>
+                      ⌖ {s.scope}
+                    </div>
+                  )}
                   {s.label && <div className="text-gray-700 mt-0.5">{s.label}</div>}
                   {s.expires_at && (
                     <div className="text-gray-500 mt-0.5">

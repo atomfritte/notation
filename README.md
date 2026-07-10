@@ -334,7 +334,7 @@ A Space is a folder under `/data/spaces/<id>/`. The structure is intentionally s
 
 ## Magic Links
 
-Click the **Sharing** tab in any Space → create a link with a permission level + optional expiry.
+Click the **Sharing** tab in any Space → create a link with a permission level, an optional **scope** (a single page or folder), and optional expiry.
 
 | Permission | Can read | Can comment | Can edit |
 |---|---|---|---|
@@ -342,6 +342,7 @@ Click the **Sharing** tab in any Space → create a link with a permission level
 | `comment` | ✅ | ✅ | — |
 | `edit`    | ✅ | ✅ | ✅ |
 
+- **Scoped links**: leave the scope empty to share the whole Space, or set it to a page (`notes/weekly.md`) or folder (`notes/`). Guests only ever see that subtree — tree, file access, search, comments and forms are all enforced server-side against the scope; requests outside it get a 403 and an audit entry. A page that embeds attachments from outside its scope will show them blocked — share the folder instead.
 - Tokens are 32 random bytes (base64url, ~43 chars), **only their SHA-256 hash is persisted**.
 - Constant-time lookup across Spaces.
 - Path `<NOTATION_SHARE_PATH>/<token>` — Authelia-bypassed.
