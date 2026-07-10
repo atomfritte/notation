@@ -19,7 +19,7 @@
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@simplewebauthn/browser": "^13.3.0",
-    "dompurify": "^3.4.5",
+    "dompurify": "^3.4.11",
     "github-slugger": "^2.0.0",
     "highlight.js": "^11.10.0",
     "katex": "^0.17.0",
@@ -43,7 +43,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "overrides": {
-    "dompurify": "^3.4.5"
+    "dompurify": "^3.4.11"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",
@@ -55,7 +55,7 @@
     "postcss": "^8.4.45",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
-    "vite": "^8.0.14",
+    "vite": "^8.1.4",
     "vitest": "^4.1.7"
   }
 }
