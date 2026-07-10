@@ -224,6 +224,7 @@ All configuration is via environment variables. None are required for a basic lo
 | `NOTATION_BIND` | `:8080` | Listen address. |
 | `NOTATION_DATA_DIR` | `/data` | Where Spaces, auth records, audit logs live. Mount as a volume. |
 | `NOTATION_BASE_URL` | *(empty)* | Public URL of the deployment. Used for share URLs, derives the WebAuthn `rp_id`, and tells the server when to mark cookies `Secure`. |
+| `NOTATION_COOKIE_SECURE` | *(empty)* | Override the session cookie's `Secure` flag: `1` = always, `0` = never (plain-HTTP LAN). Unset: `Secure` unless `NOTATION_BASE_URL` starts with `http://` — fail-safe for TLS-proxy setups that never set a base URL. |
 | `NOTATION_MAX_UPLOAD_BYTES` | `67108864` (64 MiB) | Per-file upload limit. |
 | `NOTATION_COMMIT_DEBOUNCE_MS` | `5000` | Window during which subsequent saves coalesce into one git commit. |
 

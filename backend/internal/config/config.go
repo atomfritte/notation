@@ -31,6 +31,8 @@ type Config struct {
 	DevBypassAuth     bool
 	MaxUploadBytes    int64
 	CommitDebounceMS  int
+	// Raw NOTATION_COOKIE_SECURE value ("", "0" or "1") — see CookieSecure.
+	CookieSecureEnv string
 
 	// Auth
 	AuthMode        AuthMode
@@ -62,6 +64,7 @@ func Load() (*Config, error) {
 		MCPPath:           strings.TrimRight(getEnv("NOTATION_MCP_PATH", "/mcp"), "/"),
 		BaseURL:           strings.TrimRight(getEnv("NOTATION_BASE_URL", ""), "/"),
 		DevBypassAuth:     getEnv("NOTATION_DEV_BYPASS_AUTH", "") == "1",
+		CookieSecureEnv:   getEnv("NOTATION_COOKIE_SECURE", ""),
 		MaxUploadBytes:    getEnvInt64("NOTATION_MAX_UPLOAD_BYTES", 64*1024*1024),
 		CommitDebounceMS:  int(getEnvInt64("NOTATION_COMMIT_DEBOUNCE_MS", 5000)),
 		AuthMode:          AuthMode(getEnv("NOTATION_AUTH_MODE", string(AuthModeSession))),
@@ -94,6 +97,11 @@ func Load() (*Config, error) {
 	if cfg.RPID == "" {
 		cfg.RPID = deriveRPID(cfg.BaseURL)
 	}
+	switch cfg.CookieSecureEnv {
+	case "", "0", "1":
+	default:
+		return nil, fmt.Errorf("NOTATION_COOKIE_SECURE must be 0 or 1, got %q", cfg.CookieSecureEnv)
+	}
 	return cfg, nil
 }
 
@@ -116,9 +124,21 @@ func deriveRPID(baseURL string) string {
 }
 
 // CookieSecure reports whether the session cookie should carry the Secure
-// flag. True for any https:// base URL.
+// flag. Fail-safe: an admin session unlocks every space, so the flag is on
+// unless plain HTTP was explicitly configured. NOTATION_COOKIE_SECURE=1/0
+// overrides; otherwise an http:// base URL opts out and everything else —
+// including the common "TLS proxy in front, no NOTATION_BASE_URL set"
+// deployment that previously got an insecure cookie — stays Secure.
+// (Browsers accept Secure cookies on http://localhost, so local testing
+// keeps working without the override.)
 func (c *Config) CookieSecure() bool {
-	return strings.HasPrefix(c.BaseURL, "https://")
+	switch c.CookieSecureEnv {
+	case "1":
+		return true
+	case "0":
+		return false
+	}
+	return !strings.HasPrefix(c.BaseURL, "http://")
 }
 
 func (c *Config) SpacesDir() string {

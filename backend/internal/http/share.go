@@ -456,7 +456,10 @@ func writeShareError(w http.ResponseWriter, err error) {
 	case errors.Is(err, share.ErrShareNotFound):
 		writeError(w, http.StatusNotFound, "share not found")
 	case errors.Is(err, share.ErrShareExpired):
-		writeError(w, http.StatusGone, "share has expired")
+		// Deliberately identical to not-found: a distinct "expired" answer
+		// confirms to a token holder that the token was once valid (and the
+		// space still exists) — a small oracle we don't need to hand out.
+		writeError(w, http.StatusNotFound, "share not found")
 	case errors.Is(err, fs.ErrNotExist):
 		writeError(w, http.StatusNotFound, "not found")
 	default:

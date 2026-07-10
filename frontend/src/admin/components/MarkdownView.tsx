@@ -33,7 +33,11 @@ const sanitizeSchema = {
     ...defaultSchema.attributes,
     '*': [...(defaultSchema.attributes?.['*'] ?? []), 'className', 'id'],
     a: [...(defaultSchema.attributes?.a ?? []), 'className', 'rel', 'target'],
-    span: [...(defaultSchema.attributes?.span ?? []), 'className', 'style'],
+    // No 'style' here: KaTeX's style-carrying spans are generated AFTER this
+    // sanitize pass, so only user-supplied raw HTML would benefit — and
+    // guest-authored inline CSS in the admin's full-width viewer is a UI
+    // spoofing surface we don't need.
+    span: [...(defaultSchema.attributes?.span ?? []), 'className'],
     code: [...(defaultSchema.attributes?.code ?? []), 'className'],
     div: [...(defaultSchema.attributes?.div ?? []), 'className'],
     mark: [...(defaultSchema.attributes?.mark ?? []), 'className', 'data-comment-id'],

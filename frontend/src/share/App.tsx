@@ -26,6 +26,35 @@ import { isTextFile, isMarkdownFile, findDefaultFile } from '../admin/lib/fileTy
 // path) and `s`-prefixed so the share SPA never reads the admin SPA's entries.
 const shareKey = (token: string, path: string) => `s\u0000${token}\u0000${path}`
 
+// Short non-reversible id for namespacing per-share client state (bookmarks,
+// read-aloud position). The token is a bearer credential — it lives in the URL
+// by design but must not additionally persist in localStorage, where it would
+// outlive revocation/expiry. FNV-1a over a 256-bit random token can't be
+// reversed to the token, and collisions between a user's few shares are moot.
+function shareStorageId(token: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < token.length; i++) {
+    h ^= token.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(36)
+}
+const STORAGE_ID = shareStorageId(api.TOKEN)
+
+// One-time migration of pre-existing raw-token keys to the hashed id (and
+// removal of the credential-bearing originals).
+for (const prefix of ['notation_share_bookmarks_', 'notation_readpos_']) {
+  try {
+    const old = localStorage.getItem(`${prefix}${api.TOKEN}`)
+    if (old !== null) {
+      if (localStorage.getItem(`${prefix}${STORAGE_ID}`) === null) {
+        localStorage.setItem(`${prefix}${STORAGE_ID}`, old)
+      }
+      localStorage.removeItem(`${prefix}${api.TOKEN}`)
+    }
+  } catch { /* storage unavailable — nothing to migrate */ }
+}
+
 function ShareUI() {
   const [info, setInfo] = useState<api.SpaceInfo | null>(null)
   const [tree, setTree] = useState<api.Entry[]>([])
@@ -140,7 +169,7 @@ function ShareUI() {
   const openedBySelectionRef = useRef(false)
 
   // Bookmarks (per-share-token) — kept client-only, never round-trips.
-  const tokenKey = api.TOKEN
+  const tokenKey = STORAGE_ID
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem(`notation_share_bookmarks_${tokenKey}`)
@@ -786,7 +815,7 @@ function ShareUI() {
           currentFile={file}
           content={content}
           onNavigate={select}
-          storageKey={`notation_readpos_${api.TOKEN}`}
+          storageKey={`notation_readpos_${STORAGE_ID}`}
           onClose={() => setReadAloud(false)}
           serverVoices={ttsVoices}
           ttsURL={ttsURL}
