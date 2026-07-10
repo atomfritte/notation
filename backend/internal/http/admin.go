@@ -384,6 +384,7 @@ func (h *adminHandlers) listShares(w http.ResponseWriter, r *http.Request) {
 
 type createShareReq struct {
 	Permission share.Permission `json:"permission"`
+	Scope      string           `json:"scope,omitempty"` // "" = whole space; else a page or folder path
 	Label      string           `json:"label"`
 	ExpiresIn  string           `json:"expires_in,omitempty"` // duration string e.g. "168h" (7d)
 	Features   *share.Features  `json:"features,omitempty"`   // nil → admin didn't toggle, use full defaults
@@ -405,6 +406,20 @@ func (h *adminHandlers) createShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "permission must be read|comment|edit")
 		return
 	}
+	// Scope must be a valid in-space path AND currently exist — catching typos
+	// at create time, when the admin can still see and fix them. Enforcement
+	// itself never depends on this existence check.
+	scope, err := share.NormalizeScope(req.Scope)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid scope path")
+		return
+	}
+	if scope != "" {
+		if _, err := h.store.Stat(id, scope); err != nil {
+			writeError(w, http.StatusBadRequest, "scope path not found in space")
+			return
+		}
+	}
 	var expiresAt *time.Time
 	if req.ExpiresIn != "" {
 		d, err := time.ParseDuration(req.ExpiresIn)
@@ -419,7 +434,7 @@ func (h *adminHandlers) createShare(w http.ResponseWriter, r *http.Request) {
 	if req.Features != nil {
 		features = *req.Features
 	}
-	res, err := h.shares.Create(id, req.Permission, req.Label, expiresAt, user.Name, features)
+	res, err := h.shares.Create(id, req.Permission, scope, req.Label, expiresAt, user.Name, features)
 	if err != nil {
 		writeInternal(w, r, "shares.create", err)
 		return

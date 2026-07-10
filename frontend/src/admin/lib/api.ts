@@ -315,6 +315,8 @@ export const DEFAULT_SHARE_FEATURES: ShareFeatures = {
 export type Share = {
   id: string
   permission: SharePermission
+  // Page/folder the link is limited to; absent/empty = whole space.
+  scope?: string
   label: string
   created_at: string
   expires_at?: string
@@ -331,6 +333,7 @@ export const createShare = (
   id: string,
   body: {
     permission: SharePermission
+    scope?: string
     label?: string
     expires_in?: string
     features?: ShareFeatures

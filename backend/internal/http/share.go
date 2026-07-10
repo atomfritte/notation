@@ -32,6 +32,54 @@ func (h *shareHandlers) resolve(r *http.Request) (string, share.Share, error) {
 	return h.shares.Resolve(chi.URLParam(r, "token"))
 }
 
+// requireScope enforces a share's page/folder scope for one requested path.
+// Denials are audit-logged (the guest holds a valid token but asked for
+// content outside what the admin shared — worth a trace) and answered with a
+// generic 403 that doesn't reveal whether the path exists.
+func (h *shareHandlers) requireScope(w http.ResponseWriter, r *http.Request, spaceID, action, upath string, sh share.Share) bool {
+	if sh.ScopeAllows(upath) {
+		return true
+	}
+	h.audit1(spaceID, action, upath, sh, r, share.ErrScopeDenied)
+	writeError(w, http.StatusForbidden, "outside share scope")
+	return false
+}
+
+// scopeTree prunes a Space tree to a share's scope. A folder scope returns the
+// folder's children (the guest sees the subtree as their whole world); a file
+// or form-folder scope returns just that node. A vanished scope target yields
+// an empty tree rather than an error — the link stays valid, just empty.
+func scopeTree(entries []space.Entry, scope string) []space.Entry {
+	if scope == "" {
+		return entries
+	}
+	node := findTreeEntry(entries, scope)
+	if node == nil {
+		return []space.Entry{}
+	}
+	if node.IsDir && !node.Form {
+		if node.Children == nil {
+			return []space.Entry{}
+		}
+		return node.Children
+	}
+	return []space.Entry{*node}
+}
+
+func findTreeEntry(entries []space.Entry, path string) *space.Entry {
+	for i := range entries {
+		if entries[i].Path == path {
+			return &entries[i]
+		}
+		if entries[i].IsDir {
+			if hit := findTreeEntry(entries[i].Children, path); hit != nil {
+				return hit
+			}
+		}
+	}
+	return nil
+}
+
 func actor(sh share.Share) string {
 	return "share:" + sh.ID + ":" + string(sh.Permission)
 }
@@ -70,6 +118,7 @@ func (h *shareHandlers) getSpace(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"space":      map[string]string{"id": meta.ID, "name": meta.Name},
 		"permission": sh.Permission,
+		"scope":      sh.Scope,
 		"label":      sh.Label,
 		"features":   sh.Features,
 	})
@@ -104,6 +153,10 @@ func (h *shareHandlers) searchSpace(w http.ResponseWriter, r *http.Request) {
 		ContextBefore: 0,
 		ContextAfter:  0,
 		MaxResults:    200,
+		// A scoped share searches only inside its scope — enforced in the
+		// walk itself, not by post-filtering, so out-of-scope files are never
+		// even opened and the result cap can't be starved by unseen hits.
+		PathPrefix: sh.Scope,
 	}
 	hits, err := h.store.Grep(spaceID, opts)
 	if err != nil {
@@ -131,6 +184,7 @@ func (h *shareHandlers) getTree(w http.ResponseWriter, r *http.Request) {
 		writeInternal(w, r, "share.tree", err)
 		return
 	}
+	entries = scopeTree(entries, sh.Scope)
 	h.audit1(spaceID, "read.tree", "", sh, r, nil)
 	writeJSON(w, http.StatusOK, entries)
 }
@@ -146,6 +200,9 @@ func (h *shareHandlers) getFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upath := chi.URLParam(r, "*")
+	if !h.requireScope(w, r, spaceID, "read.file", upath, sh) {
+		return
+	}
 	data, err := h.store.ReadFile(spaceID, upath)
 	if err != nil {
 		h.audit1(spaceID, "read.file", upath, sh, r, err)
@@ -171,6 +228,9 @@ func (h *shareHandlers) putFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upath := chi.URLParam(r, "*")
+	if !h.requireScope(w, r, spaceID, "write.file", upath, sh) {
+		return
+	}
 	limited := http.MaxBytesReader(w, r.Body, h.cfg.MaxUploadBytes)
 	defer limited.Close()
 	if _, err := h.store.WriteFile(spaceID, upath, limited, h.cfg.MaxUploadBytes); err != nil {
@@ -203,6 +263,9 @@ func (h *shareHandlers) postComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upath := chi.URLParam(r, "*")
+	if !h.requireScope(w, r, spaceID, "comment.add", upath, sh) {
+		return
+	}
 	if _, err := h.store.Stat(spaceID, upath); err != nil {
 		writeFileError(w, err)
 		return
@@ -248,10 +311,15 @@ func (h *shareHandlers) listAllComments(w http.ResponseWriter, r *http.Request) 
 		writeInternal(w, r, "share.comments.list_all", err)
 		return
 	}
-	if list == nil {
-		list = []share.Comment{}
+	// A scoped share's comment overview must not leak discussion (or even the
+	// existence) of pages outside the scope.
+	scoped := make([]share.Comment, 0, len(list))
+	for _, c := range list {
+		if sh.ScopeAllows(c.Path) {
+			scoped = append(scoped, c)
+		}
 	}
-	writeJSON(w, http.StatusOK, list)
+	writeJSON(w, http.StatusOK, scoped)
 }
 
 func (h *shareHandlers) listComments(w http.ResponseWriter, r *http.Request) {
@@ -265,6 +333,9 @@ func (h *shareHandlers) listComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upath := chi.URLParam(r, "*")
+	if !h.requireScope(w, r, spaceID, "comment.list", upath, sh) {
+		return
+	}
 	if _, err := h.store.Stat(spaceID, upath); err != nil {
 		writeFileError(w, err)
 		return
@@ -287,6 +358,9 @@ func (h *shareHandlers) getForm(w http.ResponseWriter, r *http.Request) {
 	}
 	if !sh.Permission.AllowsRead() {
 		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if !h.requireScope(w, r, spaceID, "read.form", chi.URLParam(r, "*"), sh) {
 		return
 	}
 	// Guests may submit (with comment/edit) but never edit/delete entries.
@@ -313,6 +387,9 @@ func (h *shareHandlers) postFormEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	folder := chi.URLParam(r, "*")
+	if !h.requireScope(w, r, spaceID, "form.submit", folder, sh) {
+		return
+	}
 	entry, err := submitFormEntry(h.store, h.cfg, spaceID, folder, w, r)
 	if err != nil {
 		h.audit1(spaceID, "form.submit", folder, sh, r, err)
@@ -341,6 +418,9 @@ func (h *shareHandlers) postFormImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	folder := chi.URLParam(r, "*")
+	if !h.requireScope(w, r, spaceID, "form.image", folder, sh) {
+		return
+	}
 	path, err := uploadFormImage(h.store, h.cfg, spaceID, folder, w, r)
 	if err != nil {
 		h.audit1(spaceID, "form.image", folder, sh, r, err)
