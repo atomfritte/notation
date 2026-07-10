@@ -124,6 +124,8 @@ func TestScopeAllows(t *testing.T) {
 		{"notes", "", false},
 		{"notes", ".", false},
 		{"notes", "notes/.notation/x", false}, // dot segments always denied
+		{"notes", " notes/a.md", false},       // padded path aliases a literal " notes" dir — deny
+		{"notes", "notes/a.md ", false},
 	}
 	for _, c := range cases {
 		sh := Share{Scope: c.scope}

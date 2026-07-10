@@ -163,6 +163,13 @@ func (s Share) ScopeAllows(userPath string) bool {
 	if s.Scope == "" {
 		return true
 	}
+	// SafeJoin (the filesystem gate) does NOT trim whitespace — " notes/x"
+	// names a literal " notes" directory. NormalizeScope's TrimSpace would
+	// alias such a path into the scope, so reject padded paths outright
+	// instead of letting the two normalizations diverge.
+	if strings.TrimSpace(userPath) != userPath {
+		return false
+	}
 	p, err := NormalizeScope(userPath)
 	if err != nil || p == "" {
 		return false
