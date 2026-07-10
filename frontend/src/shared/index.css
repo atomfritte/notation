@@ -145,8 +145,10 @@
 /* ---- Print stylesheet ----------------------------------------------------
  *
  * When the user hits Cmd/Ctrl-P (or the Print button in the page header) we
- * strip away every piece of chrome and let only the article content land on
- * paper. Anything marked .no-print is hidden, as are the sidebar, the page
+ * typeset the article as a proper document: A4 geometry, a serif reading face
+ * on a sans heading scale, disciplined page-breaks, a light code/table palette,
+ * and a `.print-doc-header` title block (injected by MarkdownView, shown only
+ * on paper). Anything marked .no-print is hidden, as are the sidebar, the page
  * header, every floating widget, and the Monaco editor (the print button is
  * only visible in read mode, but be defensive).
  *
@@ -154,12 +156,60 @@
  * already strip the page background — leaving dark mode in place would just
  * inflate the page count from blank backgrounds.
  */
+.print-only { display: none; }
+
 @media print {
+  /* --- Page geometry ----------------------------------------------------- */
+  @page {
+    size: A4;
+    margin: 20mm 18mm 20mm;
+    /* Spec-compliant page numbers. Chromium does not implement @page margin
+       boxes yet, so this only paints in engines that do (Firefox, Prince,
+       WeasyPrint); in Chrome the browser's own print footer supplies them. */
+    @bottom-right {
+      content: counter(page) " / " counter(pages);
+      font: 9pt ui-sans-serif, system-ui, sans-serif;
+      color: #6b7280;
+    }
+  }
+  /* Let the title block breathe on page one. */
+  @page :first { margin-top: 16mm; }
+
+  /* --- App-shell reset --------------------------------------------------- */
   html, body, #root {
     background: #ffffff !important;
-    color: #000000 !important;
+    color: #111111 !important;
     height: auto !important;
   }
+  /* Force our intentionally-light backgrounds, borders and token colours to
+     actually print — Chrome drops backgrounds otherwise. Safe because every
+     surface we keep on the page is light by construction. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .print-only { display: block; }
+  /* The app shell is a fixed-height (100dvh) flex column whose panes scroll via
+     overflow-hidden/auto. On paper that clips the article to a single viewport,
+     so we un-trap the whole chain: every structural wrapper drops its height cap,
+     overflow and flex sizing and collapses to a plain block, letting the content
+     flow across as many A4 pages as it needs. Only containers (main/section/nav/
+     div) are touched — never inline elements, inputs, SVG or media — so nothing
+     inside the article is resized or de-inlined. Bare element selectors (no #id)
+     keep specificity low so the article's own class rules still win. */
+  main, section, nav, article, div {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: none !important;
+    position: static !important;
+  }
+  main, section, nav, div { display: block !important; }
+  .print-doc-meta { display: flex !important; }
+  /* Hide the chrome. Listed after the block-flatten above so these element
+     selectors win the specificity tie and stay hidden (header/aside are neither
+     divs nor in the flatten list, but keep this defensive and unambiguous). */
   aside,
   header,
   .no-print,
@@ -167,45 +217,316 @@
   .monaco-editor {
     display: none !important;
   }
-  main,
-  main > * {
-    display: block !important;
-    overflow: visible !important;
-    height: auto !important;
-    flex: none !important;
-    position: static !important;
+
+  /* --- Document title block (print-only, injected by MarkdownView) ------- */
+  .print-doc-header {
+    margin: 0 0 1.5em;
+    padding-bottom: 0.5em;
+    border-bottom: 1.5pt solid #0f172a;
   }
+  .print-doc-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1.5em;
+    font: 8.5pt/1.4 ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+  }
+  .print-doc-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .print-doc-date { white-space: nowrap; flex: none; }
+  .print-doc-title {
+    margin: 0.3em 0 0;
+    font: 700 22pt/1.15 Georgia, 'Times New Roman', 'Liberation Serif', serif;
+    letter-spacing: -0.015em;
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    background: none !important;
+    text-wrap: balance;
+  }
+
+  /* --- Article shell ----------------------------------------------------- */
   article.prose {
     max-width: none !important;
-    color: #000 !important;
+    width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    font-size: 11pt;
+    color: #111 !important;
+    font-family: Georgia, 'Times New Roman', 'Liberation Serif', serif;
+    font-size: 10.8pt;
+    line-height: 1.5;
+    letter-spacing: 0;
+    font-feature-settings: normal;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    orphans: 3;
+    widows: 3;
   }
-  article.prose a {
-    color: #000 !important;
-    text-decoration: underline;
-  }
-  /* Keep code blocks legible without the dark theme. */
-  article.prose pre,
-  article.prose code {
-    background: #f5f5f5 !important;
-    color: #000 !important;
-    border: 1px solid #ddd;
-  }
-  /* Don't orphan headings or split tight blocks across pages. */
+  article.prose p { margin: 0 0 0.7em; }
+
+  /* Headings: a sans face over the serif body for editorial contrast, plus
+     a solid colour to kill the on-screen gradient-clip (which prints blank). */
   article.prose h1,
   article.prose h2,
   article.prose h3,
-  article.prose h4 {
+  article.prose h4,
+  article.prose h5,
+  article.prose h6 {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    background: none !important;
+    background-image: none !important;
+    /* Longhand, not the `border-image` shorthand: the CSS minifier strips
+       `border-image: none` down to an invalid empty value and drops it, which
+       let the on-screen accent-gradient h2 rule bleed into print. */
+    border-image-source: none !important;
+    width: auto !important;
+    break-after: avoid;
     page-break-after: avoid;
+    text-wrap: pretty;
   }
+  article.prose h1 { font-size: 19pt; line-height: 1.15; margin: 0.4em 0 0.35em; letter-spacing: -0.02em; }
+  article.prose h2 {
+    font-size: 14.5pt; margin: 1.4em 0 0.45em; padding-bottom: 0.18em;
+    border-bottom: 0.75pt solid #cbd5e1;
+  }
+  article.prose h3 { font-size: 12.5pt; margin: 1.15em 0 0.35em; }
+  article.prose h4 { font-size: 11pt; margin: 1em 0 0.3em; }
+  article.prose h1 > a, article.prose h2 > a, article.prose h3 > a,
+  article.prose h4 > a, article.prose h5 > a, article.prose h6 > a {
+    color: inherit !important; text-decoration: none !important;
+  }
+
+  /* Keep atomic blocks whole across page breaks. */
+  article.prose figure,
   article.prose img,
   article.prose pre,
   article.prose blockquote,
-  article.prose table {
+  article.prose table,
+  article.prose .mermaid-container,
+  article.prose .katex-display {
+    break-inside: avoid;
     page-break-inside: avoid;
   }
+  article.prose li { break-inside: avoid; }
+
+  /* --- Links ------------------------------------------------------------- */
+  article.prose a {
+    color: #111 !important;
+    text-decoration: underline;
+    text-decoration-color: #9ca3af;
+    text-underline-offset: 2px;
+  }
+  /* Surface the destination after genuine external links only. */
+  article.prose a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.78em;
+    color: #6b7280;
+    word-break: break-all;
+    text-decoration: none;
+  }
+  /* ...never for heading anchors, wiki-links or auto-file links (pure noise). */
+  article.prose h1 a::after, article.prose h2 a::after, article.prose h3 a::after,
+  article.prose h4 a::after, article.prose h5 a::after, article.prose h6 a::after,
+  article.prose a.wiki-link::after, article.prose a.auto-file-link::after {
+    content: none !important;
+  }
+  article.prose .wiki-link, article.prose .auto-file-link {
+    color: #111 !important;
+    border-bottom: 0 !important;
+    text-decoration: underline;
+    text-decoration-color: #9ca3af;
+  }
+  article.prose .auto-file-link-icon { display: none !important; }
+
+  /* --- Code -------------------------------------------------------------- */
+  article.prose pre {
+    background: #f6f8fa !important;
+    background-image: none !important;
+    border: 0.75pt solid #d0d7de !important;
+    border-radius: 4pt;
+    color: #24292e !important;
+    font-size: 9pt;
+    line-height: 1.45;
+    padding: 0.7em 0.85em !important;
+    white-space: pre-wrap !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    overflow: visible !important;
+  }
+  article.prose pre code { white-space: pre-wrap !important; word-break: break-word; }
+  article.prose pre button { display: none !important; }
+  article.prose :not(pre) > code {
+    background: #eff1f3 !important;
+    border: 0.5pt solid #e2e4e8 !important;
+    color: #24292e !important;
+    font-size: 0.85em;
+    padding: 0.5pt 3pt;
+  }
+  /* Map highlight.js onto the GitHub *light* palette, forced past any `.dark`
+     override so a PDF printed from dark mode stays legible on white. */
+  article.prose .hljs, article.prose pre code.hljs { color: #24292e !important; background: transparent !important; }
+  article.prose .hljs-comment, article.prose .hljs-quote { color: #6a737d !important; }
+  article.prose .hljs-keyword, article.prose .hljs-selector-tag, article.prose .hljs-doctag,
+  article.prose .hljs-type, article.prose .hljs-template-tag,
+  article.prose .hljs-variable.language_ { color: #d73a49 !important; }
+  article.prose .hljs-string, article.prose .hljs-meta .hljs-string,
+  article.prose .hljs-regexp, article.prose .hljs-addition { color: #032f62 !important; }
+  article.prose .hljs-number, article.prose .hljs-literal, article.prose .hljs-attr,
+  article.prose .hljs-attribute, article.prose .hljs-variable, article.prose .hljs-template-variable,
+  article.prose .hljs-selector-attr, article.prose .hljs-selector-class,
+  article.prose .hljs-selector-id, article.prose .hljs-meta { color: #005cc5 !important; }
+  article.prose .hljs-title, article.prose .hljs-title.function_,
+  article.prose .hljs-section { color: #6f42c1 !important; }
+  article.prose .hljs-built_in, article.prose .hljs-symbol, article.prose .hljs-bullet { color: #e36209 !important; }
+  article.prose .hljs-name, article.prose .hljs-title.class_ { color: #22863a !important; }
+  article.prose .hljs-emphasis { font-style: italic; }
+  article.prose .hljs-strong { font-weight: 700; }
+
+  /* --- Blockquote -------------------------------------------------------- */
+  article.prose blockquote {
+    border-left: 2.5pt solid #94a3b8 !important;
+    background: #f8fafc !important;
+    background-image: none !important;
+    color: #334155 !important;
+    padding: 0.35em 1em !important;
+    margin: 1em 0 !important;
+    border-radius: 0 3pt 3pt 0;
+    font-style: italic;
+  }
+
+  /* --- Tables ------------------------------------------------------------ */
+  article.prose .prose-table-wrap {
+    border: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    margin: 1.1em 0 !important;
+  }
+  article.prose table {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    font-size: 9pt !important;
+    table-layout: auto;
+    break-inside: auto;
+  }
+  article.prose thead { display: table-header-group; }
+  article.prose tr { break-inside: avoid; page-break-inside: avoid; }
+  article.prose th, article.prose table thead th {
+    background: #f1f5f9 !important;
+    background-image: none !important;
+    color: #0f172a !important;
+    border: 0.5pt solid #cbd5e1 !important;
+    padding: 4pt 7pt !important;
+    text-align: left;
+    font-size: 8pt !important;
+    white-space: normal !important;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  article.prose td, article.prose table tbody td {
+    border: 0.5pt solid #cbd5e1 !important;
+    padding: 4pt 7pt !important;
+    color: #111 !important;
+    background: #fff !important;
+    vertical-align: top;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  article.prose tbody tr:nth-child(even) td { background: #f8fafc !important; }
+  article.prose table thead th.sortable-th::after { display: none !important; }
+
+  /* --- Media & math ------------------------------------------------------ */
+  article.prose img { max-width: 100% !important; height: auto !important; border-radius: 3pt; }
+  article.prose .katex-display { overflow: visible !important; margin: 0.8em 0 !important; }
+  article.prose .katex, article.prose .katex-display { color: #111 !important; }
+  article.prose .mermaid-container {
+    background: #ffffff !important;
+    text-align: center;
+    margin: 1em 0 !important;
+  }
+  article.prose .mermaid-container svg {
+    display: inline-block;
+    /* The Mermaid component stamps explicit width/height (from the viewBox) on
+       the SVG so it has real intrinsic dimensions; here we just cap the width
+       and let height scale so a wide diagram fits the page without clipping. */
+    max-width: 100% !important;
+    height: auto !important;
+  }
+  /* A Mermaid diagram is pre-rendered in the app's current theme. When that is
+     dark, its text/edges are near-white and vanish on the printed white page.
+     Recolour a dark-theme diagram to a legible light palette (dark ink, light
+     node fills) so it prints cleanly no matter which theme it was rendered in.
+     Light-theme diagrams are already dark-on-light, so these are near-no-ops. */
+  article.prose .mermaid-container svg text,
+  article.prose .mermaid-container svg .nodeLabel,
+  article.prose .mermaid-container svg .edgeLabel,
+  article.prose .mermaid-container svg foreignObject div,
+  article.prose .mermaid-container svg foreignObject span,
+  article.prose .mermaid-container svg foreignObject p {
+    fill: #111827 !important;
+    color: #111827 !important;
+  }
+  article.prose .mermaid-container svg .labelBkg,
+  article.prose .mermaid-container svg .edgeLabel .label > rect {
+    fill: #ffffff !important;
+    background: #ffffff !important;
+    opacity: 1 !important;
+  }
+  article.prose .mermaid-container svg .node rect,
+  article.prose .mermaid-container svg .node circle,
+  article.prose .mermaid-container svg .node ellipse,
+  article.prose .mermaid-container svg .node polygon,
+  article.prose .mermaid-container svg .node path,
+  article.prose .mermaid-container svg .label-container {
+    fill: #ffffff !important;
+    stroke: #334155 !important;
+  }
+  article.prose .mermaid-container svg .cluster rect {
+    fill: #f8fafc !important;
+    stroke: #cbd5e1 !important;
+  }
+  article.prose .mermaid-container svg .flowchart-link,
+  article.prose .mermaid-container svg .edgePath path,
+  article.prose .mermaid-container svg line,
+  article.prose .mermaid-container svg marker path,
+  article.prose .mermaid-container svg .arrowMarkerPath {
+    stroke: #334155 !important;
+  }
+  article.prose .mermaid-container svg marker path,
+  article.prose .mermaid-container svg .arrowMarkerPath {
+    fill: #334155 !important;
+  }
+
+  /* --- Lists, rules, task boxes ----------------------------------------- */
+  article.prose hr { border: 0; border-top: 0.5pt solid #d1d5db; margin: 1.6em 0; }
+  article.prose ul, article.prose ol { padding-left: 1.4em; }
+  article.prose input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none;
+    width: 9pt; height: 9pt;
+    border: 0.75pt solid #4b5563 !important;
+    border-radius: 2pt;
+    background: #fff !important;
+    vertical-align: -1pt;
+    margin-right: 4pt;
+    position: relative;
+  }
+  article.prose input[type="checkbox"]:checked::after {
+    content: "\2713";
+    position: absolute;
+    inset: 0;
+    font-size: 8pt;
+    line-height: 9pt;
+    text-align: center;
+    color: #111;
+  }
+
+  /* Kill the page-reveal animation + virtualisation so nothing is skipped. */
+  article.prose > * { animation: none !important; }
+  article.prose.cv-auto > * { content-visibility: visible !important; }
 }
 
 @layer base {
@@ -861,7 +1182,5 @@ article.prose.cv-auto > * {
   content-visibility: auto;
   contain-intrinsic-size: auto 64px;
 }
-@media print {
-  article.prose > * { animation: none !important; }
-  article.prose.cv-auto > * { content-visibility: visible; }
-}
+/* Print reset for the animation + virtualisation lives in the main
+   `@media print` block near the top of this file (search "Print stylesheet"). */
