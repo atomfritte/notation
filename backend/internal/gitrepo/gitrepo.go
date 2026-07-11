@@ -68,6 +68,20 @@ type Manager struct {
 	mu      sync.Mutex
 	pending map[string]*pending
 	closed  bool
+
+	// opLocks serializes the actual git subprocess work per Space so a
+	// Reinit (rm -rf .git + init) can never run concurrently with an
+	// auto-commit on the same repo. mu only guards the debounce map, which is
+	// not enough: cancelPending stops a queued timer but does NOT wait for a
+	// commit that has already begun — without this lock that in-flight commit
+	// writes objects into .git while Reinit removes it ("directory not empty").
+	opLocks sync.Map // spaceID -> *sync.Mutex
+}
+
+// opLock returns the per-Space git-operation mutex, creating it on first use.
+func (m *Manager) opLock(spaceID string) *sync.Mutex {
+	v, _ := m.opLocks.LoadOrStore(spaceID, &sync.Mutex{})
+	return v.(*sync.Mutex)
 }
 
 func NewManager(store *space.Store, debounce time.Duration, log *slog.Logger) *Manager {
@@ -114,6 +128,12 @@ func (m *Manager) Reinit(spaceID string, author Author, message string) error {
 		message = "reinitialize"
 	}
 	m.cancelPending(spaceID)
+	// Serialize against any in-flight auto-commit on this Space. cancelPending
+	// only drops a *queued* timer; a commit that already started still holds
+	// this lock, so we block here until it finishes before touching .git.
+	l := m.opLock(spaceID)
+	l.Lock()
+	defer l.Unlock()
 	dir := m.store.FilesDir(spaceID)
 	// Blow away the entire repository. RemoveAll on a missing .git is a no-op, so
 	// this is safe on a never-committed space too.
@@ -221,6 +241,11 @@ func (m *Manager) SnapshotCommit(spaceID string, author Author, message string) 
 }
 
 func (m *Manager) commit(spaceID string, author Author, label string) error {
+	// Hold the per-Space op lock for the whole git sequence so a concurrent
+	// Reinit (which removes .git) can't pull the repository out from under us.
+	l := m.opLock(spaceID)
+	l.Lock()
+	defer l.Unlock()
 	dir := m.store.FilesDir(spaceID)
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
 		// Repo doesn't exist — attempt init (e.g., older Space without git).
