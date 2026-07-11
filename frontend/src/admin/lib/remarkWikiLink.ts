@@ -1,16 +1,17 @@
 import type { Plugin } from 'unified'
 import type { Root, Text, PhrasingContent, Parent } from 'mdast'
 import { visit, SKIP } from 'unist-util-visit'
-
-// Match [[target]] or [[target|display]], target can contain #anchor.
-// We deliberately reject newlines inside the brackets and unmatched [/].
-const wikiLinkRe = /\[\[([^\[\]\n]+?)\]\]/g
+import { WIKI_LINK_RE, parseWikiTarget } from './wikiLinks'
 
 /**
  * remarkWikiLink transforms `[[target]]` and `[[target|display]]` syntax inside
  * text nodes into Markdown link nodes whose href is `?file=<target>#<anchor>`.
  * The MarkdownView component intercepts that href via its `a` component and
  * routes it through React Router so navigation stays inside the SPA.
+ *
+ * The syntax parsing (pipe/anchor split, NFC, `.md` inference, slug) lives in
+ * {@link parseWikiTarget} so the encrypted-space backlinks scanner extracts the
+ * exact same targets this plugin renders — see `wikiLinks.ts`.
  *
  * Forms accepted:
  *   [[file]]               → href ?file=file.md
@@ -23,7 +24,7 @@ export const remarkWikiLink: Plugin<[], Root> = () => (tree) => {
   visit(tree, 'text', (node: Text, index, parent) => {
     if (!parent || index == null) return
     const value = node.value
-    const matches = [...value.matchAll(wikiLinkRe)]
+    const matches = [...value.matchAll(WIKI_LINK_RE)]
     if (matches.length === 0) return
 
     const out: PhrasingContent[] = []
@@ -34,28 +35,7 @@ export const remarkWikiLink: Plugin<[], Root> = () => (tree) => {
       if (start > cursor) {
         out.push({ type: 'text', value: value.slice(cursor, start) } as Text)
       }
-      // Aggressively normalise the captured payload before we touch it:
-      //   - NFC unifies combining-mark variants (NFD `U + ̈` → NFC `Ü`)
-      //     so a file named "Übersicht.md" matches `[[Übersicht]]` even if
-      //     the typist's editor or filesystem produced a different form.
-      //   - We then split off the pipe / hash AFTER normalisation so the
-      //     display label and the anchor inherit the same canonical chars.
-      let target = m[1].trim().normalize('NFC')
-      let display = target
-      const pipe = target.indexOf('|')
-      if (pipe >= 0) {
-        display = target.slice(pipe + 1).trim() || target.slice(0, pipe).trim()
-        target = target.slice(0, pipe).trim()
-      }
-      let anchor = ''
-      const hash = target.indexOf('#')
-      if (hash >= 0) {
-        // Slugify so `[[file#My Heading]]` matches rehype-slug's id="my-heading".
-        anchor = slugifyHeading(target.slice(hash + 1))
-        target = target.slice(0, hash)
-      }
-      let path = target
-      if (!/\.[a-z0-9]+$/i.test(path)) path += '.md'
+      const { path, anchor, display } = parseWikiTarget(m[1])
       const href = `?file=${encodeURIComponent(path)}${anchor ? '#' + anchor : ''}`
       out.push({
         type: 'link',
@@ -72,25 +52,4 @@ export const remarkWikiLink: Plugin<[], Root> = () => (tree) => {
     ;(parent as Parent).children.splice(index, 1, ...out)
     return [SKIP, index + out.length]
   })
-}
-
-/**
- * slugifyHeading approximates github-slugger / rehype-slug's default algorithm
- * so `[[file#My Heading!]]` becomes a hash that matches the rendered <h2 id>.
- * Doesn't handle the +1 numeric suffix that rehype-slug appends to duplicate
- * headings on the same page (rare in practice, can be addressed if it bites).
- */
-// github-slugger-equivalent algorithm: normalise to NFC, lower-case, drop
-// punctuation but keep Unicode letters / digits / spaces / hyphens, collapse
-// runs of whitespace to "-". Mirrors the slug rehype-slug stamps into the
-// rendered <h2 id> so anchor links resolve.
-function slugifyHeading(s: string): string {
-  return s
-    .normalize('NFC')
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }

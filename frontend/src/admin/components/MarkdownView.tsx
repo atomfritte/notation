@@ -11,6 +11,7 @@ import rehypeHighlight from 'rehype-highlight'
 import { MessageSquare } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
+import { buildFileIndex, resolveTarget as resolveWikiTarget } from '../lib/wikiLinks'
 import { buildAutoFileLink } from '../lib/remarkAutoFileLink'
 import { Mermaid } from './Mermaid'
 import 'katex/dist/katex.min.css'
@@ -121,49 +122,20 @@ export function MarkdownView({
   // Without resolving it against the real file list the resulting `?file=` URL
   // 404s. We build a lookup (exact paths + basename buckets) and resolve every
   // intra-Space link to an actual path before handing it to the router.
-  const fileIndex = useMemo(() => {
-    const set = new Set<string>()
-    const byBase = new Map<string, string[]>()
-    for (const f of files ?? []) {
-      if (!f) continue
-      set.add(f)
-      const base = f.slice(f.lastIndexOf('/') + 1).toLowerCase()
-      const bucket = byBase.get(base)
-      if (bucket) bucket.push(f)
-      else byBase.set(base, [f])
-    }
-    return { set, byBase }
-  }, [files])
+  const fileIndex = useMemo(() => buildFileIndex(files ?? []), [files])
   const currentDir = useMemo(() => {
     if (!currentFile) return ''
     const i = currentFile.lastIndexOf('/')
     return i >= 0 ? currentFile.slice(0, i) : ''
   }, [currentFile])
 
+  // Bind the shared wiki-link resolver to this document's file index + folder.
   // preferDir=true → markdown-relative semantics (resolve against the current
   // folder first); false → wiki-link / vault semantics (exact + basename first).
-  // Returns the best-guess path plus whether it actually exists in the Space, so
-  // the caller can render a dead link inert instead of producing a 404.
-  function resolveTarget(rawIn: string, preferDir: boolean): { path: string; exists: boolean } {
-    if (!rawIn) return { path: rawIn, exists: false }
-    // Authors may percent-encode spaces etc. (`My%20Note.md`); decode so it
-    // matches the plain paths in the index.
-    let raw = rawIn
-    try { raw = decodeURIComponent(rawIn) } catch { /* leave as-is on bad escape */ }
-    const rel = normJoin(currentDir, raw)
-    const root = raw.replace(/^\.?\/+/, '')
-    const tries = preferDir ? [rel, raw, root] : [raw, root, rel]
-    for (const t of tries) if (fileIndex.set.has(t)) return { path: t, exists: true }
-    const base = raw.slice(raw.lastIndexOf('/') + 1).toLowerCase()
-    const matches = fileIndex.byBase.get(base)
-    if (matches && matches.length === 1) return { path: matches[0], exists: true }
-    if (matches && matches.length > 1) {
-      const sameDir = matches.find(p => p.slice(0, Math.max(0, p.lastIndexOf('/'))) === currentDir)
-      if (sameDir) return { path: sameDir, exists: true }
-      return { path: [...matches].sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))[0], exists: true }
-    }
-    return { path: /^\.\.?\//.test(raw) ? rel : (preferDir ? rel : root), exists: false }
-  }
+  // The encrypted-space backlinks scanner runs the very same resolver so its
+  // "who links here" answer matches where these rendered links navigate.
+  const resolveTarget = (rawIn: string, preferDir: boolean) =>
+    resolveWikiTarget(fileIndex, currentDir, rawIn, preferDir)
   const haveFileList = (files?.length ?? 0) > 0
 
   // ---- Prev / next page navigation ---------------------------------------
@@ -680,18 +652,6 @@ function startsInHorizontalScroller(node: Node | null, root: HTMLElement | null)
     el = el.parentElement
   }
   return false
-}
-
-// Join a base directory with a (possibly `./` / `../`-laden) relative target
-// and collapse the navigation segments, yielding a clean Space-relative path.
-function normJoin(dir: string, rel: string): string {
-  const parts = dir ? dir.split('/') : []
-  for (const seg of rel.split('/')) {
-    if (seg === '' || seg === '.') continue
-    if (seg === '..') { parts.pop(); continue }
-    parts.push(seg)
-  }
-  return parts.join('/')
 }
 
 // Display label for a page link: basename without the markdown extension.
