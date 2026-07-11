@@ -187,6 +187,14 @@ func NewRouter(d Deps) (http.Handler, error) {
 				er.Get("/checkpoint", ahdmin.getCheckpoint)
 				er.Put("/keyrecord", ahdmin.putKeyRecord)
 				er.Get("/keyrecord", ahdmin.getKeyRecord)
+				// Convert an existing space between plaintext and encrypted.
+				// Mode-agnostic (each handler resolves the space itself), so they
+				// sit outside the requireEncrypted / requirePlaintext split — the
+				// transient Meta.Converting marker relaxes both gates while a
+				// conversion is in flight.
+				er.Post("/begin-convert", ahdmin.beginConvert)
+				er.Post("/abort-convert", ahdmin.abortConvert)
+				er.Post("/finalize-convert", ahdmin.finalizeConvert)
 			})
 
 			// Plaintext filesystem routes. requirePlaintext 409s the whole
@@ -196,6 +204,10 @@ func NewRouter(d Deps) (http.Handler, error) {
 			sr.Group(func(pr chi.Router) {
 				pr.Use(ahdmin.requirePlaintext)
 				pr.Get("/tree", ahdmin.getTree)
+				// Flat, form-transparent file list for the encrypt conversion
+				// (the tree collapses form folders). Relaxed-gate reachable while
+				// mid to-encrypted conversion.
+				pr.Get("/files-flat", ahdmin.listFilesFlat)
 				pr.Get("/tts", ahdmin.getTTS) // scope = this space → audio isolated per space
 				pr.Get("/export", ahdmin.exportSpace)
 				pr.Post("/mkdir", ahdmin.mkdir)

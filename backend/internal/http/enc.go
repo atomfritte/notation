@@ -27,6 +27,11 @@ import (
 
 // requireEncrypted resolves the space and rejects (409) if it is not encrypted.
 // Returns the space id and true on success.
+//
+// While a conversion is in progress (Meta.Converting != "") the gate is relaxed
+// so the /enc/* endpoints are reachable on a space that isn't yet flagged
+// encrypted: a to-encrypted conversion needs to STAGE ciphertext into a space
+// that is still plaintext. Outside conversion the strict split holds.
 func (h *adminHandlers) requireEncrypted(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := chi.URLParam(r, "spaceID")
 	m, err := h.store.Get(id)
@@ -34,7 +39,7 @@ func (h *adminHandlers) requireEncrypted(w http.ResponseWriter, r *http.Request)
 		writeSpaceError(w, err)
 		return "", false
 	}
-	if !m.Encrypted {
+	if !m.Encrypted && m.Converting == "" {
 		writeError(w, http.StatusConflict, "space is not encrypted")
 		return "", false
 	}
@@ -45,6 +50,11 @@ func (h *adminHandlers) requireEncrypted(w http.ResponseWriter, r *http.Request)
 // (plaintext-only) content route when the space is encrypted. Centralising it
 // here means a newly added file endpoint can't silently skip the check — it
 // just has to live in the guarded route group.
+//
+// While a conversion is in progress (Meta.Converting != "") the gate is relaxed
+// so the plaintext file endpoints stay reachable on an encrypted space: a
+// to-plaintext conversion needs to WRITE decrypted files back through the normal
+// file API. Outside conversion the strict split holds.
 func (h *adminHandlers) requirePlaintext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "spaceID")
@@ -53,7 +63,7 @@ func (h *adminHandlers) requirePlaintext(next http.Handler) http.Handler {
 			writeSpaceError(w, err)
 			return
 		}
-		if m.Encrypted {
+		if m.Encrypted && m.Converting == "" {
 			writeError(w, http.StatusConflict, "space is encrypted; use the /enc endpoints")
 			return
 		}
