@@ -10,8 +10,8 @@
 import { RECOVERY_KEY_LEN } from './constants'
 import { randomBytes } from './bytes'
 import { base32Decode, base32Encode } from './base32'
-import type { WrappedKey } from './keys'
-import { unwrapDEK, wrapDEK } from './keys'
+import type { WrappedKey } from './frame'
+import { unwrapDEK, wrapDEK } from './frame'
 
 /** Characters per dash-separated group in the printable form. */
 const GROUP_SIZE = 4
