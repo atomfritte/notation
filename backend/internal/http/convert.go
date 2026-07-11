@@ -103,6 +103,32 @@ func (h *adminHandlers) abortConvert(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, m)
 		return
 	}
+	// Data-loss guard: if a finalize already purged the SOURCE mode but crashed
+	// before finishing (e.g. the reinit race), the only surviving copy of the
+	// content is the staged TARGET-mode data. Aborting would discard it and leave
+	// an empty space. Refuse — the user must resume (re-run finalize) instead.
+	staged, err := h.store.CountPlaintextFiles(id)
+	if err != nil {
+		writeInternal(w, r, "convert.abort.count", err)
+		return
+	}
+	hasEnc, err := h.store.HasEncContent(id)
+	if err != nil {
+		writeInternal(w, r, "convert.abort.hasenc", err)
+		return
+	}
+	switch m.Converting {
+	case space.ConvertToEncrypted:
+		if staged == 0 && hasEnc {
+			writeError(w, http.StatusConflict, "this space is past the point of no return: the plaintext was already replaced by ciphertext. Use Resume to finish encrypting — aborting now would lose your content.")
+			return
+		}
+	case space.ConvertToPlaintext:
+		if !hasEnc && staged > 0 {
+			writeError(w, http.StatusConflict, "this space is past the point of no return: the ciphertext was already replaced by plaintext. Use Resume to finish decrypting — aborting now would lose your content.")
+			return
+		}
+	}
 	if err := h.store.AbortConvert(id); err != nil {
 		writeConvertError(w, r, err)
 		return

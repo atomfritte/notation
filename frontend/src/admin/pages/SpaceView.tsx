@@ -1334,20 +1334,34 @@ export function SpaceView() {
           <div className="flex items-center justify-between gap-3 px-4 py-2 bg-[color:var(--notation-warning)]/15 border-b border-[color:var(--notation-warning)] text-sm">
             <span className="flex items-center gap-2 text-[var(--notation-fg)]">
               <Lock size={14} className="text-[var(--notation-warning)]" />
-              A {spaceMeta.converting === 'to-encrypted' ? 'to-encrypted' : 'to-plaintext'} conversion was interrupted. Your original content is intact.
+              A {spaceMeta.converting === 'to-encrypted' ? 'to-encrypted' : 'to-plaintext'} conversion was interrupted. Resume to finish it, or abort to revert.
             </span>
-            <button
-              onClick={async () => {
-                try {
-                  const meta = await api.abortConvert(spaceID)
-                  setSpaceMeta(meta)
-                  if (!meta.encrypted) api.getTree(spaceID).then(setTree).catch(e => setErr(String(e)))
-                } catch (e) { setErr(String(e)) }
-              }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-[var(--notation-fg)] hover:bg-[var(--notation-border)] transition-colors flex-shrink-0"
-            >
-              <XIcon size={13} /> Abort conversion
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={async () => {
+                  try {
+                    const meta = await api.finalizeConvert(spaceID)
+                    setSpaceMeta(meta)
+                    if (!meta.encrypted) api.getTree(spaceID).then(setTree).catch(e => setErr(String(e)))
+                  } catch (e) { setErr(String(e)) }
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 transition-colors"
+              >
+                Resume
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const meta = await api.abortConvert(spaceID)
+                    setSpaceMeta(meta)
+                    if (!meta.encrypted) api.getTree(spaceID).then(setTree).catch(e => setErr(String(e)))
+                  } catch (e) { setErr(String(e)) }
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-[var(--notation-fg)] hover:bg-[var(--notation-border)] transition-colors"
+              >
+                <XIcon size={13} /> Abort
+              </button>
+            </div>
           </div>
         )}
 
