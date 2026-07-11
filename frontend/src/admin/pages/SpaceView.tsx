@@ -4,6 +4,7 @@ import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePl
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
+import { createEncryptedSearchIndex, type EncryptedSearchIndex } from '../lib/encSearch'
 import type { EncryptedFS } from '../../shared/vfs/encfs'
 import { utf8Decode, utf8Encode } from '../../shared/crypto/bytes'
 import { UnlockScreen } from '../components/UnlockScreen'
@@ -70,6 +71,10 @@ export function SpaceView() {
   const ksVersion = keyStore.useKeyStoreVersion()
   const unlocked = !encrypted || keyStore.isUnlocked(spaceID)
   const fsRef = useRef<EncryptedFS | null>(null)
+  // Client-side full-text search index over the decrypted corpus (encrypted
+  // spaces only — plaintext spaces use the server /search endpoint). Rebuilt
+  // alongside the FS; its text cache is dropped on any mutation (see below).
+  const searchIndexRef = useRef<EncryptedSearchIndex | null>(null)
   const [fsReady, setFsReady] = useState(false)
   // Refs the stable useCallback CRUD helpers read at call time so they branch to
   // the FS without being recreated (and without churning their identities).
@@ -665,6 +670,7 @@ export function SpaceView() {
   useEffect(() => {
     if (!encrypted || !unlocked) {
       fsRef.current = null
+      searchIndexRef.current = null
       setFsReady(false)
       return
     }
@@ -676,6 +682,9 @@ export function SpaceView() {
       .then(fs => {
         if (cancelled) return
         fsRef.current = fs
+        // Fresh FS → fresh (empty) search cache; the old index (if any) is
+        // discarded so a re-unlock never searches a stale corpus.
+        searchIndexRef.current = createEncryptedSearchIndex(fs)
         setFsReady(true)
         setTree(fsToEntries(fs))
       })
@@ -683,6 +692,13 @@ export function SpaceView() {
     return () => { cancelled = true }
     // ksVersion so a re-unlock after a lock rebuilds the FS with the new handle.
   }, [spaceID, encrypted, unlocked, ksVersion])
+
+  // Any mutation (create / rename / move / delete / upload / save) replaces the
+  // `tree` array with a fresh projection, so keying off it drops the encrypted
+  // search index's decrypted-text cache on every structural change — a
+  // re-decrypt of a personal-notes corpus is cheap; a stale hit is a bug. It
+  // never fires mid-search (typing in the modal doesn't touch the tree).
+  useEffect(() => { searchIndexRef.current?.clear() }, [tree])
 
   useEffect(refreshTree, [refreshTree])
 
@@ -866,7 +882,9 @@ export function SpaceView() {
   // spaces hide the server-backed tools (full-text search, git history,
   // comments, studio read-aloud) that 409 server-side.
   const headerActions: HeaderAction[] = []
-  if (!encrypted) headerActions.push({ key: 'search', label: 'Search', icon: <Search size={18} />, onClick: () => setSearchOpen(true) })
+  // Full-text search works for BOTH modes: plaintext hits the server /search
+  // endpoint; encrypted searches the decrypted corpus in-browser (see below).
+  headerActions.push({ key: 'search', label: 'Search', icon: <Search size={18} />, onClick: () => setSearchOpen(true) })
   if (isMarkdownFile(file) && !isForm) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
   if (!isForm && !encrypted) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { setHistoryMode(v => !v); setEditing(false) } })
   if (!isForm) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove favorite' : 'Add favorite', icon: <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />, active: isBookmarked, onClick: () => toggleBookmark(file) })
@@ -1340,6 +1358,11 @@ export function SpaceView() {
                         const fs = fsRef.current
                         if (!fs) throw new Error('space is locked')
                         await fs.write(file, utf8Encode(c))
+                        // Content overwrite reuses the path, so the tree-change
+                        // effect won't necessarily see a structural diff — drop
+                        // this path's cached text explicitly so a re-search
+                        // reflects the just-saved body, never a stale one.
+                        searchIndexRef.current?.invalidate(file)
                         await fs.sync()
                         return { etag: null }
                       } : undefined}
@@ -1456,23 +1479,26 @@ export function SpaceView() {
         onClose={() => setPaletteOpen(false)}
         onSelect={(p) => selectFile(p)}
       />
-      {/* Full-text search is a server feature — omitted entirely for encrypted
-          spaces (the endpoint 409s and there's no plaintext index). */}
-      {!encrypted && (
-        <SearchPanel
-          open={searchOpen}
-          onClose={() => setSearchOpen(false)}
-          onSelect={(p, opts) => {
-            // Carry the query into the URL so the viewer can highlight and
-            // scroll to the first match once the file content loads.
-            const next: Record<string, string> = { file: p }
-            if (opts?.query) next.q = opts.query
-            setSearchParams(next)
-            if (isMobile) setSidebarOpen(false)
-          }}
-          onSearch={(q) => api.searchSpace(spaceID, q)}
-        />
-      )}
+      {/* Full-text search. Plaintext spaces hit the server /search endpoint;
+          encrypted spaces search the already-decrypted corpus entirely in the
+          browser via the client index (the server can't read the ciphertext). */}
+      <SearchPanel
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelect={(p, opts) => {
+          // Carry the query into the URL so the viewer can highlight and
+          // scroll to the first match once the file content loads.
+          const next: Record<string, string> = { file: p }
+          if (opts?.query) next.q = opts.query
+          setSearchParams(next)
+          if (isMobile) setSidebarOpen(false)
+        }}
+        onSearch={(q) =>
+          encrypted
+            ? searchIndexRef.current?.search(q) ?? Promise.resolve([])
+            : api.searchSpace(spaceID, q)
+        }
+      />
       <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} scope="admin" />
       {readAloud && (
         <ReadAloudBar
