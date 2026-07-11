@@ -457,8 +457,9 @@ function CreateModal({ initialStatus, onClose, onCreated }: { initialStatus: api
                   <Lock size={13} /> Encrypt this space (zero-knowledge)
                 </span>
                 <span className="block text-[11px] text-[var(--notation-fg-muted)] mt-0.5 leading-snug">
-                  Content is encrypted in your browser; the server only stores ciphertext. Search,
-                  sharing, comments and MCP are unavailable for encrypted spaces.
+                  Content is encrypted in your browser; the server only stores ciphertext. Search
+                  runs locally in your browser; sharing, comments and MCP are unavailable for
+                  encrypted spaces.
                 </span>
               </span>
             </label>
