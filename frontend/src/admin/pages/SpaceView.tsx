@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen } from 'lucide-react'
+import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync } from 'lucide-react'
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
@@ -41,6 +41,8 @@ import { getHeaderStyle, HEADER_STYLE_EVENT, type HeaderStyle } from '../lib/the
 import { SidebarTabs, type SidebarTabKey } from '../components/SidebarTabs'
 import { AllCommentsPanel } from '../components/AllCommentsPanel'
 import { ConvertDialog } from '../components/ConvertDialog'
+import { FolderSyncPanel } from '../components/FolderSyncPanel'
+import { folderSyncSupported } from '../lib/fsAccess'
 
 // Returns true when the keydown target is an element where the user is
 // composing text — keeps single-key shortcuts like "?" from intercepting
@@ -161,6 +163,9 @@ export function SpaceView() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number, y: number, items: MenuItem[] } | null>(null)
   // Non-null while the encrypt/decrypt conversion dialog is open.
   const [convertDir, setConvertDir] = useState<api.ConvertDirection | null>(null)
+  // Local-folder-sync panel (encrypted spaces only): decrypt the space to a
+  // real folder for a local agent, then re-encrypt reviewed changes back.
+  const [folderSyncOpen, setFolderSyncOpen] = useState(false)
 
   // Form folders: when the selected path is a folder with a _form.md template,
   // we render the FormView instead of treating it as a file.
@@ -553,6 +558,11 @@ export function SpaceView() {
         // Space-level conversion: encrypt a plaintext space (or decrypt an
         // unlocked encrypted one) in place. Destructive on finalize — the dialog
         // warns clearly.
+        // Zero-knowledge spaces can sync to a local plaintext folder for a local
+        // agent (Claude Code). Encrypted + supported browsers only.
+        ...(encryptedRef.current && folderSyncSupported()
+          ? [{ label: 'Local folder sync…', icon: <FolderSync size={14} />, onClick: () => setFolderSyncOpen(true) }]
+          : []),
         encryptedRef.current
           ? { label: 'Decrypt this space…', icon: <Unlock size={14} />, onClick: () => setConvertDir('to-plaintext') }
           : { label: 'Encrypt this space…', icon: <Lock size={14} />, onClick: () => setConvertDir('to-encrypted') },
@@ -944,6 +954,7 @@ export function SpaceView() {
   headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={18} />, onClick: () => setThemeOpen(true) })
   headerActions.push({ key: 'help', label: 'Keyboard shortcuts', icon: <HelpCircle size={18} />, onClick: () => setHelpOpen(true) })
   headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
+  if (encrypted && folderSyncSupported()) headerActions.push({ key: 'folder-sync', label: 'Local folder sync', icon: <FolderSync size={18} />, onClick: () => setFolderSyncOpen(true) })
   if (encrypted) headerActions.push({ key: 'lock', label: 'Lock space', icon: <Lock size={18} />, onClick: () => { setContent(''); setTree([]); keyStore.lock(spaceID) } })
   const editVisible = isTextFile(file) && !historyMode && !isForm
   const compactHeader = headerIsCompact(headerWidth, headerActions.length, 120 + (editVisible ? 64 : 0), isMobile)
@@ -952,6 +963,14 @@ export function SpaceView() {
     <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
       {themeOpen && <ThemePalette onClose={() => setThemeOpen(false)} />}
+      {folderSyncOpen && encrypted && fsReady && fsRef.current && (
+        <FolderSyncPanel
+          fs={fsRef.current}
+          spaceID={spaceID}
+          onClose={() => setFolderSyncOpen(false)}
+          onSynced={() => { if (fsRef.current) setTree(fsToEntries(fsRef.current)) }}
+        />
+      )}
       {convertDir && (
         <ConvertDialog
           spaceID={spaceID}
