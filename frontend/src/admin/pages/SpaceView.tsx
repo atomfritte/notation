@@ -1,9 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon } from 'lucide-react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen } from 'lucide-react'
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
+import { downloadDecryptedSpaceZip } from '../lib/spaceZip'
+import { collectPages } from '../lib/pageOrder'
 import { createEncryptedSearchIndex, type EncryptedSearchIndex } from '../lib/encSearch'
 import type { EncryptedFS } from '../../shared/vfs/encfs'
 import { utf8Decode, utf8Encode } from '../../shared/crypto/bytes'
@@ -62,6 +64,7 @@ const contentKey = (spaceID: string, path: string) => `a\u0000${spaceID}\u0000${
 export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const file = searchParams.get('file') ?? ''
 
   // ---------- Zero-knowledge encryption ----------
@@ -444,6 +447,30 @@ export function SpaceView() {
     catch (err) { setErr(String(err)) }
   }, [])
 
+  // Whole-space PDF: hand off to the dedicated print route, which stacks every
+  // page and opens the print dialog. In-app navigation keeps the in-memory
+  // keyStore alive so an encrypted space can still be decrypted there.
+  const printWholeSpace = useCallback(() => {
+    navigate(`/admin/spaces/${encodeURIComponent(spaceID)}/print`)
+  }, [navigate, spaceID])
+
+  // "Download all": plaintext hits the server ZIP endpoint; an encrypted+unlocked
+  // space builds a DECRYPTED zip client-side (the server holds only ciphertext).
+  const downloadAllZip = useCallback(async () => {
+    if (!encryptedRef.current) { api.downloadSpaceZip(spaceID); return }
+    const fs = fsRef.current
+    if (!fs) { setErr('space is locked'); return }
+    try {
+      setUploadStatus('Preparing decrypted ZIP…')
+      await downloadDecryptedSpaceZip(fs, spaceID)
+      setUploadStatus('ZIP downloaded')
+      setTimeout(() => setUploadStatus(null), 3000)
+    } catch (e) {
+      setUploadStatus(null)
+      setErr(String(e))
+    }
+  }, [spaceID])
+
   const uploadInto = useCallback(async (fileList: FileList, parentDir: string) => {
     const files = Array.from(fileList)
     if (files.length === 0) return
@@ -518,8 +545,11 @@ export function SpaceView() {
         { label: 'New page',   icon: <FilePlus size={14} />,   onClick: () => createFileIn('') },
         { label: 'New folder', icon: <FolderPlus size={14} />, onClick: () => createFolderIn('') },
         { label: 'Upload here', icon: <Upload size={14} />,    onClick: () => promptUploadInto('') },
-        // The ZIP export is a server endpoint that 409s for encrypted spaces.
-        ...(encryptedRef.current ? [] : [{ label: 'Download all (ZIP)', icon: <Archive size={14} />, onClick: () => api.downloadSpaceZip(spaceID) }]),
+        // Whole-space PDF: works for any space (plaintext + encrypted alike).
+        { label: 'Print whole space (PDF)', icon: <BookOpen size={14} />, onClick: printWholeSpace },
+        // Encrypted spaces build the DECRYPTED zip client-side (the server /export
+        // endpoint holds only ciphertext and 409s); plaintext uses that endpoint.
+        { label: encryptedRef.current ? 'Download all (decrypted ZIP)' : 'Download all (ZIP)', icon: <Archive size={14} />, onClick: () => { void downloadAllZip() } },
         // Space-level conversion: encrypt a plaintext space (or decrypt an
         // unlocked encrypted one) in place. Destructive on finalize — the dialog
         // warns clearly.
@@ -528,7 +558,7 @@ export function SpaceView() {
           : { label: 'Encrypt this space…', icon: <Lock size={14} />, onClick: () => setConvertDir('to-encrypted') },
       ],
     })
-  }, [spaceID, createFileIn, createFolderIn, promptUploadInto])
+  }, [spaceID, createFileIn, createFolderIn, promptUploadInto, printWholeSpace, downloadAllZip])
 
   const handleBookmarkContextMenu = useCallback((e: React.MouseEvent, path: string) => {
     e.preventDefault()
@@ -869,8 +899,8 @@ export function SpaceView() {
   // prev/next nav; the full list feeds the auto-link plugin + link resolution.
   // Memoised so MarkdownView's per-file caches aren't rebuilt on every render
   // (hover, comment toggles, etc. would otherwise thrash them).
-  const allFiles = useMemo(() => flattenTreeFiles(tree, true), [tree])
-  const allFilesAny = useMemo(() => flattenTreeFiles(tree, false), [tree])
+  const allFiles = useMemo(() => collectPages(tree, true), [tree])
+  const allFilesAny = useMemo(() => collectPages(tree, false), [tree])
 
   // Backlinks for encrypted spaces: the server can't read the ciphertext, so we
   // resolve `[[wiki-links]]` over the decrypted corpus in-browser, reusing the
@@ -909,6 +939,8 @@ export function SpaceView() {
   if (!isForm && !encrypted) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: comments.length, onClick: () => setShowComments(v => !v) })
   if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={18} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
   if (isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={18} />, onClick: () => window.print() })
+  // Whole-space PDF — sibling of the single-page print; available for any space.
+  headerActions.push({ key: 'print-space', label: 'Print whole space (PDF)', icon: <BookOpen size={18} />, onClick: printWholeSpace })
   headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={18} />, onClick: () => setThemeOpen(true) })
   headerActions.push({ key: 'help', label: 'Keyboard shortcuts', icon: <HelpCircle size={18} />, onClick: () => setHelpOpen(true) })
   headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
@@ -1087,15 +1119,13 @@ export function SpaceView() {
             >
               <Upload size={16} />
             </button>
-            {!encrypted && (
-              <button
-                onClick={() => api.downloadSpaceZip(spaceID)}
-                title="Download whole Space as ZIP"
-                className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
-              >
-                <Archive size={16} />
-              </button>
-            )}
+            <button
+              onClick={() => { void downloadAllZip() }}
+              title={encrypted ? 'Download decrypted ZIP of this Space' : 'Download whole Space as ZIP'}
+              className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
+            >
+              <Archive size={16} />
+            </button>
             {!encrypted && ttsVoices && ttsVoices.length > 0 && (
               <button
                 onClick={() => setPrepareAudioOpen(true)}
@@ -1562,24 +1592,6 @@ export function SpaceView() {
       )}
     </div>
   )
-}
-
-// Depth-first flatten of the tree into a flat path list, in the same order the
-// FileTree renders (so prev/next nav matches the visual menu). onlyMd keeps it
-// to markdown pages; false includes every file.
-function flattenTreeFiles(entries: api.Entry[], onlyMd: boolean): string[] {
-  const result: string[] = []
-  for (const e of entries) {
-    if (e.is_dir && e.children) {
-      result.push(...flattenTreeFiles(e.children, onlyMd))
-    } else if (!e.is_dir) {
-      // Use isMarkdownFile (.md/.mdx/.markdown) — the same gate used everywhere
-      // else. A bare ".md" check dropped .mdx/.markdown pages from the nav list,
-      // so prev/next page (read-aloud + the footer button) couldn't reach them.
-      if (!onlyMd || isMarkdownFile(e.name)) result.push(e.path)
-    }
-  }
-  return result
 }
 
 // Depth-first lookup of the tree entry at a given path (form folders are in the

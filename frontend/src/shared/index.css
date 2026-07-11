@@ -527,6 +527,45 @@
   /* Kill the page-reveal animation + virtualisation so nothing is skipped. */
   article.prose > * { animation: none !important; }
   article.prose.cv-auto > * { content-visibility: visible !important; }
+
+  /* --- Whole-space PDF (PrintSpaceView) ---------------------------------- */
+  /* Each page starts on a fresh sheet so the PDF reads as a sequence of titled
+     sections; the first page shares sheet one with the cover masthead. */
+  .print-space-page { break-before: page; page-break-before: always; }
+  .print-space-page:first-of-type { break-before: auto; page-break-before: auto; }
+  /* PrintSpaceView renders its own per-page title, so the per-file masthead
+     MarkdownView injects would be redundant — suppress it inside the export. */
+  .print-space .print-doc-header { display: none !important; }
+  .print-space-cover { margin: 0 0 1.5em; padding: 0 0 0.6em; border-bottom: 1.5pt solid #0f172a; }
+  .print-space-cover h1 {
+    font: 700 24pt/1.15 Georgia, 'Times New Roman', 'Liberation Serif', serif;
+    color: #0f172a !important; -webkit-text-fill-color: #0f172a !important;
+    background: none !important; margin: 0.2em 0 0;
+  }
+  .print-space-page-head { margin: 0 0 0.7em; break-after: avoid; page-break-after: avoid; }
+  .print-space-page-dir {
+    font: 8.5pt/1.4 ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.04em; text-transform: uppercase; color: #64748b;
+  }
+  .print-space-page-title {
+    margin: 0.15em 0 0;
+    font: 700 20pt/1.15 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.015em; color: #0f172a !important; -webkit-text-fill-color: #0f172a !important;
+    background: none !important;
+  }
+}
+
+/* --- Whole-space PDF: on-screen (paper-like) preview --------------------- */
+/* The export route renders a white "paper" preview; these style the per-page
+   title blocks on screen (the cover uses inline utility classes). Print
+   overrides live in the @media print block above. */
+.print-space-page-head { margin: 2.5rem 0 0.75rem; }
+.print-space-page + .print-space-page .print-space-page-head { margin-top: 3.5rem; }
+.print-space-page-dir {
+  font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b;
+}
+.print-space-page-title {
+  margin: 0.15rem 0 0; font-size: 1.65rem; font-weight: 700; letter-spacing: -0.01em; color: #0f172a;
 }
 
 @layer base {
