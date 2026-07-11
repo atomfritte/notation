@@ -9,7 +9,8 @@ import type { EncryptedFS } from '../../shared/vfs/encfs'
 import { utf8Decode, utf8Encode } from '../../shared/crypto/bytes'
 import { UnlockScreen } from '../components/UnlockScreen'
 import { getCachedFile, setCachedFile, prefetchFile } from '../lib/contentCache'
-import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
+import { isTextFile, isMarkdownFile, findDefaultFile, rendersFromBytes } from '../lib/fileTypes'
+import { downloadDecryptedFile } from '../lib/decryptedFile'
 import { useNewPages } from '../lib/newPages'
 import { FileTree } from '../components/FileTree'
 import { MarkdownView, stripMdExt } from '../components/MarkdownView'
@@ -29,6 +30,7 @@ import { Outline } from '../components/Outline'
 import { HistoryPanel } from '../components/HistoryPanel'
 import { AuditPanel } from '../components/AuditPanel'
 import { FileViewer } from '../components/FileViewer'
+import { EncryptedFileView } from '../components/EncryptedFileView'
 import { BacklinksPanel } from '../components/BacklinksPanel'
 import { HistoryView } from '../components/HistoryView'
 import { ThemePalette } from '../components/ThemePalette'
@@ -491,7 +493,13 @@ export function SpaceView() {
       : [
           { label: 'Open',               icon: <FileText size={14} />,   onClick: () => setSearchParams({ file: path }) },
           { label: 'Open in new tab',    icon: <ExternalLink size={14} />, onClick: () => window.open(`${window.location.pathname}?file=${encodeURIComponent(path)}`, '_blank', 'noopener') },
-          { label: 'Download',           icon: <Download size={14} />,   onClick: () => api.downloadFile(spaceID, path) },
+          { label: 'Download',           icon: <Download size={14} />,   onClick: () => {
+            // Encrypted spaces have no server bytes to fetch (the /file endpoint
+            // 409s) — download the client-decrypted blob instead.
+            const fs = fsRef.current
+            if (encryptedRef.current && fs) void downloadDecryptedFile(fs, path)
+            else api.downloadFile(spaceID, path)
+          } },
           { label: 'Rename',             icon: <Edit2 size={14} />,      onClick: () => renamePath(path) },
           { label: 'Duplicate',          icon: <Files size={14} />,      onClick: () => duplicatePath(path) },
           { label: 'Copy path',          icon: <Copy size={14} />,       onClick: () => copyPathToClipboard(path) },
@@ -1419,6 +1427,18 @@ export function SpaceView() {
                         onNavigate={selectFile}
                         onPrefetch={warmFile}
                       />
+                    ) : encrypted && rendersFromBytes(file) ? (
+                      // Zero-knowledge space: the server /file endpoint 409s
+                      // (ciphertext only), so decrypt through the EncryptedFS and
+                      // feed the viewer a blob: object URL / raw bytes. Until the
+                      // FS is built we show a brief "Decrypting…" placeholder.
+                      fsReady && fsRef.current ? (
+                        <EncryptedFileView fs={fsRef.current} spaceID={spaceID} path={file} theme={theme} />
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">
+                          Decrypting…
+                        </div>
+                      )
                     ) : (
                       <FileViewer spaceID={spaceID} path={file} content={content} theme={theme} />
                     )}

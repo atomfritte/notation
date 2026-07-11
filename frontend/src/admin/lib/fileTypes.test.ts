@@ -7,7 +7,9 @@ import {
   isMarkdownFile,
   isSpreadsheetFile,
   isTextFile,
+  mimeForPath,
   monacoLang,
+  rendersFromBytes,
 } from './fileTypes'
 
 describe('file-extension classifiers', () => {
@@ -47,6 +49,58 @@ describe('language id maps', () => {
   it('falls through to extension as hljs language when unmapped', () => {
     expect(highlightLang('foo.ts')).toBe('typescript')
     expect(highlightLang('foo.kotlin')).toBe('kotlin')
+  })
+})
+
+describe('mimeForPath', () => {
+  it('maps the common preview extensions to their MIME type', () => {
+    expect(mimeForPath('a/b/pic.png')).toBe('image/png')
+    expect(mimeForPath('PHOTO.JPG')).toBe('image/jpeg')
+    expect(mimeForPath('x.jpeg')).toBe('image/jpeg')
+    expect(mimeForPath('anim.gif')).toBe('image/gif')
+    expect(mimeForPath('m.webp')).toBe('image/webp')
+    expect(mimeForPath('m.avif')).toBe('image/avif')
+    expect(mimeForPath('logo.svg')).toBe('image/svg+xml')
+    expect(mimeForPath('doc.pdf')).toBe('application/pdf')
+    expect(mimeForPath('clip.mp4')).toBe('video/mp4')
+    expect(mimeForPath('clip.webm')).toBe('video/webm')
+    expect(mimeForPath('clip.mov')).toBe('video/quicktime')
+    expect(mimeForPath('song.mp3')).toBe('audio/mpeg')
+    expect(mimeForPath('song.ogg')).toBe('audio/ogg')
+    expect(mimeForPath('song.wav')).toBe('audio/wav')
+    expect(mimeForPath('song.m4a')).toBe('audio/mp4')
+    expect(mimeForPath('sheet.xlsx')).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    expect(mimeForPath('letter.docx')).toBe(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+  })
+
+  it('defaults unknown / extension-less files to a generic binary stream', () => {
+    expect(mimeForPath('mystery.bin')).toBe('application/octet-stream')
+    expect(mimeForPath('LICENSE')).toBe('application/octet-stream')
+  })
+})
+
+describe('rendersFromBytes (encrypted-preview branch selection)', () => {
+  it('is true for URL/byte viewers', () => {
+    for (const p of ['pic.png', 'logo.svg', 'doc.pdf', 'clip.mp4', 'song.mp3', 'a.docx', 'a.xlsx', 'data.csv']) {
+      expect(rendersFromBytes(p)).toBe(true)
+    }
+  })
+
+  it('is true for unknown / extension-less types (they fall through to the download view)', () => {
+    expect(rendersFromBytes('archive.zip')).toBe(true)
+    expect(rendersFromBytes('mystery.bin')).toBe(true)
+    // Mirrors FileViewer: an extension-less file is NOT code, so it downloads.
+    expect(rendersFromBytes('LICENSE')).toBe(true)
+  })
+
+  it('is false for text rendered from a decoded string (markdown / code)', () => {
+    for (const p of ['readme.md', 'notes.markdown', 'main.ts', 'app.py', 'config.yml']) {
+      expect(rendersFromBytes(p)).toBe(false)
+    }
   })
 })
 

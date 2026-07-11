@@ -15,6 +15,31 @@ const WORD_EXTS = new Set(['docx']) // mammoth supports .docx only (no legacy .d
 const SPREADSHEET_EXTS = new Set(['xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'csv', 'tsv'])
 const PDF_EXTS = new Set(['pdf'])
 
+// Extension → MIME type, used to tag a decrypted Blob so URL-based viewers
+// (<img>/<iframe>/<video>/<audio>) and downloads get the right content type.
+// The server sets these from the extension too; here we do it client-side
+// because an encrypted space's bytes never round-trip through the server.
+const MIME_BY_EXT: Record<string, string> = {
+  // images
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon',
+  svg: 'image/svg+xml',
+  // documents
+  pdf: 'application/pdf',
+  // video
+  mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+  ogv: 'video/ogg',
+  // audio
+  mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg',
+  m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', opus: 'audio/ogg',
+  // office / tabular
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xls: 'application/vnd.ms-excel',
+  ods: 'application/vnd.oasis.opendocument.spreadsheet',
+  csv: 'text/csv', tsv: 'text/tab-separated-values',
+}
+
 // Everything we can sensibly syntax-highlight or show as plain text.
 // (Includes csv/tsv so they remain *editable* — but SpreadsheetView is
 // checked first in dispatch so the default view is the table.)
@@ -110,6 +135,31 @@ export function isSpreadsheetFile(path: string): boolean { return SPREADSHEET_EX
 export function isTextFile(path: string): boolean {
   const e = ext(path)
   return MARKDOWN_EXTS.has(e) || TEXT_EXTS.has(e) || e === ''
+}
+
+/** MIME type for a path's extension, defaulting to a generic binary stream. */
+export function mimeForPath(path: string): string {
+  return MIME_BY_EXT[ext(path)] ?? 'application/octet-stream'
+}
+
+/**
+ * True when {@link FileViewer} renders this path from RAW BYTES — a
+ * URL-fed <img>/<iframe>/<video>/<audio>/download, or an ArrayBuffer parsed by
+ * the Word/Spreadsheet viewers — rather than from a decoded text string
+ * (Markdown / Code). Mirrors FileViewer's dispatch precedence: the binary
+ * viewers are tested before the code viewer, so csv (spreadsheet + text) and
+ * svg (image + text) correctly count as byte-rendered.
+ *
+ * For an encrypted, unlocked space these are exactly the files whose bytes must
+ * be sourced from the client EncryptedFS instead of the server file URL (which
+ * 409s for ciphertext).
+ */
+export function rendersFromBytes(path: string): boolean {
+  if (isMarkdownFile(path)) return false
+  if (isImageFile(path) || isPDFFile(path) || isAudioFile(path) ||
+      isVideoFile(path) || isWordFile(path) || isSpreadsheetFile(path)) return true
+  // Code / plain text render from the decoded string; anything else downloads.
+  return !isCodeFile(path)
 }
 
 export function isCodeFile(path: string): boolean {

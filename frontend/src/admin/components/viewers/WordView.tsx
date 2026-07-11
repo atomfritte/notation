@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { FileText, AlertTriangle } from 'lucide-react'
+import { sourceArrayBuffer } from './source'
 
-type Props = { url: string; path: string }
+// `url` (plaintext server fetch) and `bytes` (decrypted, from an encrypted
+// space's EncryptedFS) are alternatives — exactly one is supplied.
+type Props = { url?: string; bytes?: Uint8Array; path: string }
 
 /**
  * WordView renders .docx files via mammoth.js + DOMPurify.
@@ -15,7 +18,7 @@ type Props = { url: string; path: string }
  *
  * Lazy-imported so the ~1MB mammoth bundle only loads on first DOCX open.
  */
-export default function WordView({ url, path }: Props) {
+export default function WordView({ url, bytes, path }: Props) {
   const [html, setHtml] = useState<string>('')
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,13 +29,11 @@ export default function WordView({ url, path }: Props) {
     setErr(null)
     ;(async () => {
       try {
-        const [mammothMod, purifyMod, res] = await Promise.all([
+        const [mammothMod, purifyMod, buf] = await Promise.all([
           import('mammoth'),
           import('dompurify'),
-          fetch(url),
+          sourceArrayBuffer(url, bytes),
         ])
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const buf = await res.arrayBuffer()
         const mammoth: any = (mammothMod as any).default ?? mammothMod
         const DOMPurify: any = (purifyMod as any).default ?? purifyMod
         const result = await mammoth.convertToHtml({ arrayBuffer: buf })
@@ -73,7 +74,7 @@ export default function WordView({ url, path }: Props) {
     return () => {
       cancelled = true
     }
-  }, [url])
+  }, [url, bytes])
 
   if (loading) {
     return (
