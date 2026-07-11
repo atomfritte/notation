@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Sheet, AlertTriangle } from 'lucide-react'
+import { sourceArrayBuffer } from './source'
 
-type Props = { url: string; path: string }
+// `url` (plaintext server fetch) and `bytes` (decrypted, from an encrypted
+// space's EncryptedFS) are alternatives — exactly one is supplied.
+type Props = { url?: string; bytes?: Uint8Array; path: string }
 
 /**
  * SpreadsheetView renders .xlsx / .xls / .ods / .csv / .tsv files.
@@ -17,7 +20,7 @@ type Props = { url: string; path: string }
  * module so the (~700KB combined) bundle only loads when a user opens a
  * spreadsheet.
  */
-export default function SpreadsheetView({ url }: Props) {
+export default function SpreadsheetView({ url, bytes }: Props) {
   const [workbook, setWorkbook] = useState<any | null>(null)
   const [activeSheet, setActiveSheet] = useState<string>('')
   const [err, setErr] = useState<string | null>(null)
@@ -34,12 +37,10 @@ export default function SpreadsheetView({ url }: Props) {
         // `default`, so destructuring `{ default: XLSX }` makes XLSX
         // undefined at runtime (TS doesn't catch it because we cast through
         // `any`). Use a namespace import instead.
-        const [xlsxMod, res] = await Promise.all([
+        const [xlsxMod, buf] = await Promise.all([
           import('xlsx'),
-          fetch(url),
+          sourceArrayBuffer(url, bytes),
         ])
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const buf = await res.arrayBuffer()
         const XLSX: any = (xlsxMod as any).default ?? xlsxMod
         const wb = XLSX.read(buf, { type: 'array' })
         if (cancelled) return
@@ -54,7 +55,7 @@ export default function SpreadsheetView({ url }: Props) {
     return () => {
       cancelled = true
     }
-  }, [url])
+  }, [url, bytes])
 
   if (loading) {
     return (

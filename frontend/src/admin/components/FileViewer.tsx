@@ -29,6 +29,12 @@ type Props = {
   /** Override the URL builder. Admin defaults to api.fileURL; share SPA can
    * pass a share-token aware variant so the same component renders for both. */
   urlFor?: (path: string) => string
+  /** Already-decrypted bytes for byte-parsing viewers (docx / xlsx) in an
+   * encrypted space. When present those viewers parse these directly instead of
+   * fetching the URL (whose server endpoint 409s for ciphertext). URL-based
+   * viewers (image / pdf / video / audio) read `urlFor`, which the encrypted
+   * adapter points at a blob: object URL for the same decrypted bytes. */
+  bytes?: Uint8Array
 }
 
 /**
@@ -48,7 +54,7 @@ type Props = {
  * For binary types the caller can pass an empty `content` — the viewer
  * fetches via the file URL directly.
  */
-export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
+export function FileViewer({ spaceID, path, content, theme, urlFor, bytes }: Props) {
   const resolveURL = urlFor ?? ((p: string) => api.fileURL(spaceID, p))
 
   if (isMarkdownFile(path)) {
@@ -69,14 +75,14 @@ export function FileViewer({ spaceID, path, content, theme, urlFor }: Props) {
   if (isWordFile(path)) {
     return (
       <Suspense fallback={<LazyLoading />}>
-        <WordView url={resolveURL(path)} path={path} />
+        <WordView url={resolveURL(path)} bytes={bytes} path={path} />
       </Suspense>
     )
   }
   if (isSpreadsheetFile(path)) {
     return (
       <Suspense fallback={<LazyLoading />}>
-        <SpreadsheetView url={resolveURL(path)} path={path} />
+        <SpreadsheetView url={resolveURL(path)} bytes={bytes} path={path} />
       </Suspense>
     )
   }
