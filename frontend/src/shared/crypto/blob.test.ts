@@ -74,9 +74,14 @@ describe('encryptBlob / decryptBlob', () => {
     await expect(decryptBlob(blob, key, utf8Encode('context-B'))).rejects.toThrow()
   })
 
-  it('accepts a bare CryptoKey as well as a KeyHandle', async () => {
-    const handle = await freshHandle()
-    const blob = await encryptBlob(utf8Encode('via crypto key'), handle.contentKey)
-    expect(await decryptText(blob, handle)).toBe('via crypto key')
+  it('is keyed only by the opaque handle: a second handle over the same DEK decrypts it', async () => {
+    // No bare CryptoKey exists on the main thread any more — the DEK identity is
+    // what decrypts, so an independent handle imported from the same DEK opens
+    // the first handle's blob.
+    const dek = generateDEK()
+    const h1 = await importContentKey(dek)
+    const h2 = await importContentKey(dek)
+    const blob = await encryptBlob(utf8Encode('via same dek'), h1)
+    expect(await decryptText(blob, h2)).toBe('via same dek')
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEK_LEN } from './constants'
 import { generateDEK, importContentKey, rewrapDEK, unwrapDEK, wrapDEK } from './keys'
+import { importAesGcmKey } from './aesgcm'
 import { decryptText, encryptText } from './blob'
 import { randomBytes, timingSafeEqual } from './bytes'
 
@@ -52,14 +53,24 @@ describe('rewrapDEK (password change)', () => {
   })
 })
 
-describe('KeyHandle content key', () => {
-  it('imports as a non-extractable CryptoKey', async () => {
+describe('KeyHandle (opaque worker slot)', () => {
+  it('exposes only a slot id — no CryptoKey or raw key bytes on the main thread', async () => {
     const handle = await importContentKey(generateDEK())
-    expect(handle.contentKey.extractable).toBe(false)
-    await expect(crypto.subtle.exportKey('raw', handle.contentKey)).rejects.toThrow()
+    expect(Object.keys(handle)).toEqual(['slotId'])
+    expect(typeof handle.slotId).toBe('string')
+    // The old shape leaked a CryptoKey here; the new handle must not.
+    expect('contentKey' in handle).toBe(false)
   })
 
-  it('en/decrypts content end to end', async () => {
+  it('imports every DEK non-extractable (the engine can never yield the raw key)', async () => {
+    // The key engine imports the DEK/KEK with extractable:false; assert the
+    // primitive it uses so the guarantee is covered without reaching into the slot.
+    const key = await importAesGcmKey(generateDEK(), ['encrypt', 'decrypt'], false)
+    expect(key.extractable).toBe(false)
+    await expect(crypto.subtle.exportKey('raw', key)).rejects.toThrow()
+  })
+
+  it('en/decrypts content end to end through the key backend', async () => {
     const handle = await importContentKey(generateDEK())
     expect(await decryptText(await encryptText('payload', handle), handle)).toBe('payload')
   })

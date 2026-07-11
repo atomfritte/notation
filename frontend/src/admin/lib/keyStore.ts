@@ -17,6 +17,7 @@
  */
 import { useSyncExternalStore } from 'react'
 import type { KeyHandle } from '../../shared/crypto/keys'
+import { getKeyBackend } from '../../shared/crypto/keyBackend'
 
 const handles = new Map<string, KeyHandle>()
 const listeners = new Set<() => void>()
@@ -47,14 +48,23 @@ export function set(spaceId: string, handle: KeyHandle): void {
   emit()
 }
 
-/** Re-lock one space: drop its handle so it is garbage-collected. */
+/**
+ * Re-lock one space: forget its handle AND drop the worker key slot so the DEK
+ * is discarded inside the worker (not just dereferenced on the main thread).
+ */
 export function lock(spaceId: string): void {
-  if (handles.delete(spaceId)) emit()
+  const handle = handles.get(spaceId)
+  if (handles.delete(spaceId)) {
+    if (handle) void getKeyBackend().drop(handle.slotId)
+    emit()
+  }
 }
 
-/** Lock every space. Called on logout. */
+/** Lock every space, dropping every worker key slot. Called on logout. */
 export function lockAll(): void {
   if (handles.size > 0) {
+    const backend = getKeyBackend()
+    for (const handle of handles.values()) void backend.drop(handle.slotId)
     handles.clear()
     emit()
   }
