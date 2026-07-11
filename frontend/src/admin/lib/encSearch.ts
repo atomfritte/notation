@@ -39,6 +39,7 @@ import { ROOT_ID, type Node } from '../../shared/vfs/nodes'
 import type { EncryptedFS } from '../../shared/vfs/encfs'
 import { utf8Decode } from '../../shared/crypto/bytes'
 import { isTextFile } from './fileTypes'
+import { buildFileIndex, dirOf, extractWikiTargets, resolveTarget } from './wikiLinks'
 import type { SearchMatch } from './api'
 
 /** Content clip length — mirrors `search.go`'s `len(snippet) > 240` gate. */
@@ -108,6 +109,59 @@ export class EncryptedSearchIndex {
         if (line.toLowerCase().includes(needle)) {
           out.push({ path, line: i + 1, content: clip(line) })
           if (out.length >= max) return out
+        }
+      }
+    }
+    return out
+  }
+
+  /**
+   * Backlinks for `targetPath`: the pages whose `[[wiki-links]]` resolve to it.
+   *
+   * The server can't compute this for an encrypted space (it can't read the
+   * ciphertext), and a plaintext-style substring grep for `[[name` would both
+   * miss folder-qualified / aliased links and produce false hits for a
+   * different page that shares a basename. Instead we scan the decrypted corpus
+   * and resolve every source file's links with the SAME rules MarkdownView uses
+   * to render them ({@link resolveTarget}, vault semantics) — so "who links
+   * here" agrees exactly with where those links navigate.
+   *
+   * Reuses this index's decrypted-text cache (and therefore its invalidation:
+   * a save drops the edited path, a structural change clears all), so results
+   * never go stale after an edit. One result per source file, self excluded, in
+   * the server's walk order. Shape is the {@link SearchMatch} the BacklinksPanel
+   * already renders for plaintext (line/content point at the first linking line).
+   *
+   * @param targetPath the open page whose inbound links we want.
+   * @param files the Space's full path list — the resolution index, matching
+   *   the `files` prop MarkdownView resolves against.
+   */
+  async backlinks(targetPath: string, files: Iterable<string>): Promise<SearchMatch[]> {
+    const out: SearchMatch[] = []
+    if (!targetPath) return out
+    const index = buildFileIndex(files)
+
+    for (const path of this.walkPaths()) {
+      if (path === targetPath) continue // a page never backlinks itself
+      if (!isTextFile(path)) continue
+
+      const text = await this.textAt(path)
+      if (text === null) continue
+
+      const dir = dirOf(path)
+      const lines = text.split('\n')
+      let matched = false
+      for (let i = 0; i < lines.length && !matched; i++) {
+        // Strip a trailing CR so \r\n files scan like the server's line reader.
+        let line = lines[i]
+        if (line.endsWith('\r')) line = line.slice(0, -1)
+        for (const raw of extractWikiTargets(line)) {
+          const r = resolveTarget(index, dir, raw, false)
+          if (r.exists && r.path === targetPath) {
+            out.push({ path, line: i + 1, content: clip(line) })
+            matched = true
+            break
+          }
         }
       }
     }

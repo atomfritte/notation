@@ -864,6 +864,16 @@ export function SpaceView() {
   const allFiles = useMemo(() => flattenTreeFiles(tree, true), [tree])
   const allFilesAny = useMemo(() => flattenTreeFiles(tree, false), [tree])
 
+  // Backlinks for encrypted spaces: the server can't read the ciphertext, so we
+  // resolve `[[wiki-links]]` over the decrypted corpus in-browser, reusing the
+  // search index (and its cache/invalidation). Memoised on the file list so the
+  // BacklinksPanel recomputes on a structural change / save — not per render.
+  // Plaintext spaces pass undefined and keep the server-backed path.
+  const backlinksCompute = useCallback(
+    (p: string) => searchIndexRef.current?.backlinks(p, allFilesAny) ?? Promise.resolve([]),
+    [allFilesAny],
+  )
+
   if (!spaceID) return <p className="p-8 text-[var(--notation-fg-muted)]">missing workspace</p>
 
   // Encrypted + locked → gate the whole browser behind the unlock screen.
@@ -1429,8 +1439,14 @@ export function SpaceView() {
           {showOutline && file && !editing && isMarkdownFile(file) && (
             <div className="surface-elevated w-[240px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-4 duration-200 overflow-y-auto">
               <Outline content={content} />
-              {/* Backlinks come from a server-side index; skip for encrypted. */}
-              {!encrypted && <BacklinksPanel spaceID={spaceID} path={file} onSelect={selectFile} />}
+              {/* Backlinks: plaintext hits the server search index; encrypted
+                  resolves [[wiki-links]] over the decrypted corpus client-side. */}
+              <BacklinksPanel
+                spaceID={spaceID}
+                path={file}
+                onSelect={selectFile}
+                compute={encrypted ? backlinksCompute : undefined}
+              />
             </div>
           )}
 

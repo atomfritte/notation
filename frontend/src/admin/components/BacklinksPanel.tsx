@@ -6,15 +6,25 @@ type Props = {
   spaceID: string
   path: string
   onSelect: (path: string) => void
+  /**
+   * Client-side backlink computation for zero-knowledge encrypted spaces, where
+   * the server can't read the ciphertext so its search index returns nothing.
+   * When provided it replaces the server query; the decrypted corpus is scanned
+   * in-browser (see {@link EncryptedSearchIndex.backlinks}). Plaintext spaces
+   * leave this undefined and keep the server path. Must be referentially stable
+   * (memoise it) — the panel recomputes whenever its identity changes.
+   */
+  compute?: (path: string) => Promise<api.SearchMatch[]>
 }
 
 /**
  * BacklinksPanel — finds files that link to the current page via [[wikilink]]
- * syntax. Implementation reuses the backend search endpoint, querying for the
- * page's display name wrapped in [[ to scope hits. Results exclude the page
- * itself and are deduplicated by source file.
+ * syntax. Plaintext spaces reuse the backend search endpoint, querying for the
+ * page's display name wrapped in [[ to scope hits. Encrypted spaces pass a
+ * `compute` function that resolves the same links entirely client-side. Either
+ * way results exclude the page itself and are deduplicated by source file.
  */
-export function BacklinksPanel({ spaceID, path, onSelect }: Props) {
+export function BacklinksPanel({ spaceID, path, onSelect, compute }: Props) {
   const [hits, setHits] = useState<api.SearchMatch[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -27,10 +37,15 @@ export function BacklinksPanel({ spaceID, path, onSelect }: Props) {
     }
     setLoading(true)
     setErr(null)
-    // Query for `[[name` which catches both [[name]] and [[name#section|alias]].
-    api
-      .searchSpace(spaceID, `[[${name}`)
+    let cancelled = false
+    // Encrypted: scan the decrypted corpus client-side. Plaintext: query for
+    // `[[name` which catches both [[name]] and [[name#section|alias]].
+    const source = compute
+      ? compute(path)
+      : api.searchSpace(spaceID, `[[${name}`)
+    source
       .then(matches => {
+        if (cancelled) return
         const safe = Array.isArray(matches) ? matches : []
         const dedup = new Map<string, api.SearchMatch>()
         for (const m of safe) {
@@ -39,9 +54,10 @@ export function BacklinksPanel({ spaceID, path, onSelect }: Props) {
         }
         setHits([...dedup.values()])
       })
-      .catch(e => setErr(String(e)))
-      .finally(() => setLoading(false))
-  }, [spaceID, path])
+      .catch(e => { if (!cancelled) setErr(String(e)) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [spaceID, path, compute])
 
   if (loading) {
     return (
