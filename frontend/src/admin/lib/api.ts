@@ -29,6 +29,10 @@ export type Meta = {
   status?: BoardColumn | ''
   /** Manual sort rank within a column (ascending); absent = 0. */
   order?: number
+  /** Zero-knowledge space: its content lives as opaque ciphertext blobs +
+   *  a sealed op-log under /enc/*, and the plaintext file/tree/search/… APIs
+   *  409. The client drives it through EncryptedFS. */
+  encrypted?: boolean
 }
 
 export type BoardMove = { id: string; status: BoardColumn; order: number }
@@ -130,11 +134,16 @@ export const me = () => fetchJSON<{ name: string; groups: string[] | null }>('/a
 
 export const listSpaces = () => fetchJSON<Meta[]>('/api/admin/spaces')
 
-export const createSpace = (id: string, name?: string) =>
+/** Fetch a single space's metadata — notably the `encrypted` flag the
+ *  SpaceView needs to decide between the plaintext API path and EncryptedFS. */
+export const getSpace = (id: string) =>
+  fetchJSON<Meta>(`/api/admin/spaces/${encodeURIComponent(id)}`)
+
+export const createSpace = (id: string, name?: string, encrypted = false) =>
   fetchJSON<Meta>('/api/admin/spaces', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, name }),
+    body: JSON.stringify({ id, name, encrypted }),
   })
 
 export const deleteSpace = (id: string) =>

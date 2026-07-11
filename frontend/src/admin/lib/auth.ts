@@ -4,6 +4,7 @@
 // that the screens call.
 
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
+import { lockAll } from './keyStore'
 
 export type AuthState = {
   signed_in: boolean
@@ -72,6 +73,9 @@ export async function claim(token: string): Promise<void> {
 }
 
 export async function logout(): Promise<void> {
+  // Drop every unlocked space key before the session ends — a shared machine
+  // must not keep a decrypted DEK alive past sign-out.
+  lockAll()
   await jsonOrThrow(
     await fetch('/api/auth/logout', {
       method: 'POST',

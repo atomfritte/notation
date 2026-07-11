@@ -24,6 +24,10 @@ type Props = {
   /** Counts shown as small badges next to tabs that have content. Missing
    *  or zero entries hide the badge. */
   badges?: Partial<Record<SidebarTabKey, number>>
+  /** Whitelist of tabs to show. Encrypted spaces pass a reduced set (the
+   *  server-backed tabs — comments, sharing, integration, history, audit —
+   *  don't apply). Omit to show all. */
+  tabs?: SidebarTabKey[]
 }
 
 /**
@@ -38,9 +42,10 @@ type Props = {
  * Badge counts (Comments, Bookmarks) ride alongside the label in both the
  * collapsed-single-row and the expanded-full-list states.
  */
-export function SidebarTabs({ active, onPick, badges }: Props) {
+export function SidebarTabs({ active, onPick, badges, tabs }: Props) {
   const [expanded, setExpanded] = useState(false)
-  const activeTab = TABS.find(t => t.key === active) || TABS[1]
+  const visibleTabs = tabs ? TABS.filter(t => tabs.includes(t.key)) : TABS
+  const activeTab = visibleTabs.find(t => t.key === active) || visibleTabs[0] || TABS[1]
   const activeBadge = badges?.[active] ?? 0
 
   if (!expanded) {
@@ -60,7 +65,7 @@ export function SidebarTabs({ active, onPick, badges }: Props) {
 
   return (
     <div className="space-y-0.5">
-      {TABS.map(t => {
+      {visibleTabs.map(t => {
         const isActive = t.key === active
         const count = badges?.[t.key] ?? 0
         return (

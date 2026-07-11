@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Moon, Sun, FolderOpen, Sparkles, LogOut, X, Palette, CloudOff, SquareKanban, LayoutGrid } from 'lucide-react'
+import { Plus, Search, Moon, Sun, FolderOpen, Sparkles, LogOut, X, Palette, CloudOff, SquareKanban, LayoutGrid, Lock } from 'lucide-react'
 import * as api from '../lib/api'
 import { logout } from '../lib/auth'
 import * as offline from '../lib/offlineSync'
+import * as keyStore from '../lib/keyStore'
 import { ThemePalette } from '../components/ThemePalette'
 import { SpaceCard } from '../components/SpaceCard'
 import { KanbanBoard } from '../components/KanbanBoard'
+import { RecoveryKeyModal } from '../components/RecoveryKeyModal'
+import { createEncryptedSpace } from '../../shared/crypto/space'
+import { HttpEncStore } from '../../shared/vfs/httpEncStore'
 
 /**
  * SpaceList — the workspace switcher / landing page.
@@ -321,8 +325,14 @@ function NoResults({ query }: { query: string }) {
 function CreateModal({ initialStatus, onClose, onCreated }: { initialStatus: api.BoardColumn; onClose: () => void; onCreated: () => void }) {
   const [id, setId] = useState('')
   const [name, setName] = useState('')
+  const [encrypt, setEncrypt] = useState(false)
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // When set, the create succeeded and we're showing the one-time recovery key
+  // before dismissing. Confirming it finishes the flow.
+  const [recovery, setRecovery] = useState<string | null>(null)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
@@ -333,9 +343,26 @@ function CreateModal({ initialStatus, onClose, onCreated }: { initialStatus: api
   async function submit(e: FormEvent) {
     e.preventDefault()
     setErr(null)
+    if (encrypt) {
+      if (password.length < 8) { setErr('Password must be at least 8 characters.'); return }
+      if (password !== confirm) { setErr('Passwords do not match.'); return }
+    }
     setSubmitting(true)
     try {
-      const created = await api.createSpace(id, name || undefined)
+      let created: api.Meta
+      if (encrypt) {
+        // Zero-knowledge: build the DEK + wraps CLIENT-SIDE, create the space
+        // flagged encrypted, then PUT the (non-secret) key record. The unlocked
+        // handle goes straight into the session keyStore so the space is open
+        // right after creation.
+        const { record, recoveryDisplay, handle } = await createEncryptedSpace(password)
+        created = await api.createSpace(id, name || undefined, true)
+        await new HttpEncStore(created.id).putKeyRecord(record)
+        keyStore.set(created.id, handle)
+        setRecovery(recoveryDisplay)
+      } else {
+        created = await api.createSpace(id, name || undefined)
+      }
       // New spaces default to Inbox server-side (empty status). When created from
       // another column's "+", drop it at the top there (order 0 sorts above any
       // manually-ranked card). A failure here is non-fatal — the space exists and
@@ -343,13 +370,23 @@ function CreateModal({ initialStatus, onClose, onCreated }: { initialStatus: api
       if (initialStatus !== 'inbox') {
         try { await api.updateBoard([{ id: created.id, status: initialStatus, order: 0 }]) } catch { /* keep in inbox */ }
       }
-      onCreated()
+      // For encrypted spaces we hold the modal open on the recovery-key step;
+      // plaintext spaces finish immediately.
+      if (!encrypt) onCreated()
     } catch (e) {
       setErr(String(e))
     } finally {
       setSubmitting(false)
     }
   }
+
+  // Recovery-key hand-off is a separate, blocking step — the space already
+  // exists; the user MUST save the key before we return to the list.
+  if (recovery) {
+    return <RecoveryKeyModal recovery={recovery} onConfirm={onCreated} />
+  }
+
+  const inputCls = 'w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors'
 
   return (
     <div
@@ -387,7 +424,7 @@ function CreateModal({ initialStatus, onClose, onCreated }: { initialStatus: api
               required
               pattern="[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]"
               autoFocus
-              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
+              className={inputCls + ' font-mono'}
               placeholder="my-project"
             />
             <p className="text-[11px] text-[var(--notation-fg-muted)] mt-1">
@@ -401,10 +438,57 @@ function CreateModal({ initialStatus, onClose, onCreated }: { initialStatus: api
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-[color:var(--notation-accent-30)] focus:border-[var(--notation-border)] dark:focus:border-[var(--notation-border)] transition-colors"
+              className={inputCls}
               placeholder="My Project"
             />
           </div>
+
+          {/* Zero-knowledge encryption opt-in. */}
+          <div className="rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)]/40 p-3">
+            <label className="flex items-start gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={encrypt}
+                onChange={e => setEncrypt(e.target.checked)}
+                className="mt-0.5 accent-[var(--notation-accent)]"
+              />
+              <span className="flex-1">
+                <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--notation-fg)]">
+                  <Lock size={13} /> Encrypt this space (zero-knowledge)
+                </span>
+                <span className="block text-[11px] text-[var(--notation-fg-muted)] mt-0.5 leading-snug">
+                  Content is encrypted in your browser; the server only stores ciphertext. Search,
+                  sharing, comments and MCP are unavailable for encrypted spaces.
+                </span>
+              </span>
+            </label>
+
+            {encrypt && (
+              <div className="mt-3 space-y-2">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder="Password (min 8 chars)"
+                  className={inputCls}
+                />
+                <input
+                  type="password"
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder="Confirm password"
+                  className={inputCls}
+                />
+                <p className="text-[11px] text-[var(--notation-warning)] leading-snug">
+                  There is no password reset. You will get a one-time recovery key after creating —
+                  save it, it is the only other way in.
+                </p>
+              </div>
+            )}
+          </div>
+
           {err && (
             <p className="text-[var(--notation-danger)] text-sm" aria-live="polite">{err}</p>
           )}
@@ -418,7 +502,7 @@ function CreateModal({ initialStatus, onClose, onCreated }: { initialStatus: api
             </button>
             <button
               type="submit"
-              disabled={submitting || !id}
+              disabled={submitting || !id || (encrypt && (!password || !confirm))}
               className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 disabled:opacity-40 transition-colors"
             >
               {submitting ? 'Creating…' : 'Create'}

@@ -70,10 +70,18 @@ const RAW = 'application/octet-stream'
 const asBody = (bytes: Uint8Array): BodyInit => bytes as unknown as BodyInit
 
 export class HttpEncStore implements EncStore {
+  private readonly doFetch: typeof fetch
+
   constructor(
     private readonly spaceId: string,
-    private readonly doFetch: typeof fetch = fetch,
-  ) {}
+    doFetch?: typeof fetch,
+  ) {
+    // A bare `fetch` reference invoked as `this.doFetch(...)` runs with `this`
+    // bound to the store, which the DOM rejects ("Illegal invocation" — fetch
+    // must be called on the global). Wrap it so the receiver is always correct;
+    // an injected fetch (tests) is used verbatim.
+    this.doFetch = doFetch ?? ((input, init) => fetch(input, init))
+  }
 
   private base(): string {
     return `/api/admin/spaces/${encodeURIComponent(this.spaceId)}/enc`
