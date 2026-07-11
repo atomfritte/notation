@@ -357,7 +357,20 @@ function CreateModal({ initialStatus, onClose, onCreated }: { initialStatus: api
         // right after creation.
         const { record, recoveryDisplay, handle } = await createEncryptedSpace(password)
         created = await api.createSpace(id, name || undefined, true)
-        await new HttpEncStore(created.id).putKeyRecord(record)
+        // The space now exists flagged encrypted but has no key record yet. If this
+        // upload fails the space is permanently unopenable (the unlock screen fetches
+        // the key record), so retry transient failures — and if it still fails, roll
+        // the space back rather than leave a broken, un-unlockable encrypted space.
+        const store = new HttpEncStore(created.id)
+        let putErr: unknown = null
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try { await store.putKeyRecord(record); putErr = null; break }
+          catch (e) { putErr = e; await new Promise(r => setTimeout(r, 200 * (attempt + 1))) }
+        }
+        if (putErr) {
+          try { await api.deleteSpace(created.id) } catch { /* best-effort rollback */ }
+          throw new Error('Could not finish creating the encrypted space (key upload failed). Nothing was saved — please try again.')
+        }
         keyStore.set(created.id, handle)
         setRecovery(recoveryDisplay)
       } else {
