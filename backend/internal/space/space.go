@@ -51,6 +51,14 @@ type Meta struct {
 	// default for never-dragged spaces; the frontend tie-breaks equal ranks by
 	// created_at descending so freshly created spaces float to the top.
 	Order int `json:"order,omitempty"`
+	// Encrypted marks a zero-knowledge space: its files/ dir holds only opaque
+	// ciphertext (content blobs + an append-only op-log + a checkpoint) that the
+	// server never decrypts. Such a space is a blob store, NOT a plaintext
+	// filesystem — the two are mutually exclusive, enforced at the HTTP layer.
+	// Absent in metas written before this field existed, so legacy spaces read
+	// back as false (plaintext). Always serialized (no omitempty) so the GET
+	// response is explicit about a space's mode.
+	Encrypted bool `json:"encrypted"`
 }
 
 // boardStatuses is the closed set of Kanban columns a space may be assigned to.
@@ -75,6 +83,11 @@ type Store struct {
 	// board update can't expose a half-applied view. Per-file content ops still
 	// rely on OS atomicity, not this lock.
 	mu sync.RWMutex
+	// encMu guards the encSeq map only (a short critical section to fetch/create
+	// a space's op-log sequencer). The sequencer's own mutex — not encMu — is
+	// held across the append, so different encrypted spaces append concurrently.
+	encMu  sync.Mutex
+	encSeq map[string]*seqCounter
 }
 
 func NewStore(rootDir string) *Store {
@@ -105,7 +118,21 @@ func (s *Store) List() ([]Meta, error) {
 	return out, nil
 }
 
+// Create provisions a normal plaintext Space (files/ is a versioned filesystem).
 func (s *Store) Create(id, name, owner string) (Meta, error) {
+	return s.create(id, name, owner, false)
+}
+
+// CreateEncrypted provisions a zero-knowledge Space: the on-disk layout is
+// identical (files/ + .notation/), but its Meta is flagged Encrypted so the
+// HTTP layer routes it to the opaque blob/op-log store instead of the plaintext
+// file APIs. The files/ dir starts empty — it fills with ciphertext blobs and
+// op-log entries the server never decrypts.
+func (s *Store) CreateEncrypted(id, name, owner string) (Meta, error) {
+	return s.create(id, name, owner, true)
+}
+
+func (s *Store) create(id, name, owner string, encrypted bool) (Meta, error) {
 	id = strings.ToLower(strings.TrimSpace(id))
 	if !idPattern.MatchString(id) {
 		return Meta{}, ErrInvalidID
@@ -129,7 +156,7 @@ func (s *Store) Create(id, name, owner string) (Meta, error) {
 	if strings.TrimSpace(name) == "" {
 		name = id
 	}
-	meta := Meta{ID: id, Name: strings.TrimSpace(name), CreatedAt: now, UpdatedAt: now, Owner: owner}
+	meta := Meta{ID: id, Name: strings.TrimSpace(name), CreatedAt: now, UpdatedAt: now, Owner: owner, Encrypted: encrypted}
 	if err := s.writeMeta(id, meta); err != nil {
 		return Meta{}, err
 	}

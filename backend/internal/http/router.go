@@ -163,43 +163,68 @@ func NewRouter(d Deps) (http.Handler, error) {
 		// Top-level (not under /spaces/{spaceID}) since one drag spans many spaces.
 		ar.Patch("/board", ahdmin.updateBoard)
 		ar.Route("/spaces/{spaceID}", func(sr chi.Router) {
+			// Mode-agnostic routes: valid whether the space is plaintext or an
+			// encrypted blob store. getSpace exposes the `encrypted` flag.
 			sr.Get("/", ahdmin.getSpace)
 			sr.Delete("/", ahdmin.deleteSpace)
-			sr.Get("/tree", ahdmin.getTree)
-			sr.Get("/tts", ahdmin.getTTS) // scope = this space → audio isolated per space
-			sr.Get("/export", ahdmin.exportSpace)
-			sr.Post("/mkdir", ahdmin.mkdir)
-			sr.Get("/file/*", ahdmin.getFile)
-			sr.Put("/file/*", ahdmin.putFile)
-			sr.Delete("/file/*", ahdmin.deleteFile)
-			sr.Post("/rename/*", ahdmin.renameFile)
-			sr.Get("/log", ahdmin.getLog)
-			sr.Get("/diff/{hash}", ahdmin.getDiff)
-			sr.Post("/snapshot", ahdmin.snapshot)
 			sr.Get("/shares", ahdmin.listShares)
 			sr.Post("/shares", ahdmin.createShare)
 			sr.Delete("/shares/{shareID}", ahdmin.deleteShare)
 			sr.Get("/mcp-tokens", ahdmin.listMCPTokens)
 			sr.Post("/mcp-tokens", ahdmin.createMCPToken)
 			sr.Delete("/mcp-tokens/{tokenID}", ahdmin.deleteMCPToken)
-			// Space-wide comment listing for the "All comments" sidebar tab.
-			// Placed before the path-suffix routes so it matches the bare
-			// /comments without the wildcard catching it.
-			sr.Get("/all-comments", ahdmin.listAllComments)
-			sr.Delete("/comments/by-id/{commentID}", ahdmin.deleteComment)
-			sr.Get("/comments/*", ahdmin.listComments)
-			sr.Get("/form/*", ahdmin.getForm)
-			sr.Post("/form/*", ahdmin.postFormEntry)
-			sr.Put("/form/*", ahdmin.putFormEntry)
-			sr.Delete("/form/*", ahdmin.deleteFormEntry)
-			sr.Post("/form-upload/*", ahdmin.postFormImage)
-			sr.Post("/comments/*", ahdmin.postComment)
-			sr.Get("/search", ahdmin.search)
-			sr.Get("/audit", ahdmin.getAudit)
-			sr.Get("/file-history/*", ahdmin.fileHistory)
-			sr.Get("/file-at/{hash}/*", ahdmin.fileAt)
-			sr.Get("/file-diff/*", ahdmin.fileDiffAcross)
-			sr.Post("/restore/*", ahdmin.restoreFile)
+
+			// Zero-knowledge blob + op-log store. Each handler 409s on a
+			// plaintext space (requireEncrypted). The server only ever moves
+			// opaque ciphertext bytes here — it never decrypts.
+			sr.Route("/enc", func(er chi.Router) {
+				er.Put("/blob/{blobId}", ahdmin.putBlob)
+				er.Get("/blob/{blobId}", ahdmin.getBlob)
+				er.Delete("/blob/{blobId}", ahdmin.deleteBlob)
+				er.Post("/ops", ahdmin.postOp)
+				er.Get("/ops", ahdmin.getOps)
+				er.Put("/checkpoint", ahdmin.putCheckpoint)
+				er.Get("/checkpoint", ahdmin.getCheckpoint)
+				er.Put("/keyrecord", ahdmin.putKeyRecord)
+				er.Get("/keyrecord", ahdmin.getKeyRecord)
+			})
+
+			// Plaintext filesystem routes. requirePlaintext 409s the whole
+			// group when the space is encrypted, so a space is never both a
+			// filesystem and a blob store. Any content endpoint added later just
+			// has to live inside this group to inherit the gate.
+			sr.Group(func(pr chi.Router) {
+				pr.Use(ahdmin.requirePlaintext)
+				pr.Get("/tree", ahdmin.getTree)
+				pr.Get("/tts", ahdmin.getTTS) // scope = this space → audio isolated per space
+				pr.Get("/export", ahdmin.exportSpace)
+				pr.Post("/mkdir", ahdmin.mkdir)
+				pr.Get("/file/*", ahdmin.getFile)
+				pr.Put("/file/*", ahdmin.putFile)
+				pr.Delete("/file/*", ahdmin.deleteFile)
+				pr.Post("/rename/*", ahdmin.renameFile)
+				pr.Get("/log", ahdmin.getLog)
+				pr.Get("/diff/{hash}", ahdmin.getDiff)
+				pr.Post("/snapshot", ahdmin.snapshot)
+				// Space-wide comment listing for the "All comments" sidebar tab.
+				// Placed before the path-suffix routes so it matches the bare
+				// /comments without the wildcard catching it.
+				pr.Get("/all-comments", ahdmin.listAllComments)
+				pr.Delete("/comments/by-id/{commentID}", ahdmin.deleteComment)
+				pr.Get("/comments/*", ahdmin.listComments)
+				pr.Get("/form/*", ahdmin.getForm)
+				pr.Post("/form/*", ahdmin.postFormEntry)
+				pr.Put("/form/*", ahdmin.putFormEntry)
+				pr.Delete("/form/*", ahdmin.deleteFormEntry)
+				pr.Post("/form-upload/*", ahdmin.postFormImage)
+				pr.Post("/comments/*", ahdmin.postComment)
+				pr.Get("/search", ahdmin.search)
+				pr.Get("/audit", ahdmin.getAudit)
+				pr.Get("/file-history/*", ahdmin.fileHistory)
+				pr.Get("/file-at/{hash}/*", ahdmin.fileAt)
+				pr.Get("/file-diff/*", ahdmin.fileDiffAcross)
+				pr.Post("/restore/*", ahdmin.restoreFile)
+			})
 		})
 	})
 

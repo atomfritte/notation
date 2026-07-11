@@ -32,6 +32,18 @@ func (h *shareHandlers) resolve(r *http.Request) (string, share.Share, error) {
 	return h.shares.Resolve(chi.URLParam(r, "token"))
 }
 
+// refuseEncrypted seals encrypted spaces off from the share surface for now:
+// client-side share decryption is a later phase, and the server can't decrypt.
+// Returns true (and writes a 409) when the space is encrypted, so callers do
+// `if h.refuseEncrypted(w, spaceID) { return }` right after resolving.
+func (h *shareHandlers) refuseEncrypted(w http.ResponseWriter, spaceID string) bool {
+	if m, err := h.store.Get(spaceID); err == nil && m.Encrypted {
+		writeError(w, http.StatusConflict, "space is encrypted; not available via share links yet")
+		return true
+	}
+	return false
+}
+
 // requireScope enforces a share's page/folder scope for one requested path.
 // Denials are audit-logged (the guest holds a valid token but asked for
 // content outside what the admin shared — worth a trace) and answered with a
@@ -104,6 +116,9 @@ func (h *shareHandlers) getSpace(w http.ResponseWriter, r *http.Request) {
 		writeShareError(w, err)
 		return
 	}
+	if h.refuseEncrypted(w, spaceID) {
+		return
+	}
 	if !sh.Permission.AllowsRead() {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
@@ -131,6 +146,9 @@ func (h *shareHandlers) searchSpace(w http.ResponseWriter, r *http.Request) {
 	spaceID, sh, err := h.resolve(r)
 	if err != nil {
 		writeShareError(w, err)
+		return
+	}
+	if h.refuseEncrypted(w, spaceID) {
 		return
 	}
 	if !sh.Permission.AllowsRead() {
@@ -175,6 +193,9 @@ func (h *shareHandlers) getTree(w http.ResponseWriter, r *http.Request) {
 		writeShareError(w, err)
 		return
 	}
+	if h.refuseEncrypted(w, spaceID) {
+		return
+	}
 	if !sh.Permission.AllowsRead() {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
@@ -193,6 +214,9 @@ func (h *shareHandlers) getFile(w http.ResponseWriter, r *http.Request) {
 	spaceID, sh, err := h.resolve(r)
 	if err != nil {
 		writeShareError(w, err)
+		return
+	}
+	if h.refuseEncrypted(w, spaceID) {
 		return
 	}
 	if !sh.Permission.AllowsRead() {
@@ -221,6 +245,9 @@ func (h *shareHandlers) putFile(w http.ResponseWriter, r *http.Request) {
 	spaceID, sh, err := h.resolve(r)
 	if err != nil {
 		writeShareError(w, err)
+		return
+	}
+	if h.refuseEncrypted(w, spaceID) {
 		return
 	}
 	if !sh.Permission.AllowsEdit() {
@@ -256,6 +283,9 @@ func (h *shareHandlers) postComment(w http.ResponseWriter, r *http.Request) {
 	spaceID, sh, err := h.resolve(r)
 	if err != nil {
 		writeShareError(w, err)
+		return
+	}
+	if h.refuseEncrypted(w, spaceID) {
 		return
 	}
 	if !sh.Permission.AllowsComment() {
@@ -302,6 +332,9 @@ func (h *shareHandlers) listAllComments(w http.ResponseWriter, r *http.Request) 
 		writeShareError(w, err)
 		return
 	}
+	if h.refuseEncrypted(w, spaceID) {
+		return
+	}
 	if !sh.Permission.AllowsComment() {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
@@ -326,6 +359,9 @@ func (h *shareHandlers) listComments(w http.ResponseWriter, r *http.Request) {
 	spaceID, sh, err := h.resolve(r)
 	if err != nil {
 		writeShareError(w, err)
+		return
+	}
+	if h.refuseEncrypted(w, spaceID) {
 		return
 	}
 	if !sh.Permission.AllowsRead() {
@@ -356,6 +392,9 @@ func (h *shareHandlers) getForm(w http.ResponseWriter, r *http.Request) {
 		writeShareError(w, err)
 		return
 	}
+	if h.refuseEncrypted(w, spaceID) {
+		return
+	}
 	if !sh.Permission.AllowsRead() {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
@@ -380,6 +419,9 @@ func (h *shareHandlers) postFormEntry(w http.ResponseWriter, r *http.Request) {
 	spaceID, sh, err := h.resolve(r)
 	if err != nil {
 		writeShareError(w, err)
+		return
+	}
+	if h.refuseEncrypted(w, spaceID) {
 		return
 	}
 	if !sh.Permission.AllowsComment() {
@@ -411,6 +453,9 @@ func (h *shareHandlers) postFormImage(w http.ResponseWriter, r *http.Request) {
 	spaceID, sh, err := h.resolve(r)
 	if err != nil {
 		writeShareError(w, err)
+		return
+	}
+	if h.refuseEncrypted(w, spaceID) {
 		return
 	}
 	if !sh.Permission.AllowsComment() {
