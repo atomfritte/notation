@@ -171,6 +171,15 @@ func requiredProp(name, typ, desc string) map[string]any {
 
 // dispatchTool routes a tool call to the right implementation.
 func (s *Server) dispatchTool(_ context.Context, spaceID, tokenID, name string, args map[string]any) (*toolResult, error) {
+	// Seal encrypted spaces off from MCP at the space-resolution boundary: the
+	// server stores only opaque ciphertext for such a space and literally cannot
+	// read it, so every tool call fails with a clear error rather than returning
+	// garbage. Checked once here so no individual tool branch can leak.
+	if m, err := s.store.Get(spaceID); err == nil && m.Encrypted {
+		s.auditCall(spaceID, tokenID, "mcp."+name, "", ErrEncryptedSpace)
+		return errResult("space is encrypted; not accessible via MCP"), nil
+	}
+
 	pathArg := stringArg(args, "path")
 	var actionPath = pathArg
 

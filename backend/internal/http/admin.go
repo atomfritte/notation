@@ -55,6 +55,10 @@ func (h *adminHandlers) listSpaces(w http.ResponseWriter, r *http.Request) {
 type createSpaceReq struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// Encrypted opts the new space into zero-knowledge mode: an EMPTY opaque
+	// blob + op-log store the server never decrypts, instead of a plaintext
+	// filesystem. Default false → a normal plaintext space (back-compatible).
+	Encrypted bool `json:"encrypted"`
 }
 
 func (h *adminHandlers) createSpace(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +72,11 @@ func (h *adminHandlers) createSpace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id is required")
 		return
 	}
-	m, err := h.store.Create(req.ID, req.Name, user.Name)
+	create := h.store.Create
+	if req.Encrypted {
+		create = h.store.CreateEncrypted
+	}
+	m, err := create(req.ID, req.Name, user.Name)
 	if err != nil {
 		switch {
 		case errors.Is(err, space.ErrInvalidID):

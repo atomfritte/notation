@@ -190,3 +190,8 @@ func (s *Server) auditCall(spaceID, tokenID, action, path string, err error) {
 
 // ErrUnknownTool is returned when a tool name is not registered.
 var ErrUnknownTool = errors.New("unknown tool")
+
+// ErrEncryptedSpace marks a tool call against a zero-knowledge space, which MCP
+// cannot serve (the server holds only opaque ciphertext). Surfaced in the audit
+// log; the caller gets a plain "not accessible via MCP" tool error.
+var ErrEncryptedSpace = errors.New("space is encrypted; not accessible via MCP")
