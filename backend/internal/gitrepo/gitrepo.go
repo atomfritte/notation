@@ -48,7 +48,7 @@ type Commit struct {
 }
 
 var (
-	commitHashRe = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+	commitHashRe   = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 	ErrInvalidHash = errors.New("invalid commit hash")
 )
 
@@ -94,6 +94,64 @@ func (m *Manager) Init(spaceID string) error {
 	_, _ = run(dir, nil, "config", "user.name", "notation")
 	_, _ = run(dir, nil, "config", "user.email", "notation@local")
 	return nil
+}
+
+// Reinit DESTROYS a Space's git history and recreates a fresh repository with a
+// single initial commit of the CURRENT working tree. It does this by removing
+// files/.git entirely (objects, refs, reflogs, packfiles) and running
+// `git init` + `git add -A` + one commit — so NO prior commit, tree, or blob
+// survives. That total wipe is the mechanism the destructive convert path uses
+// to purge the OTHER-mode content (e.g. plaintext bytes when encrypting) from
+// history: after the working tree has been reduced to just the target-mode data,
+// re-init leaves history containing only that.
+//
+// It is intended to be called ONLY from the admin finalize-convert handler,
+// which has already purged the other-mode files. Any pending debounced commit is
+// cancelled first so it can't race the .git removal.
+func (m *Manager) Reinit(spaceID string, author Author, message string) error {
+	author = author.withDefaults()
+	if strings.TrimSpace(message) == "" {
+		message = "reinitialize"
+	}
+	m.cancelPending(spaceID)
+	dir := m.store.FilesDir(spaceID)
+	// Blow away the entire repository. RemoveAll on a missing .git is a no-op, so
+	// this is safe on a never-committed space too.
+	if err := os.RemoveAll(filepath.Join(dir, ".git")); err != nil {
+		return fmt.Errorf("reinit: rm .git: %w", err)
+	}
+	if _, err := run(dir, nil, "init", "-q", "-b", "main"); err != nil {
+		return fmt.Errorf("reinit: git init: %w", err)
+	}
+	_, _ = run(dir, nil, "config", "user.name", "notation")
+	_, _ = run(dir, nil, "config", "user.email", "notation@local")
+	if _, err := run(dir, nil, "add", "-A"); err != nil {
+		return fmt.Errorf("reinit: git add: %w", err)
+	}
+	env := []string{
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_AUTHOR_NAME=" + author.Name,
+		"GIT_AUTHOR_EMAIL=" + author.Email,
+		"GIT_COMMITTER_NAME=" + author.Name,
+		"GIT_COMMITTER_EMAIL=" + author.Email,
+	}
+	// --allow-empty so a space with no files (e.g. an empty encrypted vault) still
+	// gets exactly one initial commit, keeping the "single fresh commit" invariant.
+	if _, err := run(dir, env, "commit", "-q", "--allow-empty", "-m", message); err != nil {
+		return fmt.Errorf("reinit: git commit: %w", err)
+	}
+	return nil
+}
+
+// cancelPending stops and drops any debounced auto-commit queued for a Space, so
+// it can't fire in the middle of a Reinit and re-introduce a stale commit.
+func (m *Manager) cancelPending(spaceID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if p, ok := m.pending[spaceID]; ok {
+		p.timer.Stop()
+		delete(m.pending, spaceID)
+	}
 }
 
 // Schedule debounces a commit for the given Space. If a commit is already

@@ -59,6 +59,14 @@ type Meta struct {
 	// back as false (plaintext). Always serialized (no omitempty) so the GET
 	// response is explicit about a space's mode.
 	Encrypted bool `json:"encrypted"`
+	// Converting is a transient marker set while a space is mid-conversion
+	// between plaintext and encrypted: "" = not converting, "to-encrypted" or
+	// "to-plaintext" otherwise. It temporarily relaxes the plaintext/encrypted
+	// gate so the client can read the source mode AND stage the target mode at
+	// the same time. Cleared by finalize-convert (with Encrypted flipped) or by
+	// abort-convert (with Encrypted unchanged). omitempty: a settled space never
+	// carries it.
+	Converting string `json:"converting,omitempty"`
 }
 
 // boardStatuses is the closed set of Kanban columns a space may be assigned to.

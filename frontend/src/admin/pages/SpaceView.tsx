@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock } from 'lucide-react'
+import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon } from 'lucide-react'
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
@@ -35,6 +35,7 @@ import { HelpPanel } from '../components/HelpPanel'
 import { getHeaderStyle, HEADER_STYLE_EVENT, type HeaderStyle } from '../lib/theme'
 import { SidebarTabs, type SidebarTabKey } from '../components/SidebarTabs'
 import { AllCommentsPanel } from '../components/AllCommentsPanel'
+import { ConvertDialog } from '../components/ConvertDialog'
 
 // Returns true when the keydown target is an element where the user is
 // composing text — keeps single-key shortcuts like "?" from intercepting
@@ -148,6 +149,8 @@ export function SpaceView() {
   const [bookmarks, setBookmarks] = useState<string[]>([])
   
   const [ctxMenu, setCtxMenu] = useState<{ x: number, y: number, items: MenuItem[] } | null>(null)
+  // Non-null while the encrypt/decrypt conversion dialog is open.
+  const [convertDir, setConvertDir] = useState<api.ConvertDirection | null>(null)
 
   // Form folders: when the selected path is a folder with a _form.md template,
   // we render the FormView instead of treating it as a file.
@@ -504,6 +507,12 @@ export function SpaceView() {
         { label: 'Upload here', icon: <Upload size={14} />,    onClick: () => promptUploadInto('') },
         // The ZIP export is a server endpoint that 409s for encrypted spaces.
         ...(encryptedRef.current ? [] : [{ label: 'Download all (ZIP)', icon: <Archive size={14} />, onClick: () => api.downloadSpaceZip(spaceID) }]),
+        // Space-level conversion: encrypt a plaintext space (or decrypt an
+        // unlocked encrypted one) in place. Destructive on finalize — the dialog
+        // warns clearly.
+        encryptedRef.current
+          ? { label: 'Decrypt this space…', icon: <Unlock size={14} />, onClick: () => setConvertDir('to-plaintext') }
+          : { label: 'Encrypt this space…', icon: <Lock size={14} />, onClick: () => setConvertDir('to-encrypted') },
       ],
     })
   }, [spaceID, createFileIn, createFolderIn, promptUploadInto])
@@ -875,6 +884,31 @@ export function SpaceView() {
     <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
       {themeOpen && <ThemePalette onClose={() => setThemeOpen(false)} />}
+      {convertDir && (
+        <ConvertDialog
+          spaceID={spaceID}
+          direction={convertDir}
+          handle={keyStore.get(spaceID)}
+          onClose={() => setConvertDir(null)}
+          onDone={(meta) => {
+            setConvertDir(null)
+            setErr(null)
+            setSearchParams({}, { replace: true })
+            setContent('')
+            setEtag(null)
+            setEditing(false)
+            setHistoryMode(false)
+            setTree([])
+            setSpaceMeta(meta)
+            // Encrypted → the EncryptedFS build effect (keyed on encrypted/unlocked)
+            // loads the tree once the just-stored handle is seen. Plaintext → load
+            // the server tree directly now that the gate has settled.
+            if (!meta.encrypted) {
+              api.getTree(spaceID).then(setTree).catch(e => setErr(String(e)))
+            }
+          }}
+        />
+      )}
       
       {/* Mobile backdrop: dim + tap-to-close the drawer. Only rendered on
          small viewports so desktop never sees it. */}
@@ -1189,6 +1223,30 @@ export function SpaceView() {
             </div>
           )}
         </header>
+
+        {/* Resume/abort banner for a conversion that was left in-flight (e.g. the
+            tab was closed mid-convert). Detecting the marker and offering an
+            abort keeps the user from getting stuck; the original mode is intact. */}
+        {spaceMeta?.converting && !convertDir && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2 bg-[color:var(--notation-warning)]/15 border-b border-[color:var(--notation-warning)] text-sm">
+            <span className="flex items-center gap-2 text-[var(--notation-fg)]">
+              <Lock size={14} className="text-[var(--notation-warning)]" />
+              A {spaceMeta.converting === 'to-encrypted' ? 'to-encrypted' : 'to-plaintext'} conversion was interrupted. Your original content is intact.
+            </span>
+            <button
+              onClick={async () => {
+                try {
+                  const meta = await api.abortConvert(spaceID)
+                  setSpaceMeta(meta)
+                  if (!meta.encrypted) api.getTree(spaceID).then(setTree).catch(e => setErr(String(e)))
+                } catch (e) { setErr(String(e)) }
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-[var(--notation-fg)] hover:bg-[var(--notation-border)] transition-colors flex-shrink-0"
+            >
+              <XIcon size={13} /> Abort conversion
+            </button>
+          </div>
+        )}
 
         <div className="flex-1 flex overflow-hidden">
           <div ref={mainScrollRef} className="flex-1 overflow-y-auto relative no-scrollbar">

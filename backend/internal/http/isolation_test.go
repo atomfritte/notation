@@ -50,6 +50,7 @@ type isoEnv struct {
 	handler http.Handler
 	cfg     *config.Config
 	store   *space.Store
+	git     *gitrepo.Manager
 	shares  *share.Store
 	mcp     *mcptoken.Store
 	dataDir string
@@ -135,7 +136,7 @@ func newIsoEnv(t *testing.T) *isoEnv {
 	}
 
 	e := &isoEnv{
-		t: t, handler: handler, cfg: cfg, store: store,
+		t: t, handler: handler, cfg: cfg, store: store, git: gitMgr,
 		shares: shareStore, mcp: mcpStore, dataDir: dataDir,
 	}
 

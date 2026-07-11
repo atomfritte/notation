@@ -33,7 +33,14 @@ export type Meta = {
    *  a sealed op-log under /enc/*, and the plaintext file/tree/search/… APIs
    *  409. The client drives it through EncryptedFS. */
   encrypted?: boolean
+  /** Set while a space is mid-conversion between modes: "to-encrypted" or
+   *  "to-plaintext". Empty/absent for a settled space. Both mode gates are
+   *  relaxed while it is set. */
+  converting?: '' | 'to-encrypted' | 'to-plaintext'
 }
+
+/** Conversion direction for the encrypt/decrypt flows. */
+export type ConvertDirection = 'to-encrypted' | 'to-plaintext'
 
 export type BoardMove = { id: string; status: BoardColumn; order: number }
 
@@ -161,6 +168,11 @@ export const updateBoard = (moves: BoardMove[]) =>
 export const getTree = (id: string) =>
   fetchJSON<Entry[]>(`/api/admin/spaces/${encodeURIComponent(id)}/tree`)
 
+/** Flat list of every file path in the space (form folders NOT collapsed).
+ *  Used by the encrypt conversion so nothing is dropped from the copy. */
+export const listFilesFlat = (id: string) =>
+  fetchJSON<string[]>(`/api/admin/spaces/${encodeURIComponent(id)}/files-flat`)
+
 export const getForm = (id: string, folder: string) =>
   fetchJSON<FormData>(`/api/admin/spaces/${encodeURIComponent(id)}/form/${encodePath(folder)}`)
 
@@ -238,6 +250,36 @@ export const writeFileBinary = async (id: string, path: string, blob: Blob): Pro
 /** Direct URL for downloading or rendering a file via <img>. */
 export const fileURL = (id: string, path: string) =>
   `/api/admin/spaces/${encodeURIComponent(id)}/file/${encodePath(path)}`
+
+/** Read a file's RAW bytes (text OR binary) — used by the encrypt conversion so
+ *  attachments round-trip losslessly (a .text() read would corrupt binary). */
+export const readFileBytes = async (id: string, path: string): Promise<Uint8Array> => {
+  const r = await fetch(fileURL(id, path), { credentials: 'same-origin' })
+  if (!r.ok) throw await asError(r)
+  return new Uint8Array(await r.arrayBuffer())
+}
+
+// ---- convert an existing space between plaintext and encrypted -------------
+
+/** Set the transient conversion marker (non-destructive). Relaxes the gate. */
+export const beginConvert = (id: string, direction: ConvertDirection) =>
+  fetchJSON<Meta>(`/api/admin/spaces/${encodeURIComponent(id)}/enc/begin-convert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ direction }),
+  })
+
+/** Drop the staged target-mode data and return to the original mode intact. */
+export const abortConvert = (id: string) =>
+  fetchJSON<Meta>(`/api/admin/spaces/${encodeURIComponent(id)}/enc/abort-convert`, {
+    method: 'POST',
+  })
+
+/** The DESTRUCTIVE commit: purge the source mode, flip the flag, re-init git. */
+export const finalizeConvert = (id: string) =>
+  fetchJSON<Meta>(`/api/admin/spaces/${encodeURIComponent(id)}/enc/finalize-convert`, {
+    method: 'POST',
+  })
 
 // ---- server-side TTS (read-aloud studio voice) ----
 export type ServerVoice = { id: string; label: string; lang: string }
