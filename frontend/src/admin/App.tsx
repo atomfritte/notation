@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { SpaceList } from './pages/SpaceList'
 import { SpaceView } from './pages/SpaceView'
+import { PrintSpaceView } from './pages/PrintSpaceView'
 import { AuthGate } from './components/AuthGate'
 import { initTheme } from './lib/theme'
 
@@ -16,6 +17,7 @@ export function App() {
           <Route path="/" element={<SpaceList />} />
           <Route path="/admin" element={<SpaceList />} />
           <Route path="/admin/spaces/:spaceID" element={<SpaceView />} />
+          <Route path="/admin/spaces/:spaceID/print" element={<PrintSpaceView />} />
           <Route path="*" element={<div className="p-8">Not found</div>} />
         </Routes>
       </AuthGate>
