@@ -6,5 +6,6 @@
 export * from './ids'
 export * from './nodes'
 export * from './ops'
+export * from './crdt'
 export * from './opCrypto'
 export type { SpaceFS } from './spacefs'

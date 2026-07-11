@@ -78,13 +78,22 @@ describe('buildTree', () => {
     expect(byId(buildTree(ops)).get('a')?.parentId).toBe(ROOT_ID)
   })
 
-  it('skips a self-parenting move and a move under a nonexistent parent', () => {
+  it('skips a self-parenting move (would cycle)', () => {
+    const ops: Op[] = [create('a', ROOT_ID, 'a', 'dir', 1), move('a', 'a', 2)]
+    expect(byId(buildTree(ops)).get('a')?.parentId).toBe(ROOT_ID)
+  })
+
+  it('applies a move to a not-yet-known parent (the node waits as an orphan)', () => {
+    // Phase-2 change: the CRDT does NOT check parent existence. On another
+    // replica 'ghost' may exist (or its create is still in flight), so rejecting
+    // the move would make the result depend on arrival order — and would break
+    // create-from-limbo. The move is applied; 'a' hangs off 'ghost' until (if
+    // ever) its create arrives, and never gets lost.
     const ops: Op[] = [
       create('a', ROOT_ID, 'a', 'dir', 1),
-      move('a', 'a', 2), // self
-      move('a', 'ghost', 3), // no such parent
+      move('a', 'ghost', 3), // parent not (yet) present
     ]
-    expect(byId(buildTree(ops)).get('a')?.parentId).toBe(ROOT_ID)
+    expect(byId(buildTree(ops)).get('a')?.parentId).toBe('ghost')
   })
 
   it('soft-deletes into the trash root, keeping children attached', () => {
