@@ -86,6 +86,14 @@ func NewRouter(d Deps) (http.Handler, error) {
 			api.Get("/{token}/tts/info", sh.getTTSInfo)
 			api.Get("/{token}/search", sh.searchSpace)
 		})
+		// Serve the PWA root files under the share path too. Without these, a
+		// request for e.g. /s/manifest.webmanifest falls through to the
+		// {token} route and gets the SPA HTML (Content-Type text/html), which
+		// the browser then fails to parse as a manifest ("Syntax error"). chi
+		// matches these literal paths before the {token} wildcard.
+		for _, f := range []string{"manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "icon.svg"} {
+			sr.Get("/"+f, web.RootFile(f))
+		}
 		sr.Get("/{token}", web.ShareIndex())
 		sr.Get("/{token}/*", web.ShareIndex())
 	})
