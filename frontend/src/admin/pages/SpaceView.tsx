@@ -1145,6 +1145,24 @@ export function SpaceView() {
             >
               <Archive size={16} />
             </button>
+            {encrypted && folderSyncSupported() && (
+              <button
+                onClick={() => setFolderSyncOpen(true)}
+                title="Local folder sync (work on this Space as plain files)"
+                className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
+              >
+                <FolderSync size={16} />
+              </button>
+            )}
+            {!spaceMeta?.converting && (
+              <button
+                onClick={() => setConvertDir(encrypted ? 'to-plaintext' : 'to-encrypted')}
+                title={encrypted ? 'Decrypt this Space' : 'Encrypt this Space (zero-knowledge)'}
+                className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
+              >
+                {encrypted ? <Unlock size={16} /> : <Lock size={16} />}
+              </button>
+            )}
             {!encrypted && ttsVoices && ttsVoices.length > 0 && (
               <button
                 onClick={() => setPrepareAudioOpen(true)}
