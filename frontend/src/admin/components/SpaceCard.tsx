@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Trash2, Cloud, CloudDownload, CloudOff, RefreshCw, Loader2, Headphones } from 'lucide-react'
+import { Trash2, Cloud, CloudDownload, CloudOff, RefreshCw, Loader2, Headphones, Lock } from 'lucide-react'
 import * as api from '../lib/api'
 import * as offline from '../lib/offlineSync'
 import { defaultVoice, markdownPagesUnder, vertonenPages, type Cancel } from '../lib/vertonen'
@@ -125,6 +125,14 @@ export function SpaceCard({ space, onDelete, online, voices }: { space: api.Meta
         >
           <span className="text-3xl font-bold text-white drop-shadow-md select-none relative z-10">{initial}</span>
           <div className="absolute inset-0 bg-gradient-to-b from-white/15 via-transparent to-black/30 pointer-events-none" />
+          {space.encrypted && (
+            <span
+              className="absolute bottom-1.5 right-1.5 z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/40 backdrop-blur-sm text-white text-[10px] font-semibold"
+              title="Zero-knowledge encrypted space"
+            >
+              <Lock size={10} /> Encrypted
+            </span>
+          )}
         </div>
         <div className="p-4">
           <div className="font-semibold text-[var(--notation-fg)] truncate">{space.name || space.id}</div>

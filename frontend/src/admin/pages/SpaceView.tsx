@@ -1,7 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones } from 'lucide-react'
+import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock } from 'lucide-react'
 import * as api from '../lib/api'
+import * as keyStore from '../lib/keyStore'
+import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
+import type { EncryptedFS } from '../../shared/vfs/encfs'
+import { utf8Decode, utf8Encode } from '../../shared/crypto/bytes'
+import { UnlockScreen } from '../components/UnlockScreen'
 import { getCachedFile, setCachedFile, prefetchFile } from '../lib/contentCache'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../lib/fileTypes'
 import { useNewPages } from '../lib/newPages'
@@ -54,7 +59,22 @@ export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const file = searchParams.get('file') ?? ''
-  
+
+  // ---------- Zero-knowledge encryption ----------
+  // spaceMeta tells us whether this space is encrypted. When it is and the key
+  // is in the session keyStore, all file ops route through an EncryptedFS
+  // instead of the plaintext api.ts. Plaintext spaces never touch any of this.
+  const [spaceMeta, setSpaceMeta] = useState<api.Meta | null>(null)
+  const encrypted = !!spaceMeta?.encrypted
+  const ksVersion = keyStore.useKeyStoreVersion()
+  const unlocked = !encrypted || keyStore.isUnlocked(spaceID)
+  const fsRef = useRef<EncryptedFS | null>(null)
+  const [fsReady, setFsReady] = useState(false)
+  // Refs the stable useCallback CRUD helpers read at call time so they branch to
+  // the FS without being recreated (and without churning their identities).
+  const encryptedRef = useRef(false)
+  useEffect(() => { encryptedRef.current = encrypted }, [encrypted])
+
   const [tree, setTree] = useState<api.Entry[]>([])
   const [content, setContent] = useState<string>('')
   const [etag, setEtag] = useState<string | null>(null)
@@ -293,7 +313,19 @@ export function SpaceView() {
 
   const refreshTree = useCallback(() => {
     if (!spaceID) return
-    api.getTree(spaceID).then(setTree).catch(e => setErr(String(e)))
+    const fs = fsRef.current
+    if (encryptedRef.current) {
+      // Encrypted: pull new ops, then re-project the node set. Until the FS is
+      // built (before unlock) there is nothing to show and no server tree to
+      // fetch — the plaintext /tree endpoint 409s for an encrypted space.
+      if (!fs) return
+      fs.sync().then(() => setTree(fsToEntries(fs))).catch(e => setErr(String(e)))
+      return
+    }
+    // A 409 means the space is actually encrypted but meta hasn't loaded yet;
+    // swallow it (the encrypted path takes over once meta resolves) rather than
+    // flashing an error. Plaintext /tree never 409s, so this is a no-op there.
+    api.getTree(spaceID).then(setTree).catch(e => { if ((e as { status?: number })?.status !== 409) setErr(String(e)) })
   }, [spaceID])
 
   const toggleBookmark = useCallback((path: string) => {
@@ -318,8 +350,10 @@ export function SpaceView() {
     const target = parentDir ? `${parentDir}/${withExt}` : withExt
     try {
       const title = withExt.replace(/\.md$/i, '').split('/').pop()
-      await api.writeFile(spaceID, target, `# ${title}\n\n`)
-      refreshTree()
+      const body = `# ${title}\n\n`
+      const fs = fsRef.current
+      if (fs) { await fs.write(target, utf8Encode(body)); await fs.sync(); setTree(fsToEntries(fs)) }
+      else { await api.writeFile(spaceID, target, body); refreshTree() }
       setSearchParams({ file: target })
       setEditing(true)
     } catch (err) { setErr(String(err)) }
@@ -332,8 +366,9 @@ export function SpaceView() {
     if (!name) return
     const target = parentDir ? `${parentDir}/${name}` : name
     try {
-      await api.mkdir(spaceID, target)
-      refreshTree()
+      const fs = fsRef.current
+      if (fs) { await fs.mkdir(target); await fs.sync(); setTree(fsToEntries(fs)) }
+      else { await api.mkdir(spaceID, target); refreshTree() }
     } catch (err) { setErr(String(err)) }
   }, [spaceID, refreshTree])
 
@@ -341,8 +376,9 @@ export function SpaceView() {
     const newPath = window.prompt('Rename to (full path):', oldPath)
     if (!newPath || newPath === oldPath) return
     try {
-      await api.renameFile(spaceID, oldPath, newPath)
-      refreshTree()
+      const fs = fsRef.current
+      if (fs) { await fs.rename(oldPath, newPath); await fs.sync(); setTree(fsToEntries(fs)) }
+      else { await api.renameFile(spaceID, oldPath, newPath); refreshTree() }
       if (file === oldPath) setSearchParams({ file: newPath })
     } catch (err) { setErr(String(err)) }
   }, [spaceID, file, refreshTree, setSearchParams])
@@ -353,9 +389,17 @@ export function SpaceView() {
       const base = dot > 0 ? path.slice(0, dot) : path
       const ext = dot > 0 ? path.slice(dot) : ''
       const target = `${base}-copy${ext}`
-      const res = await api.readFile(spaceID, path)
-      await api.writeFile(spaceID, target, res.content)
-      refreshTree()
+      const fs = fsRef.current
+      if (fs) {
+        const bytes = await fs.read(path)
+        await fs.write(target, bytes)
+        await fs.sync()
+        setTree(fsToEntries(fs))
+      } else {
+        const res = await api.readFile(spaceID, path)
+        await api.writeFile(spaceID, target, res.content)
+        refreshTree()
+      }
     } catch (err) { setErr(String(err)) }
   }, [spaceID, refreshTree])
 
@@ -365,8 +409,9 @@ export function SpaceView() {
     const target = toDir ? `${toDir}/${name}` : name
     if (target === from) return
     try {
-      await api.renameFile(spaceID, from, target)
-      refreshTree()
+      const fs = fsRef.current
+      if (fs) { await fs.rename(from, target); await fs.sync(); setTree(fsToEntries(fs)) }
+      else { await api.renameFile(spaceID, from, target); refreshTree() }
       if (file === from) setSearchParams({ file: target })
     } catch (err) { setErr(String(err)) }
   }, [spaceID, file, refreshTree, setSearchParams])
@@ -377,8 +422,9 @@ export function SpaceView() {
       : `Delete ${path}?`
     if (!window.confirm(msg)) return
     try {
-      await api.deleteFile(spaceID, path)
-      refreshTree()
+      const fs = fsRef.current
+      if (fs) { await fs.remove(path); await fs.sync(); setTree(fsToEntries(fs)) }
+      else { await api.deleteFile(spaceID, path); refreshTree() }
       if (file === path) setSearchParams({ file: '' })
     } catch (err) { setErr(String(err)) }
   }, [spaceID, file, refreshTree, setSearchParams])
@@ -393,15 +439,18 @@ export function SpaceView() {
     if (files.length === 0) return
     setUploadStatus(`Uploading ${files.length}…`)
     let ok = 0
+    const fs = fsRef.current
     for (const f of files) {
       const target = parentDir ? `${parentDir}/${f.name}` : f.name
       try {
-        await api.writeFileBinary(spaceID, target, f)
+        if (fs) await fs.write(target, new Uint8Array(await f.arrayBuffer()))
+        else await api.writeFileBinary(spaceID, target, f)
         ok++
       } catch (err) {
         console.error('upload failed', target, err)
       }
     }
+    if (fs) await fs.sync()
     setUploadStatus(`Uploaded ${ok}/${files.length}${parentDir ? ' to ' + parentDir : ''}`)
     setTimeout(() => setUploadStatus(null), 3000)
     refreshTree()
@@ -453,7 +502,8 @@ export function SpaceView() {
         { label: 'New page',   icon: <FilePlus size={14} />,   onClick: () => createFileIn('') },
         { label: 'New folder', icon: <FolderPlus size={14} />, onClick: () => createFolderIn('') },
         { label: 'Upload here', icon: <Upload size={14} />,    onClick: () => promptUploadInto('') },
-        { label: 'Download all (ZIP)', icon: <Archive size={14} />, onClick: () => api.downloadSpaceZip(spaceID) },
+        // The ZIP export is a server endpoint that 409s for encrypted spaces.
+        ...(encryptedRef.current ? [] : [{ label: 'Download all (ZIP)', icon: <Archive size={14} />, onClick: () => api.downloadSpaceZip(spaceID) }]),
       ],
     })
   }, [spaceID, createFileIn, createFolderIn, promptUploadInto])
@@ -487,7 +537,9 @@ export function SpaceView() {
   // grouped view in AllCommentsPanel. Re-fetched whenever a comment is
   // added/deleted via allCommentsRefresh.
   const refreshAllComments = useCallback(() => {
-    if (!spaceID) return
+    // Comments are a server feature — encrypted spaces have none (the endpoint
+    // 409s), so don't even ask.
+    if (!spaceID || encryptedRef.current) return
     api.getAllComments(spaceID).then(setAllComments).catch(console.error)
   }, [spaceID])
   useEffect(() => { refreshAllComments() }, [refreshAllComments, allCommentsRefresh])
@@ -518,6 +570,9 @@ export function SpaceView() {
   // on the network. Best-effort and deduped — see contentCache.
   const warmFile = useCallback(
     (p: string) => {
+      // Encrypted spaces read straight from the FS on open (no server cache
+      // path), so there is nothing to prefetch — and the plaintext endpoint 409s.
+      if (encryptedRef.current) return
       if (!spaceID || !p || !isTextFile(p)) return
       prefetchFile(contentKey(spaceID, p), () =>
         api.readFile(spaceID, p).then(res => ({ content: res.content, etag: res.etag })),
@@ -532,8 +587,10 @@ export function SpaceView() {
     const mdPath = path.toLowerCase().endsWith('.md') ? path : path + '.md'
     const title = mdPath.split('/').pop()?.replace(/\.md$/i, '')
     try {
-      await api.writeFile(spaceID, mdPath, `# ${title}\n\n`)
-      refreshTree()
+      const body = `# ${title}\n\n`
+      const fs = fsRef.current
+      if (fs) { await fs.write(mdPath, utf8Encode(body)); await fs.sync(); setTree(fsToEntries(fs)) }
+      else { await api.writeFile(spaceID, mdPath, body); refreshTree() }
       setSearchParams({ file: mdPath })
       setEditing(true)
     } catch (e) { setErr(String(e)) }
@@ -584,6 +641,40 @@ export function SpaceView() {
     } catch { /* ignore */ }
   }, [spaceID])
 
+  // Fetch the space's metadata (crucially the `encrypted` flag) so we know
+  // whether to drive it through the plaintext API or an EncryptedFS.
+  useEffect(() => {
+    if (!spaceID) return
+    let cancelled = false
+    setSpaceMeta(null)
+    api.getSpace(spaceID).then(m => { if (!cancelled) setSpaceMeta(m) }).catch(e => { if (!cancelled) setErr(String(e)) })
+    return () => { cancelled = true }
+  }, [spaceID])
+
+  // Build (and load) the EncryptedFS once the space is unlocked. Rebuilds when
+  // the space or its unlocked-state changes; tears down on lock.
+  useEffect(() => {
+    if (!encrypted || !unlocked) {
+      fsRef.current = null
+      setFsReady(false)
+      return
+    }
+    const handle = keyStore.get(spaceID)
+    if (!handle) return
+    let cancelled = false
+    setFsReady(false)
+    openEncryptedFS(spaceID, handle)
+      .then(fs => {
+        if (cancelled) return
+        fsRef.current = fs
+        setFsReady(true)
+        setTree(fsToEntries(fs))
+      })
+      .catch(e => { if (!cancelled) setErr(String(e)) })
+    return () => { cancelled = true }
+    // ksVersion so a re-unlock after a lock rebuilds the FS with the new handle.
+  }, [spaceID, encrypted, unlocked, ksVersion])
+
   useEffect(refreshTree, [refreshTree])
 
   useEffect(() => {
@@ -603,6 +694,23 @@ export function SpaceView() {
       setEditing(false)
       setHistoryMode(false)
       return
+    }
+    // Encrypted space: decrypt the file through the FS (no cache, no server
+    // etag). Until the FS is built we simply show nothing.
+    if (encrypted) {
+      const fs = fsRef.current
+      setEditing(false)
+      setHistoryMode(false)
+      if (!fs || !isTextFile(file)) {
+        setContent('')
+        setEtag(null)
+        return
+      }
+      let cancelledEnc = false
+      fs.read(file)
+        .then(bytes => { if (!cancelledEnc) { setContent(utf8Decode(bytes)); setEtag(null) } })
+        .catch(e => { if (!cancelledEnc) setErr(String(e)) })
+      return () => { cancelledEnc = true }
     }
     let cancelled = false
     if (isTextFile(file)) {
@@ -628,9 +736,10 @@ export function SpaceView() {
           }
         })
         // A 400 usually means the path is a directory — e.g. a form folder the
-        // tree hasn't classified yet. Don't flash an error; once the tree loads
-        // the form effect takes over.
-        .catch(e => { if (!cancelled && (e as { status?: number })?.status !== 400) setErr(String(e)) })
+        // tree hasn't classified yet. A 409 means the space is actually
+        // encrypted but its meta hasn't loaded yet (the encrypted branch above
+        // takes over once it does). Don't flash an error for either.
+        .catch(e => { if (!cancelled && ![400, 409].includes((e as { status?: number })?.status ?? 0)) setErr(String(e)) })
     } else {
       // Binary file — viewer streams via direct URL, no content fetch needed.
       setContent('')
@@ -641,7 +750,7 @@ export function SpaceView() {
     refreshComments()
     // A late response from the previous file must not clobber the current one.
     return () => { cancelled = true }
-  }, [spaceID, file, refreshComments, isForm])
+  }, [spaceID, file, refreshComments, isForm, encrypted, fsReady])
 
   // Load a form folder's schema + entries when one is selected.
   useEffect(() => {
@@ -661,15 +770,18 @@ export function SpaceView() {
     setUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`)
     let ok = 0
     let lastPath = ''
+    const fs = fsRef.current
     for (const f of files) {
       try {
-        await api.writeFileBinary(spaceID, f.name, f)
+        if (fs) await fs.write(f.name, new Uint8Array(await f.arrayBuffer()))
+        else await api.writeFileBinary(spaceID, f.name, f)
         ok++
         lastPath = f.name
       } catch (err) {
         console.error('upload failed', f.name, err)
       }
     }
+    if (fs) await fs.sync()
     setUploadStatus(
       ok === files.length
         ? `Uploaded ${ok} file${ok === 1 ? '' : 's'}`
@@ -729,24 +841,33 @@ export function SpaceView() {
 
   if (!spaceID) return <p className="p-8 text-[var(--notation-fg-muted)]">missing workspace</p>
 
+  // Encrypted + locked → gate the whole browser behind the unlock screen.
+  // Storing the handle bumps the keyStore version, which re-renders us with
+  // `unlocked` true and kicks off the EncryptedFS build effect.
+  if (encrypted && !unlocked) {
+    return <UnlockScreen spaceID={spaceID} onUnlocked={(handle) => keyStore.set(spaceID, handle)} />
+  }
+
   const isBookmarked = bookmarks.includes(file)
   const displayTitle = stripMdExt(file.split('/').pop() || '')
   const pathParts = file ? file.split('/') : []
 
   // Header tools as one list driving both the inline icons and the overflow
-  // ("tool") menu — so on a narrow window every tool stays reachable.
-  const headerActions: HeaderAction[] = [
-    { key: 'search', label: 'Search', icon: <Search size={18} />, onClick: () => setSearchOpen(true) },
-  ]
+  // ("tool") menu — so on a narrow window every tool stays reachable. Encrypted
+  // spaces hide the server-backed tools (full-text search, git history,
+  // comments, studio read-aloud) that 409 server-side.
+  const headerActions: HeaderAction[] = []
+  if (!encrypted) headerActions.push({ key: 'search', label: 'Search', icon: <Search size={18} />, onClick: () => setSearchOpen(true) })
   if (isMarkdownFile(file) && !isForm) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
-  if (!isForm) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { setHistoryMode(v => !v); setEditing(false) } })
+  if (!isForm && !encrypted) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { setHistoryMode(v => !v); setEditing(false) } })
   if (!isForm) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove favorite' : 'Add favorite', icon: <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />, active: isBookmarked, onClick: () => toggleBookmark(file) })
-  if (!isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: comments.length, onClick: () => setShowComments(v => !v) })
+  if (!isForm && !encrypted) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: comments.length, onClick: () => setShowComments(v => !v) })
   if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={18} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
   if (isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={18} />, onClick: () => window.print() })
   headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={18} />, onClick: () => setThemeOpen(true) })
   headerActions.push({ key: 'help', label: 'Keyboard shortcuts', icon: <HelpCircle size={18} />, onClick: () => setHelpOpen(true) })
   headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
+  if (encrypted) headerActions.push({ key: 'lock', label: 'Lock space', icon: <Lock size={18} />, onClick: () => { setContent(''); setTree([]); keyStore.lock(spaceID) } })
   const editVisible = isTextFile(file) && !historyMode && !isForm
   const compactHeader = headerIsCompact(headerWidth, headerActions.length, 120 + (editVisible ? 64 : 0), isMobile)
 
@@ -805,6 +926,9 @@ export function SpaceView() {
                 comments: allComments.length,
                 bookmarks: bookmarks.length,
               }}
+              // Encrypted spaces expose only the client-side tabs; comments,
+              // sharing, MCP, git history and audit are all server features.
+              tabs={encrypted ? ['bookmarks', 'files'] : undefined}
             />
           </div>
 
@@ -854,7 +978,7 @@ export function SpaceView() {
                 )}
               </div>
             )}
-            {sidebarTab === 'comments' && (
+            {!encrypted && sidebarTab === 'comments' && (
               <AllCommentsPanel
                 spaceID={spaceID}
                 currentFile={file}
@@ -866,10 +990,10 @@ export function SpaceView() {
                 refreshKey={allCommentsRefresh}
               />
             )}
-            {sidebarTab === 'shares' && <SharePanel spaceID={spaceID} />}
-            {sidebarTab === 'mcp' && <MCPPanel spaceID={spaceID} />}
-            {sidebarTab === 'history' && <HistoryPanel spaceID={spaceID} />}
-            {sidebarTab === 'audit' && <AuditPanel spaceID={spaceID} />}
+            {!encrypted && sidebarTab === 'shares' && <SharePanel spaceID={spaceID} />}
+            {!encrypted && sidebarTab === 'mcp' && <MCPPanel spaceID={spaceID} />}
+            {!encrypted && sidebarTab === 'history' && <HistoryPanel spaceID={spaceID} />}
+            {!encrypted && sidebarTab === 'audit' && <AuditPanel spaceID={spaceID} />}
           </div>
 
           <div className="p-2 border-t border-[var(--notation-border)] flex gap-1">
@@ -893,14 +1017,16 @@ export function SpaceView() {
             >
               <Upload size={16} />
             </button>
-            <button
-              onClick={() => api.downloadSpaceZip(spaceID)}
-              title="Download whole Space as ZIP"
-              className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
-            >
-              <Archive size={16} />
-            </button>
-            {ttsVoices && ttsVoices.length > 0 && (
+            {!encrypted && (
+              <button
+                onClick={() => api.downloadSpaceZip(spaceID)}
+                title="Download whole Space as ZIP"
+                className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
+              >
+                <Archive size={16} />
+              </button>
+            )}
+            {!encrypted && ttsVoices && ttsVoices.length > 0 && (
               <button
                 onClick={() => setPrepareAudioOpen(true)}
                 title="Audio vorbereiten (Ordner vertonen, offline hören)"
@@ -1004,6 +1130,15 @@ export function SpaceView() {
             >
               <PanelLeft size={18} />
             </button>
+
+            {encrypted && (
+              <span
+                className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] text-[11px] font-semibold"
+                title="Zero-knowledge encrypted space — content is decrypted only in your browser"
+              >
+                <Lock size={11} /> Encrypted
+              </span>
+            )}
 
             {file && (
               <div className="flex items-center text-sm text-[var(--notation-fg-muted)] min-w-0">
@@ -1141,10 +1276,24 @@ export function SpaceView() {
                       etag={etag}
                       theme={theme}
                       allFiles={allFiles}
+                      // Encrypted spaces persist through EncryptedFS; plaintext
+                      // spaces keep the default api.writeFile path untouched.
+                      saveFile={encrypted ? async (c) => {
+                        const fs = fsRef.current
+                        if (!fs) throw new Error('space is locked')
+                        await fs.write(file, utf8Encode(c))
+                        await fs.sync()
+                        return { etag: null }
+                      } : undefined}
+                      readFileText={encrypted ? async (p) => {
+                        const fs = fsRef.current
+                        if (!fs) return ''
+                        return utf8Decode(await fs.read(p))
+                      } : undefined}
                       onSaved={(c, newEtag) => {
                         // Keep the cache in step with the save so navigating away
                         // and back paints the just-saved text, not a stale body.
-                        setCachedFile(contentKey(spaceID, file), c, newEtag)
+                        if (!encrypted) setCachedFile(contentKey(spaceID, file), c, newEtag)
                         setContent(c)
                         setEtag(newEtag)
                         refreshTree()
@@ -1199,11 +1348,12 @@ export function SpaceView() {
           {showOutline && file && !editing && isMarkdownFile(file) && (
             <div className="surface-elevated w-[240px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-4 duration-200 overflow-y-auto">
               <Outline content={content} />
-              <BacklinksPanel spaceID={spaceID} path={file} onSelect={selectFile} />
+              {/* Backlinks come from a server-side index; skip for encrypted. */}
+              {!encrypted && <BacklinksPanel spaceID={spaceID} path={file} onSelect={selectFile} />}
             </div>
           )}
 
-          {showComments && file && !isForm && (
+          {showComments && file && !isForm && !encrypted && (
             <div id="comments-panel" className="surface-elevated w-[320px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
               <div className="p-3 border-b border-[var(--notation-border)] flex justify-between items-center bg-[var(--notation-bg-elevated)]">
                  <h3 className="font-semibold text-sm text-[var(--notation-fg)] flex items-center gap-2">
@@ -1248,19 +1398,23 @@ export function SpaceView() {
         onClose={() => setPaletteOpen(false)}
         onSelect={(p) => selectFile(p)}
       />
-      <SearchPanel
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onSelect={(p, opts) => {
-          // Carry the query into the URL so the viewer can highlight and
-          // scroll to the first match once the file content loads.
-          const next: Record<string, string> = { file: p }
-          if (opts?.query) next.q = opts.query
-          setSearchParams(next)
-          if (isMobile) setSidebarOpen(false)
-        }}
-        onSearch={(q) => api.searchSpace(spaceID, q)}
-      />
+      {/* Full-text search is a server feature — omitted entirely for encrypted
+          spaces (the endpoint 409s and there's no plaintext index). */}
+      {!encrypted && (
+        <SearchPanel
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          onSelect={(p, opts) => {
+            // Carry the query into the URL so the viewer can highlight and
+            // scroll to the first match once the file content loads.
+            const next: Record<string, string> = { file: p }
+            if (opts?.query) next.q = opts.query
+            setSearchParams(next)
+            if (isMobile) setSidebarOpen(false)
+          }}
+          onSearch={(q) => api.searchSpace(spaceID, q)}
+        />
+      )}
       <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} scope="admin" />
       {readAloud && (
         <ReadAloudBar
@@ -1270,11 +1424,13 @@ export function SpaceView() {
           onNavigate={selectFile}
           storageKey={`notation_readpos_${spaceID}`}
           onClose={() => setReadAloud(false)}
-          serverVoices={ttsVoices}
+          // Encrypted spaces keep the on-device browser voice but never send
+          // text to the server "studio" voice endpoint.
+          serverVoices={encrypted ? [] : ttsVoices}
           ttsURL={ttsURL}
         />
       )}
-      {ttsVoices && ttsVoices.length > 0 && (
+      {!encrypted && ttsVoices && ttsVoices.length > 0 && (
         <PrepareAudioPanel
           key={prepareAudioOpen ? 'audio-open' : 'audio-closed'}
           open={prepareAudioOpen}

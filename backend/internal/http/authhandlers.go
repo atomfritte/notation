@@ -48,6 +48,22 @@ type stateResponse struct {
 }
 
 func (h *authHandlers) state(w http.ResponseWriter, r *http.Request) {
+	// Dev-only: when auth is bypassed (NOTATION_DEV_BYPASS_AUTH=1) the admin API
+	// is served without a session cookie, so report a signed-in state with the
+	// same CSRF token devBypassMiddleware stamps on the context. This lets the
+	// React AuthGate render the app and the client attach a matching CSRF header.
+	// MUST NOT be reachable in production (DevBypassAuth is refused there).
+	if h.cfg.DevBypassAuth {
+		writeJSON(w, http.StatusOK, stateResponse{
+			AuthMode:  string(h.cfg.AuthMode),
+			RPID:      h.cfg.RPID,
+			SignedIn:  true,
+			CSRFToken: "dev-csrf-token",
+			User:      "dev-admin",
+		})
+		return
+	}
+
 	admin, err := h.store.Load()
 	if err != nil && !errors.Is(err, authstore.ErrAdminNotInitialized) {
 		writeInternal(w, r, "auth.state.store", err)

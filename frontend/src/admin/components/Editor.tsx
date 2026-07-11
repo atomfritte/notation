@@ -63,10 +63,17 @@ type Props = {
   allFiles: string[]
   onSaved: (content: string, etag: string | null) => void
   onCommentRequest?: (text: string) => void
+  /** Override the persistence path — encrypted spaces save through EncryptedFS
+   *  instead of api.writeFile. Returns the new etag (null for encrypted). When
+   *  omitted, the default plaintext api.writeFile path is used unchanged. */
+  saveFile?: (content: string, etag: string | null) => Promise<{ etag: string | null }>
+  /** Override cross-file reads (wiki-link heading completion). Encrypted spaces
+   *  read decrypted text via EncryptedFS; omitted → plaintext api.readFile. */
+  readFileText?: (path: string) => Promise<string>
 }
 
 export default function Editor({
-  spaceID, path, initial, etag, theme, allFiles, onSaved, onCommentRequest,
+  spaceID, path, initial, etag, theme, allFiles, onSaved, onCommentRequest, saveFile, readFileText,
 }: Props) {
   const editorRef = useRef<IEditor | null>(null)
   const monacoRef = useRef<IMonaco | null>(null)
@@ -84,6 +91,8 @@ export default function Editor({
   const allFilesRef = useRef(allFiles)
   const pathRef = useRef(path)
   const onCommentRequestRef = useRef(onCommentRequest)
+  const readFileTextRef = useRef(readFileText)
+  useEffect(() => { readFileTextRef.current = readFileText }, [readFileText])
   useEffect(() => { contentRef.current = content }, [content])
   useEffect(() => { etagRef.current = currentEtag }, [currentEtag])
   useEffect(() => { allFilesRef.current = allFiles }, [allFiles])
@@ -119,14 +128,23 @@ export default function Editor({
   }, [initial, etag])
 
   // ---- save ----------------------------------------------------------------
+  const saveFileRef = useRef(saveFile)
+  useEffect(() => { saveFileRef.current = saveFile }, [saveFile])
+
   const save = useCallback(async () => {
     if (contentRef.current === initial && !dirty) return
     setSaving(true)
     setErr(null)
     try {
-      await api.writeFile(spaceID, pathRef.current, contentRef.current, etagRef.current)
-      setCurrentEtag(null)
-      onSaved(contentRef.current, null)
+      let newEtag: string | null = null
+      if (saveFileRef.current) {
+        // Encrypted space: persist through EncryptedFS (no server etag).
+        ;({ etag: newEtag } = await saveFileRef.current(contentRef.current, etagRef.current))
+      } else {
+        await api.writeFile(spaceID, pathRef.current, contentRef.current, etagRef.current)
+      }
+      setCurrentEtag(newEtag)
+      onSaved(contentRef.current, newEtag)
     } catch (e) {
       if (String(e).includes('412')) {
         setErr('Conflict: another writer modified this file. Copy your changes and reload.')
@@ -346,10 +364,15 @@ export default function Editor({
         const docContent = targetPath === pathRef.current
           ? model.getValue()
           : null
-        // For other files, suggest async via api.readFile (cached by browser anyway).
+        // For other files, suggest async via a read (cached by browser anyway).
+        // Encrypted spaces route through readFileText (EncryptedFS); others use
+        // the plaintext api.readFile.
+        const readOther = readFileTextRef.current
+          ? readFileTextRef.current(targetPath).catch(() => '')
+          : api.readFile(spaceID, targetPath).then(r => r.content).catch(() => '')
         const fileContentPromise: Promise<string> = docContent != null
           ? Promise.resolve(docContent)
-          : api.readFile(spaceID, targetPath).then(r => r.content).catch(() => '')
+          : readOther
         return fileContentPromise.then(text => {
           const headings: string[] = []
           const re = /^#+\s+(.+)$/gm
