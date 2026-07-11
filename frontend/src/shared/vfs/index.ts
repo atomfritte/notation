@@ -9,3 +9,8 @@ export * from './ops'
 export * from './crdt'
 export * from './opCrypto'
 export type { SpaceFS } from './spacefs'
+// Phase 3b: the zero-knowledge SpaceFS backend + its store abstraction.
+// HttpEncStore lives in ./httpEncStore (deep-import) so this barrel stays free
+// of the admin auth/WebAuthn dependency it pulls in.
+export * from './encStore'
+export * from './encfs'
