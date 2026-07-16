@@ -327,9 +327,14 @@ export function MarkdownView({
 
   // React to activeCommentID changes: toggle `data-active` on matching marks,
   // scroll the first matching mark into view, and fire the blink animation.
-  // Wrapped in rAF so that if `comments` and `activeCommentID` change in the
-  // same render (e.g. brand-new comment freshly committed), the mark exists
-  // before we try to highlight it.
+  // ALSO re-runs when `content`/`comments` change: clicking a comment in the
+  // "all comments" panel navigates to a DIFFERENT page, so the target mark
+  // doesn't exist yet when activeCommentID is set — the document has to load
+  // (and, for encrypted spaces, decrypt) and the marks be re-applied first.
+  // Depending on the same inputs as applyAnchorMarks makes the scroll retry
+  // once the mark is finally in the DOM. The applyAnchorMarks effect is
+  // registered earlier, so its rAF (which inserts the marks) runs before this
+  // one (which finds and scrolls to them) in the same frame.
   useEffect(() => {
     const article = articleRef.current
     if (!article) return
@@ -350,7 +355,7 @@ export function MarkdownView({
       })
     })
     return () => cancelAnimationFrame(frame)
-  }, [activeCommentID])
+  }, [activeCommentID, comments, content])
 
   // Horizontal swipe (touch only) flips to the prev/next page. Guards keep it
   // from firing on vertical scrolls, on sideways scrolls inside wide code
