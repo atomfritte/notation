@@ -52,6 +52,18 @@ describe('EncryptedFS comments', () => {
     expect(reloaded.commentsForNode(nodeId).map((c) => c.text).sort()).toEqual(['first', 'second'])
   })
 
+  it('round-trips a comment anchor (quote/prefix/suffix) through a reload', async () => {
+    const store = new InMemoryEncStore()
+    const key = await newKey()
+    const fs = await fsWithFile(store, key)
+    const nodeId = fs.idAt('docs/note.md')!
+    const anchor = { quote: 'secret note', prefix: '# ', suffix: '' }
+    await fs.addComment(nodeId, { text: 'on the heading', author: 'a', anchor })
+
+    const reloaded = await EncryptedFS.open(store, key, 'B')
+    expect(reloaded.commentsForNode(nodeId)[0].anchor).toEqual(anchor)
+  })
+
   it('never writes comment text, author, anchor, or nodeId to the store in cleartext', async () => {
     const store = new InMemoryEncStore()
     const key = await newKey()
