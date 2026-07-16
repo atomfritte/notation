@@ -261,6 +261,56 @@ func (s *Store) purgePlaintextContent(id string) error {
 	return nil
 }
 
+// legacyServerMetadata are the server-written plaintext sidecars that live in
+// .notation/ — OUTSIDE files/, so purgePlaintextContent never reached them. For
+// an encrypted space they are a zero-knowledge leak: comments.jsonl holds file
+// PATHS + comment text + authors + anchor quotes, and audit.log holds file
+// paths + IPs. They are purged when a space is encrypted, and swept from spaces
+// that were encrypted before this cleanup existed. Comments are migrated into
+// the encrypted op-log by the client BEFORE the purge (audit.log is a
+// server-only tamper-evidence log and is simply dropped — the server has no key
+// to re-encrypt it, and no new entries are written for an encrypted space).
+var legacyServerMetadata = []string{"comments.jsonl", "audit.log"}
+
+// PurgeLegacyServerMetadata deletes the plaintext comment + audit sidecars from
+// a space's .notation/ dir. Idempotent: a missing file is not an error.
+func (s *Store) PurgeLegacyServerMetadata(id string) error {
+	if !ValidID(id) {
+		return ErrInvalidID
+	}
+	dir := s.MetaDir(id)
+	for _, name := range legacyServerMetadata {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+// HasLegacyServerMetadata reports whether either plaintext sidecar still exists,
+// so the client can decide whether a one-time migrate+purge sweep is needed.
+func (s *Store) HasLegacyServerMetadata(id string) (comments, audit bool, err error) {
+	if !ValidID(id) {
+		return false, false, ErrInvalidID
+	}
+	dir := s.MetaDir(id)
+	stat := func(name string) (bool, error) {
+		_, statErr := os.Stat(filepath.Join(dir, name))
+		if statErr == nil {
+			return true, nil
+		}
+		if errors.Is(statErr, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, statErr
+	}
+	if comments, err = stat("comments.jsonl"); err != nil {
+		return false, false, err
+	}
+	audit, err = stat("audit.log")
+	return comments, audit, err
+}
+
 // ListFilePaths returns every regular file under files/ as a flat list of
 // slash-delimited paths, EXCLUDING dotfiles/dirs (so .git and .tmp-* are skipped)
 // and the encrypted store's reserved artifacts (blobs/, ops/, checkpoint). Unlike

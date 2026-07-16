@@ -4,6 +4,8 @@ import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePl
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
+import { fileComments, allComments as encAllComments, migrateLegacyComments } from '../lib/encComments'
+import { fetchState } from '../lib/auth'
 import { downloadDecryptedSpaceZip } from '../lib/spaceZip'
 import { collectPages } from '../lib/pageOrder'
 import { createEncryptedSearchIndex, type EncryptedSearchIndex } from '../lib/encSearch'
@@ -159,6 +161,17 @@ export function SpaceView() {
   const [pendingAnchor, setPendingAnchor] = useState<api.CommentAnchor | null>(null)
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
   const [bookmarks, setBookmarks] = useState<string[]>([])
+  // Author for comments written into an encrypted space's op-log. The server
+  // can't see the plaintext (so it can't stamp the author itself); mirror its
+  // "admin:<name>" format from the signed-in user. Resolved once on mount.
+  const [commentAuthor, setCommentAuthor] = useState('admin')
+  useEffect(() => {
+    let cancelled = false
+    fetchState()
+      .then(s => { if (!cancelled && s.user) setCommentAuthor(`admin:${s.user}`) })
+      .catch(() => { /* fall back to the generic "admin" */ })
+    return () => { cancelled = true }
+  }, [])
   
   const [ctxMenu, setCtxMenu] = useState<{ x: number, y: number, items: MenuItem[] } | null>(null)
   // Non-null while the encrypt/decrypt conversion dialog is open.
@@ -592,6 +605,14 @@ export function SpaceView() {
       setComments([])
       return
     }
+    // Encrypted spaces have no server comments; read them from the op-log by
+    // resolving the current file to its nodeId. The plaintext endpoint 409s.
+    if (encryptedRef.current) {
+      const fs = fsRef.current
+      const nodeId = fs?.idAt(file)
+      setComments(fs && nodeId ? fileComments(fs, nodeId) : [])
+      return
+    }
     api.getComments(spaceID, file).then(setComments).catch(console.error)
   }, [spaceID, file])
 
@@ -599,21 +620,47 @@ export function SpaceView() {
   // grouped view in AllCommentsPanel. Re-fetched whenever a comment is
   // added/deleted via allCommentsRefresh.
   const refreshAllComments = useCallback(() => {
-    // Comments are a server feature — encrypted spaces have none (the endpoint
-    // 409s), so don't even ask.
-    if (!spaceID || encryptedRef.current) return
+    if (!spaceID) return
+    // Encrypted: project the op-log's comments (nodeId → path) client-side.
+    if (encryptedRef.current) {
+      const fs = fsRef.current
+      setAllComments(fs ? encAllComments(fs) : [])
+      return
+    }
     api.getAllComments(spaceID).then(setAllComments).catch(console.error)
   }, [spaceID])
-  useEffect(() => { refreshAllComments() }, [refreshAllComments, allCommentsRefresh])
+  // fsReady re-runs this once the encrypted FS finishes loading its op-log.
+  useEffect(() => { refreshAllComments() }, [refreshAllComments, allCommentsRefresh, fsReady])
 
   const handleDeleteComment = useCallback(async (commentID: string) => {
     if (!spaceID) return
     try {
-      await api.deleteComment(spaceID, commentID)
+      if (encryptedRef.current) await fsRef.current?.deleteComment(commentID)
+      else await api.deleteComment(spaceID, commentID)
       refreshComments()
       setAllCommentsRefresh(v => v + 1)
     } catch (e) {
       setErr(String(e))
+    }
+  }, [spaceID, refreshComments])
+
+  // One-time cleanup for spaces encrypted BEFORE comments joined the crypto
+  // system: the plaintext .notation/comments.jsonl + audit.log still linger on
+  // disk (a cleartext path/text/IP leak). Migrate the orphaned comments into the
+  // encrypted op-log, then purge both sidecars. A cheap no-op (one GET) once a
+  // space has been swept; new conversions purge at finalize so nothing lingers.
+  const sweepLegacyMetadata = useCallback(async (fs: EncryptedFS) => {
+    try {
+      const legacy = await api.getLegacyComments(spaceID)
+      if (!legacy.has_comments && !legacy.has_audit) return
+      if (legacy.comments.length > 0) await migrateLegacyComments(fs, legacy.comments)
+      await api.purgeLegacyMetadata(spaceID)
+      if (fsRef.current === fs) {
+        refreshComments()
+        setAllCommentsRefresh(v => v + 1)
+      }
+    } catch (e) {
+      console.error('legacy comment sweep failed', e)
     }
   }, [spaceID, refreshComments])
 
@@ -666,7 +713,14 @@ export function SpaceView() {
     // pendingAnchor was captured from the viewer's selection toolbar. We only
     // attach it to top-level comments (replies inherit position from parent).
     const anchor = opts?.anchor ?? (opts?.parentID ? undefined : pendingAnchor ?? undefined)
-    await api.postComment(spaceID, file, text, { parentID: opts?.parentID, anchor })
+    if (encryptedRef.current) {
+      const fs = fsRef.current
+      const nodeId = fs?.idAt(file)
+      if (!fs || !nodeId) throw new Error('space is locked or file not found')
+      await fs.addComment(nodeId, { text, author: commentAuthor, parentId: opts?.parentID, anchor })
+    } else {
+      await api.postComment(spaceID, file, text, { parentID: opts?.parentID, anchor })
+    }
     setPendingAnchor(null)
     refreshComments()
     setAllCommentsRefresh(v => v + 1)
@@ -740,6 +794,17 @@ export function SpaceView() {
     return () => { cancelled = true }
     // ksVersion so a re-unlock after a lock rebuilds the FS with the new handle.
   }, [spaceID, encrypted, unlocked, ksVersion])
+
+  // Once the encrypted FS is ready, run the one-time legacy-metadata sweep — at
+  // most once per space (a cheap GET no-op after the space has been cleaned).
+  const sweptRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!encrypted || !fsReady) return
+    const fs = fsRef.current
+    if (!fs || sweptRef.current === spaceID) return
+    sweptRef.current = spaceID
+    void sweepLegacyMetadata(fs)
+  }, [encrypted, fsReady, spaceID, sweepLegacyMetadata])
 
   // Any mutation (create / rename / move / delete / upload / save) replaces the
   // `tree` array with a fresh projection, so keying off it drops the encrypted
@@ -946,7 +1011,7 @@ export function SpaceView() {
   if (isMarkdownFile(file) && !isForm) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
   if (!isForm && !encrypted) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { setHistoryMode(v => !v); setEditing(false) } })
   if (!isForm) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove favorite' : 'Add favorite', icon: <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />, active: isBookmarked, onClick: () => toggleBookmark(file) })
-  if (!isForm && !encrypted) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: comments.length, onClick: () => setShowComments(v => !v) })
+  if (!isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: comments.length, onClick: () => setShowComments(v => !v) })
   if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={18} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
   if (isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={18} />, onClick: () => window.print() })
   // Whole-space PDF — sibling of the single-page print; available for any space.
@@ -1047,9 +1112,10 @@ export function SpaceView() {
                 comments: allComments.length,
                 bookmarks: bookmarks.length,
               }}
-              // Encrypted spaces expose only the client-side tabs; comments,
-              // sharing, MCP, git history and audit are all server features.
-              tabs={encrypted ? ['bookmarks', 'files'] : undefined}
+              // Encrypted spaces expose the client-side tabs plus Comments
+              // (now end-to-end encrypted in the op-log). Sharing, MCP, git
+              // history and audit remain plaintext-only server features.
+              tabs={encrypted ? ['files', 'bookmarks', 'comments'] : undefined}
             />
           </div>
 
@@ -1099,7 +1165,7 @@ export function SpaceView() {
                 )}
               </div>
             )}
-            {!encrypted && sidebarTab === 'comments' && (
+            {sidebarTab === 'comments' && (
               <AllCommentsPanel
                 spaceID={spaceID}
                 currentFile={file}
@@ -1109,6 +1175,10 @@ export function SpaceView() {
                   if (commentID) setActiveCommentId(commentID)
                 }}
                 refreshKey={allCommentsRefresh}
+                // Encrypted spaces have no server comments — feed the op-log's
+                // client-side list + a client delete handler instead.
+                items={encrypted ? allComments : undefined}
+                onDeleteComment={encrypted ? handleDeleteComment : undefined}
               />
             )}
             {!encrypted && sidebarTab === 'shares' && <SharePanel spaceID={spaceID} />}
@@ -1551,7 +1621,7 @@ export function SpaceView() {
             </div>
           )}
 
-          {showComments && file && !isForm && !encrypted && (
+          {showComments && file && !isForm && (
             <div id="comments-panel" className="surface-elevated w-[320px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl">
               <div className="p-3 border-b border-[var(--notation-border)] flex justify-between items-center bg-[var(--notation-bg-elevated)]">
                  <h3 className="font-semibold text-sm text-[var(--notation-fg)] flex items-center gap-2">

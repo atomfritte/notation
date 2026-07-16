@@ -4,6 +4,8 @@ import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { getActorId } from '../lib/encSpace'
 import { encryptSpaceContent, decryptSpaceContent, type PlaintextSource, type PlaintextSink } from '../lib/convert'
+import { migrateLegacyComments } from '../lib/encComments'
+import { EncryptedFS } from '../../shared/vfs/encfs'
 import { HttpEncStore } from '../../shared/vfs/httpEncStore'
 import type { KeyHandle } from '../../shared/crypto/keys'
 import { RecoveryKeyModal } from './RecoveryKeyModal'
@@ -74,6 +76,15 @@ export function ConvertDialog({
       }
       const store = new HttpEncStore(spaceID)
       const res = await encryptSpaceContent(source, store, password, { actorId: getActorId(), onProgress })
+      // Migrate existing plaintext comments into the encrypted op-log BEFORE
+      // finalize purges comments.jsonl. The all-comments endpoint is reachable
+      // here because the in-flight conversion relaxes the plaintext gate. A
+      // failure falls through to the catch → abortConvert (nothing destroyed).
+      const legacyComments = await api.getAllComments(spaceID)
+      if (legacyComments.length > 0) {
+        const fs = await EncryptedFS.open(store, res.handle, getActorId())
+        await migrateLegacyComments(fs, legacyComments)
+      }
       setPendingHandle(res.handle)
       setRecovery(res.recoveryDisplay)
       setPhase('recovery')

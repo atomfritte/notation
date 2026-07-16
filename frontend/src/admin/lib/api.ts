@@ -467,6 +467,25 @@ export const deleteComment = (id: string, commentID: string) =>
     method: 'DELETE',
   })
 
+// ---- legacy plaintext metadata cleanup (encrypted spaces) ------------------
+//
+// A space encrypted before comments joined the crypto system still carries the
+// plaintext .notation/comments.jsonl (+ audit.log) that predates encryption.
+// The client reads the orphaned comments, migrates them into the encrypted
+// op-log, then purges both sidecars.
+
+export type LegacyMetadata = {
+  has_comments: boolean
+  has_audit: boolean
+  comments: AllCommentItem[]
+}
+
+export const getLegacyComments = (id: string) =>
+  fetchJSON<LegacyMetadata>(`/api/admin/spaces/${encodeURIComponent(id)}/enc/legacy-comments`)
+
+export const purgeLegacyMetadata = (id: string) =>
+  fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/enc/purge-legacy-metadata`, { method: 'POST' })
+
 export const postComment = (
   id: string,
   path: string,
