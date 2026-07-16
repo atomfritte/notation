@@ -2,9 +2,33 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import {
   PanelLeft, List, MessageSquare, Search, Printer, Sun, Moon, Palette,
-  Bookmark, FileText, Folder, HelpCircle, X, Headphones,
+  Bookmark, FileText, Folder, HelpCircle, X, Headphones, Link2Off,
 } from 'lucide-react'
 import * as api from './lib/api'
+
+/** Turn a raw fetch/permission error into a message a guest can act on. */
+function friendlyShareError(err: string): { title: string; detail: string } {
+  const e = err.toLowerCase()
+  if (/(^|\D)(401|403)(\D|$)|forbidden|unauthor/.test(e)) {
+    return {
+      title: 'This link is no longer active',
+      detail: 'The share link has expired or was revoked. Ask whoever sent it for a fresh link.',
+    }
+  }
+  if (/(^|\D)404(\D|$)|not found/.test(e)) {
+    return {
+      title: 'Share not found',
+      detail: 'This link doesn’t point to anything — it may be mistyped or the space was removed.',
+    }
+  }
+  if (/failed to fetch|networkerror|load failed/.test(e)) {
+    return {
+      title: 'Can’t reach the server',
+      detail: 'You appear to be offline, or the server is unavailable. Check your connection and try again.',
+    }
+  }
+  return { title: 'Share unavailable', detail: 'Something went wrong loading this share. Try again in a moment.' }
+}
 import { getCachedFile, setCachedFile, prefetchFile } from '../admin/lib/contentCache'
 import { ShareCommentsPanel } from './ShareCommentsPanel'
 import { HeaderActionBtn, HeaderOverflowMenu, useHeaderWidth, headerIsCompact, type HeaderAction } from '../admin/components/HeaderActions'
@@ -123,6 +147,13 @@ function ShareUI() {
   useEffect(() => {
     localStorage.setItem('notation_share_sidebar_width', String(sidebarWidth))
   }, [sidebarWidth])
+  // Esc closes the mobile navigation drawer (parity with tapping the backdrop).
+  useEffect(() => {
+    if (!isMobile || !sidebarOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSidebarOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isMobile, sidebarOpen])
   function startResize(e: React.MouseEvent) {
     e.preventDefault()
     const startX = e.clientX
@@ -429,14 +460,27 @@ function ShareUI() {
   }
 
   if (err && !info) {
+    const friendly = friendlyShareError(err)
     return (
-      <div className="p-8 max-w-xl mx-auto">
-        <h1 className="text-xl font-bold mb-2 text-[var(--notation-fg)]">Share unavailable</h1>
-        <p className="text-[var(--notation-danger)] dark:text-[var(--notation-danger)]">{err}</p>
+      <div className="min-h-screen flex items-center justify-center p-8">
+        <div className="max-w-md w-full text-center">
+          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-[var(--notation-bg-alt)] flex items-center justify-center text-[var(--notation-fg-muted)]">
+            <Link2Off size={22} />
+          </div>
+          <h1 className="text-xl font-bold mb-2 text-[var(--notation-fg)]">{friendly.title}</h1>
+          <p className="text-[var(--notation-fg-muted)]">{friendly.detail}</p>
+        </div>
       </div>
     )
   }
-  if (!info) return <div className="p-8 text-[var(--notation-fg-muted)]">loading…</div>
+  if (!info) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-[var(--notation-fg-muted)]">
+        <div className="w-7 h-7 border-2 border-[color:var(--notation-accent)] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm">Loading…</p>
+      </div>
+    )
+  }
 
   // Sidebar tabs a guest gets: Pages always, plus Comments (if they can
   // comment) and Bookmarks (if enabled) — with live badge counts, like admin.
@@ -477,10 +521,11 @@ function ShareUI() {
   return (
     <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {isMobile && sidebarOpen && (
-        <div
+        <button
+          type="button"
           className="fixed inset-0 z-30 bg-[var(--notation-backdrop)] backdrop-blur-sm md:hidden"
           onClick={() => setSidebarOpen(false)}
-          aria-label="Close sidebar"
+          aria-label="Close navigation"
         />
       )}
       <aside
@@ -695,7 +740,9 @@ function ShareUI() {
                   <MarkdownView
                     content={content}
                     theme={theme}
-                    comments={comments}
+                    // Read-only guests can't open a thread, so don't paint
+                    // comment-anchor highlights they can't interact with.
+                    comments={canComment ? comments : []}
                     activeCommentID={activeCommentId}
                     onHoverMark={setActiveCommentId}
                     onSelectAnchor={setActiveCommentId}
