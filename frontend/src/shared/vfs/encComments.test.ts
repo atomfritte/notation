@@ -45,7 +45,11 @@ describe('EncryptedFS comments', () => {
     await fs.addComment(nodeId, { text: 'second', author: 'admin:me' })
 
     const reloaded = await EncryptedFS.open(store, key, 'B')
-    expect(reloaded.commentsForNode(nodeId).map((c) => c.text)).toEqual(['first', 'second'])
+    // Assert presence, order-independent: both comments are stamped in the same
+    // millisecond by the instant in-memory store, so their (createdAt,id) sort is
+    // a tie broken by random id. In production each addComment awaits a network
+    // round-trip, so createdAt is distinct — see commentLog.test.ts for ordering.
+    expect(reloaded.commentsForNode(nodeId).map((c) => c.text).sort()).toEqual(['first', 'second'])
   })
 
   it('never writes comment text, author, anchor, or nodeId to the store in cleartext', async () => {
@@ -135,9 +139,10 @@ describe('EncryptedFS comments', () => {
     await fs.addComment(nodeId, { text: 'after-checkpoint', author: 'a' })
 
     const reloaded = await EncryptedFS.open(store, key, 'B')
-    expect(reloaded.commentsForNode(nodeId).map((c) => c.text)).toEqual([
-      'before-checkpoint',
+    // Presence, order-independent (same-millisecond createdAt tie — see above).
+    expect(reloaded.commentsForNode(nodeId).map((c) => c.text).sort()).toEqual([
       'after-checkpoint',
+      'before-checkpoint',
     ])
   })
 })
