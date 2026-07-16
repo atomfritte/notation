@@ -652,7 +652,7 @@ export function SpaceView() {
   const sweepLegacyMetadata = useCallback(async (fs: EncryptedFS) => {
     try {
       const legacy = await api.getLegacyComments(spaceID)
-      if (!legacy.has_comments && !legacy.has_audit) return
+      if (!legacy.has_comments && !legacy.has_other) return
       if (legacy.comments.length > 0) await migrateLegacyComments(fs, legacy.comments)
       await api.purgeLegacyMetadata(spaceID)
       if (fsRef.current === fs) {

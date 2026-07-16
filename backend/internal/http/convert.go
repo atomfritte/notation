@@ -166,6 +166,26 @@ func (h *adminHandlers) finalizeConvert(w http.ResponseWriter, r *http.Request) 
 			writeInternal(w, r, "convert.finalize.keyrecord", err)
 			return
 		}
+		// Data-loss guard (symmetric with the to-plaintext branch below): refuse
+		// to purge the plaintext if there IS source content but NO ciphertext was
+		// staged. A key record with no blobs/ops (crash, partial upload, client
+		// bug) would otherwise wipe the source into an empty encrypted space. An
+		// empty source (0 plaintext files) legitimately stages nothing, so it is
+		// allowed through.
+		plaintextCount, err := h.store.CountPlaintextFiles(id)
+		if err != nil {
+			writeInternal(w, r, "convert.finalize.count", err)
+			return
+		}
+		hasEnc, err := h.store.HasEncContent(id)
+		if err != nil {
+			writeInternal(w, r, "convert.finalize.hasenc", err)
+			return
+		}
+		if plaintextCount > 0 && !hasEnc {
+			writeError(w, http.StatusConflict, "cannot finalize: no ciphertext staged yet")
+			return
+		}
 		if err := h.store.PurgePlaintextContent(id); err != nil {
 			writeInternal(w, r, "convert.finalize.purge_plaintext", err)
 			return

@@ -68,8 +68,28 @@ func (h *adminHandlers) requirePlaintext(next http.Handler) http.Handler {
 			writeError(w, http.StatusConflict, "space is encrypted; use the /enc endpoints")
 			return
 		}
+		// While a space is being ENCRYPTED the gate is relaxed so the client can
+		// READ the plaintext source, but a plaintext WRITE must not slip in: one
+		// landing between PurgePlaintextContent and the git reinit would be
+		// committed into the "encrypted" history (a cleartext leak / mode-split
+		// break). Pause state-changing methods for that direction only —
+		// to-plaintext still needs writes (it stages decrypted files).
+		if m.Converting == space.ConvertToEncrypted && !isSafeMethod(r.Method) {
+			writeError(w, http.StatusConflict, "space is being encrypted; plaintext writes are paused")
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isSafeMethod reports whether an HTTP method is read-only (never mutates state).
+func isSafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *adminHandlers) writeEncError(w http.ResponseWriter, err error) {
@@ -272,9 +292,11 @@ func (h *adminHandlers) getKeyRecord(w http.ResponseWriter, r *http.Request) {
 // comments here, re-adds them to the encrypted op-log, then purges both files.
 
 type legacyMetadataResp struct {
-	// HasComments/HasAudit tell the client whether a sweep is needed at all.
+	// HasComments = comments.jsonl exists (the sidecar the client MIGRATES).
+	// HasOther = audit.log / shares.json / mcp-tokens.json exist (dropped as-is).
+	// Either being true means a purge is warranted.
 	HasComments bool `json:"has_comments"`
-	HasAudit    bool `json:"has_audit"`
+	HasOther    bool `json:"has_other"`
 	// Comments are the orphaned plaintext comments to migrate (empty if none).
 	Comments []share.Comment `json:"comments"`
 }
@@ -288,12 +310,12 @@ func (h *adminHandlers) getLegacyComments(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	hasComments, hasAudit, err := h.store.HasLegacyServerMetadata(id)
+	hasComments, hasOther, err := h.store.HasLegacyServerMetadata(id)
 	if err != nil {
 		writeInternal(w, r, "enc.legacy.stat", err)
 		return
 	}
-	resp := legacyMetadataResp{HasComments: hasComments, HasAudit: hasAudit, Comments: []share.Comment{}}
+	resp := legacyMetadataResp{HasComments: hasComments, HasOther: hasOther, Comments: []share.Comment{}}
 	if hasComments {
 		list, err := h.comments.ListAll(id)
 		if err != nil {

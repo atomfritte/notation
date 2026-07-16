@@ -475,8 +475,10 @@ export const deleteComment = (id: string, commentID: string) =>
 // op-log, then purges both sidecars.
 
 export type LegacyMetadata = {
+  /** comments.jsonl exists — the one sidecar the client migrates before purge. */
   has_comments: boolean
-  has_audit: boolean
+  /** audit.log / shares.json / mcp-tokens.json exist — dropped outright. */
+  has_other: boolean
   comments: AllCommentItem[]
 }
 
