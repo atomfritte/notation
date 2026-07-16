@@ -33,7 +33,8 @@
 import { ROOT_ID, TRASH_ID } from './nodes'
 import type { Node, NodeType } from './nodes'
 import type { CreateOp, DeleteOp, MoveOp, Op, RenameOp } from './ops'
-import { LamportClock, TreeReplica } from './crdt'
+import { LamportClock, TreeReplica, compareTimestamps } from './crdt'
+import type { Timestamp } from './crdt'
 import { newBlobId, newNodeId, newOpId } from './ids'
 import { sealOp, openOp } from './opCrypto'
 import type { EncryptedOpEnvelope, LogRecord } from './opCrypto'
@@ -48,7 +49,7 @@ import {
   type CommentOp,
   type EncComment,
 } from './commentLog'
-import type { EncStore } from './encStore'
+import type { EncStore, StoredOp } from './encStore'
 import type { SpaceFS } from './spacefs'
 import type { KeyHandle } from '../crypto/keys'
 import type { SpaceKeyRecord } from '../crypto/space'
@@ -139,20 +140,37 @@ export async function openOpBytes<T extends LogRecord = Op>(bytes: Uint8Array, k
 
 // ── checkpoint envelope ─────────────────────────────────────────────────────
 
+/** The full timestamp (lamport, actorId, opId) of a log record — the CRDT's
+ *  total-order key. Used as the checkpoint high-water so same-lamport concurrent
+ *  ops are ordered unambiguously (a scalar lamport is NOT globally unique). */
+const tsOf = (r: LogRecord): Timestamp => ({ lamport: r.lamport, actorId: r.actorId, opId: r.opId })
+
+/** The later of two timestamps (b if a is null). */
+const maxTs = (a: Timestamp | null, b: Timestamp): Timestamp => (a && compareTimestamps(a, b) >= 0 ? a : b)
+
 interface CheckpointData {
-  /** Ops with lamport <= this are already folded into {@link nodes}/{@link comments}. */
-  lamport: number
+  /** The MAX timestamp folded into {@link nodes}/{@link comments}. A later load
+   *  may seed from this snapshot and safely apply only ops whose timestamp sorts
+   *  strictly AFTER `hi` — the CRDT can't undo below a seed, so an op at/before
+   *  `hi` forces a full replay instead. */
+  hi: Timestamp
+  /** Server seq high-water at checkpoint time: ops with seq <= this are folded,
+   *  so a reload fetches only `seq > this`. */
+  seq: number
   nodes: Node[]
-  /** Comment-log state at the same high-water mark (optional for old checkpoints). */
   comments?: CommentLogSnapshot
 }
 
+// A domain tag bound as AAD so a checkpoint can't be confused with a content
+// blob (which binds its blobId) or an op envelope under the same space key.
+const CHECKPOINT_AAD = utf8Encode('notation:checkpoint:v2')
+
 async function sealCheckpoint(cp: CheckpointData, key: KeyHandle): Promise<Uint8Array> {
-  return encryptBlob(utf8Encode(JSON.stringify(cp)), key)
+  return encryptBlob(utf8Encode(JSON.stringify(cp)), key, CHECKPOINT_AAD)
 }
 
 async function openCheckpoint(bytes: Uint8Array, key: KeyHandle): Promise<CheckpointData> {
-  return JSON.parse(utf8Decode(await decryptBlob(bytes, key))) as CheckpointData
+  return JSON.parse(utf8Decode(await decryptBlob(bytes, key, CHECKPOINT_AAD))) as CheckpointData
 }
 
 // ── EncryptedFS ─────────────────────────────────────────────────────────────
@@ -161,19 +179,32 @@ async function openCheckpoint(bytes: Uint8Array, key: KeyHandle): Promise<Checkp
 const blobAad = (blobId: string): Uint8Array => utf8Encode(blobId)
 
 export class EncryptedFS implements SpaceFS {
-  private readonly replica = new TreeReplica()
+  // replica / commentLog / clock are replaced wholesale by a full replay, so
+  // they are not readonly.
+  private replica = new TreeReplica()
   /** Comments fold through their own reducer over the SAME sealed op-log. */
-  private readonly commentLog = new CommentLog()
-  private readonly clock: LamportClock
+  private commentLog = new CommentLog()
+  private clock: LamportClock
   private nodesList: Node[] = []
   private byId = new Map<string, Node>()
   private childrenByParent = new Map<string, Node[]>()
   /** High-water seq consumed from the store; the next sync fetches `> lastSeq`. */
   private lastSeq = 0
-  /** Highest lamport folded into the replica (local ticks + remote ops). */
-  private maxLamport = 0
-  /** Ops at or below this lamport are already in the checkpoint seed. */
-  private checkpointLamport = 0
+  /** Max timestamp folded so far (local commits + remote ops) — the next
+   *  checkpoint's high-water. */
+  private hi: Timestamp | null = null
+  /** When seeded from a checkpoint, its high-water: an incoming op whose
+   *  timestamp sorts at/before this can't be applied on the seed correctly
+   *  (the CRDT can't undo below a seed) and forces a full replay. Null once a
+   *  full replay has rebuilt the whole log in memory. */
+  private checkpointHi: Timestamp | null = null
+  /** True while the in-memory state came from a checkpoint seed (so the safety
+   *  check above is live); false after a full replay holds every op. */
+  private checkpointSeeded = false
+  /** Ops folded since the last checkpoint — drives the auto-checkpoint. */
+  private opsSinceCheckpoint = 0
+  /** Write a fresh checkpoint once this many ops have accumulated. */
+  private static readonly AUTO_CHECKPOINT_EVERY = 150
   /** The (non-secret) key record, if the space has one persisted. */
   keyRecord: SpaceKeyRecord | null = null
 
@@ -200,11 +231,30 @@ export class EncryptedFS implements SpaceFS {
     this.keyRecord = await this.store.getKeyRecord()
     const cpBytes = await this.store.getCheckpoint()
     if (cpBytes) {
-      const cp = await openCheckpoint(cpBytes, this.key)
-      this.replica.seed(cp.nodes)
-      if (cp.comments) this.commentLog.seed(cp.comments)
-      this.checkpointLamport = cp.lamport
-      this.maxLamport = Math.max(this.maxLamport, cp.lamport)
+      // A checkpoint is only an optimization: if it won't open (corrupt, a
+      // future/rejected format, or a byzantine server serving garbage), fall
+      // back to replaying the full op-log rather than bricking the space.
+      try {
+        const cp = await openCheckpoint(cpBytes, this.key)
+        if (!cp.hi || typeof cp.seq !== 'number' || !Array.isArray(cp.nodes)) {
+          throw new VfsError('vfs: malformed checkpoint')
+        }
+        this.replica.seed(cp.nodes)
+        if (cp.comments) this.commentLog.seed(cp.comments)
+        this.checkpointHi = cp.hi
+        this.hi = cp.hi
+        this.lastSeq = cp.seq
+        this.checkpointSeeded = true
+        this.clock.observe(cp.hi.lamport)
+      } catch {
+        // Reset any partial seed and load from scratch.
+        this.replica = new TreeReplica()
+        this.commentLog = new CommentLog()
+        this.checkpointSeeded = false
+        this.checkpointHi = null
+        this.hi = null
+        this.lastSeq = 0
+      }
     }
     await this.sync()
   }
@@ -216,33 +266,54 @@ export class EncryptedFS implements SpaceFS {
    * converges, local-then-remote and remote-then-local yield the same tree.
    */
   async sync(): Promise<void> {
-    const stored = await this.store.listOps(this.lastSeq)
+    await this.applyBatch(await this.store.listOps(this.lastSeq), true)
+    await this.maybeAutoCheckpoint()
+  }
+
+  /**
+   * Open a batch of stored ops and fold them into the tree + comment reducers.
+   *
+   * `checkForSeed` is true for normal syncs (state may be checkpoint-seeded) and
+   * false during a full replay (the whole log is being rebuilt, so the seed
+   * safety check is neither needed nor valid). Three guards run per op:
+   *   1. seq contiguity — the server assigns gap-free monotonic seq, so a gap
+   *      means it omitted an op (truncation/tamper); fail loud, never silently
+   *      skip it.
+   *   2. authenticated decrypt — a tampered op throws (aborts the sync) rather
+   *      than being silently dropped.
+   *   3. seed safety — an op whose AUTHENTICATED timestamp sorts at/before the
+   *      checkpoint high-water can't be applied on the seed correctly (the CRDT
+   *      can't undo below a seed), so we discard the seed and full-replay.
+   */
+  private async applyBatch(stored: StoredOp[], checkForSeed: boolean): Promise<void> {
     const treeOps: Op[] = []
     const commentOps: CommentOp[] = []
     let batchMax = 0
+    let expectedSeq = this.lastSeq + 1
     for (const s of stored) {
-      this.lastSeq = Math.max(this.lastSeq, s.seq)
-      // Decrypt FIRST, then decide whether to skip using the AUTHENTICATED
-      // lamport from the op body (bound as AAD) — NEVER the cleartext wire
-      // framing. `peekEnvelope`'s meta is attacker-controlled: a byzantine
-      // server could rewrite meta.lamport to 0 to make us silently skip (drop)
-      // a chosen op without ever failing the auth tag. openOpBytes throws on any
-      // tamper, so a doctored op aborts the sync rather than being suppressed.
+      if (s.seq !== expectedSeq) {
+        throw new VfsError(`vfs: op-log gap — expected seq ${expectedSeq}, got ${s.seq}`)
+      }
+      expectedSeq++
+      this.lastSeq = s.seq
       const rec = await openOpBytes<LogEntryRecord>(s.blob, this.key)
-      // Ops already folded into the checkpoint seed carry no new information.
-      if (rec.lamport <= this.checkpointLamport) continue
-      // One shared log carries two op families; route by the decrypted `type`.
+      if (checkForSeed && this.checkpointSeeded && this.checkpointHi &&
+          compareTimestamps(tsOf(rec), this.checkpointHi) <= 0) {
+        await this.fullReplay()
+        return
+      }
       if (isCommentOp(rec)) commentOps.push(rec)
       else treeOps.push(rec)
       if (rec.lamport > batchMax) batchMax = rec.lamport
+      this.hi = maxTs(this.hi, tsOf(rec))
     }
     const applied = treeOps.length + commentOps.length
     if (applied > 0) {
       if (treeOps.length > 0) this.replica.applyAll(treeOps)
       if (commentOps.length > 0) this.commentLog.applyAll(commentOps)
-      this.maxLamport = Math.max(this.maxLamport, batchMax)
       // Advance the clock past everything seen so local ops sort strictly after.
       this.clock.observe(batchMax)
+      this.opsSinceCheckpoint += applied
       this.materialize()
     } else if (this.nodesList.length === 0) {
       // First load with no ops: materialize the (possibly checkpoint-seeded) tree.
@@ -251,18 +322,55 @@ export class EncryptedFS implements SpaceFS {
   }
 
   /**
-   * Write a compaction checkpoint: the current materialized tree at the current
-   * lamport high-water. A later {@link load} can seed from it and skip opening
-   * every op at or below that lamport. Opt-in — {@link EncryptedFS} never writes
-   * one automatically.
+   * Discard the checkpoint seed and rebuild the whole state from op 1. Triggered
+   * when a late op sorts at/before the seed's high-water (rare — a concurrent op
+   * from a replica whose clock lagged). Guarantees byte-identical convergence
+   * with a from-scratch replay; the checkpoint was only ever an optimization.
+   */
+  private async fullReplay(): Promise<void> {
+    this.replica = new TreeReplica()
+    this.commentLog = new CommentLog()
+    this.clock = new LamportClock(this.actorId)
+    this.checkpointSeeded = false
+    this.checkpointHi = null
+    this.hi = null
+    this.lastSeq = 0
+    this.opsSinceCheckpoint = 0
+    await this.applyBatch(await this.store.listOps(0), false)
+    this.materialize()
+  }
+
+  /**
+   * Write a checkpoint once enough ops have accrued. Best-effort: a failed write
+   * just means the next load replays a little more. Called at the END of a sync,
+   * when {@link lastSeq} reflects exactly the ops folded into the state — so the
+   * checkpoint's `seq` and materialized state agree.
+   */
+  private async maybeAutoCheckpoint(): Promise<void> {
+    if (this.opsSinceCheckpoint < EncryptedFS.AUTO_CHECKPOINT_EVERY) return
+    try {
+      await this.writeCheckpoint()
+    } catch {
+      /* best-effort — a missing checkpoint only costs replay time next load */
+    }
+  }
+
+  /**
+   * Write a compaction checkpoint: the materialized tree + comment state at the
+   * current timestamp/seq high-water. A later {@link load} seeds from it and
+   * fetches only `seq > cp.seq`, opening far fewer ops. No-op for an empty space
+   * (nothing folded yet). Also runs automatically via {@link maybeAutoCheckpoint}.
    */
   async writeCheckpoint(): Promise<void> {
+    if (!this.hi) return
     const cp: CheckpointData = {
-      lamport: this.maxLamport,
+      hi: this.hi,
+      seq: this.lastSeq,
       nodes: this.replica.materialize(),
       comments: this.commentLog.snapshot(),
     }
     await this.store.putCheckpoint(await sealCheckpoint(cp, this.key))
+    this.opsSinceCheckpoint = 0
   }
 
   // ── SpaceFS surface ──────────────────────────────────────────────────────
@@ -530,7 +638,7 @@ export class EncryptedFS implements SpaceFS {
     const sealed = await sealOpBytes(op, this.key)
     await this.store.appendOp(op.opId, sealed)
     this.replica.apply(op)
-    this.maxLamport = Math.max(this.maxLamport, op.lamport)
+    this.hi = maxTs(this.hi, tsOf(op))
     this.materialize()
   }
 
@@ -555,7 +663,7 @@ export class EncryptedFS implements SpaceFS {
     const sealed = await sealOpBytes(op, this.key)
     await this.store.appendOp(op.opId, sealed)
     this.commentLog.apply(op)
-    this.maxLamport = Math.max(this.maxLamport, op.lamport)
+    this.hi = maxTs(this.hi, tsOf(op))
   }
 
   private mkCommentAdd(comment: EncComment): CommentAddOp {
