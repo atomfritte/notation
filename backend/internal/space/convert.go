@@ -261,19 +261,29 @@ func (s *Store) purgePlaintextContent(id string) error {
 	return nil
 }
 
+// legacyCommentsFile is the one server sidecar whose contents are MIGRATED into
+// the encrypted op-log (paths remapped to nodeIds) before being purged.
+const legacyCommentsFile = "comments.jsonl"
+
 // legacyServerMetadata are the server-written plaintext sidecars that live in
 // .notation/ — OUTSIDE files/, so purgePlaintextContent never reached them. For
-// an encrypted space they are a zero-knowledge leak: comments.jsonl holds file
-// PATHS + comment text + authors + anchor quotes, and audit.log holds file
-// paths + IPs. They are purged when a space is encrypted, and swept from spaces
-// that were encrypted before this cleanup existed. Comments are migrated into
-// the encrypted op-log by the client BEFORE the purge (audit.log is a
-// server-only tamper-evidence log and is simply dropped — the server has no key
-// to re-encrypt it, and no new entries are written for an encrypted space).
-var legacyServerMetadata = []string{"comments.jsonl", "audit.log"}
+// an encrypted space every one is a zero-knowledge leak of file PATHS (and more):
+//   - comments.jsonl: file paths + comment text + authors + anchor quotes
+//   - audit.log:      file paths + IPs + actions
+//   - shares.json:    each share's Scope = a real page/folder PATH, plus labels
+//   - mcp-tokens.json: token labels + hashes
+//
+// They are purged when a space is encrypted, and swept from spaces that were
+// encrypted before this cleanup existed. Only comments.jsonl is migrated first
+// (into the encrypted op-log, by the client); the rest are dropped outright —
+// they are dead for an encrypted space (shares + MCP are refused) and the server
+// has no key to re-encrypt them.
+var legacyServerMetadata = []string{legacyCommentsFile, "audit.log", "shares.json", "mcp-tokens.json"}
 
-// PurgeLegacyServerMetadata deletes the plaintext comment + audit sidecars from
-// a space's .notation/ dir. Idempotent: a missing file is not an error.
+// PurgeLegacyServerMetadata deletes the plaintext sidecars listed in
+// legacyServerMetadata from a space's .notation/ dir. Idempotent: a missing file
+// is not an error. Both the share and mcp stores read their file fresh on every
+// call (no in-memory cache), so removing the file underneath them is safe.
 func (s *Store) PurgeLegacyServerMetadata(id string) error {
 	if !ValidID(id) {
 		return ErrInvalidID
@@ -287,14 +297,16 @@ func (s *Store) PurgeLegacyServerMetadata(id string) error {
 	return nil
 }
 
-// HasLegacyServerMetadata reports whether either plaintext sidecar still exists,
-// so the client can decide whether a one-time migrate+purge sweep is needed.
-func (s *Store) HasLegacyServerMetadata(id string) (comments, audit bool, err error) {
+// HasLegacyServerMetadata reports whether any legacy plaintext sidecar still
+// exists, split into `comments` (comments.jsonl — the one the client MIGRATES)
+// and `other` (audit/shares/mcp — dropped outright). The client uses this to
+// decide whether a one-time migrate+purge sweep is needed.
+func (s *Store) HasLegacyServerMetadata(id string) (comments, other bool, err error) {
 	if !ValidID(id) {
 		return false, false, ErrInvalidID
 	}
 	dir := s.MetaDir(id)
-	stat := func(name string) (bool, error) {
+	exists := func(name string) (bool, error) {
 		_, statErr := os.Stat(filepath.Join(dir, name))
 		if statErr == nil {
 			return true, nil
@@ -304,11 +316,21 @@ func (s *Store) HasLegacyServerMetadata(id string) (comments, audit bool, err er
 		}
 		return false, statErr
 	}
-	if comments, err = stat("comments.jsonl"); err != nil {
-		return false, false, err
+	for _, name := range legacyServerMetadata {
+		present, statErr := exists(name)
+		if statErr != nil {
+			return false, false, statErr
+		}
+		if !present {
+			continue
+		}
+		if name == legacyCommentsFile {
+			comments = true
+		} else {
+			other = true
+		}
 	}
-	audit, err = stat("audit.log")
-	return comments, audit, err
+	return comments, other, nil
 }
 
 // ListFilePaths returns every regular file under files/ as a flat list of

@@ -222,10 +222,15 @@ export class EncryptedFS implements SpaceFS {
     let batchMax = 0
     for (const s of stored) {
       this.lastSeq = Math.max(this.lastSeq, s.seq)
-      const { meta } = peekEnvelope(s.blob)
-      // Ops already folded into the checkpoint seed carry no new information.
-      if (meta.lamport <= this.checkpointLamport) continue
+      // Decrypt FIRST, then decide whether to skip using the AUTHENTICATED
+      // lamport from the op body (bound as AAD) — NEVER the cleartext wire
+      // framing. `peekEnvelope`'s meta is attacker-controlled: a byzantine
+      // server could rewrite meta.lamport to 0 to make us silently skip (drop)
+      // a chosen op without ever failing the auth tag. openOpBytes throws on any
+      // tamper, so a doctored op aborts the sync rather than being suppressed.
       const rec = await openOpBytes<LogEntryRecord>(s.blob, this.key)
+      // Ops already folded into the checkpoint seed carry no new information.
+      if (rec.lamport <= this.checkpointLamport) continue
       // One shared log carries two op families; route by the decrypted `type`.
       if (isCommentOp(rec)) commentOps.push(rec)
       else treeOps.push(rec)
