@@ -454,7 +454,7 @@ export function ReadAloudBar({
   ]
 
   return (
-    <div className="no-print fixed bottom-0 inset-x-0 z-40 flex justify-center px-3 pb-3 pointer-events-none">
+    <div className="no-print fixed bottom-0 inset-x-0 z-40 flex justify-center px-3 read-aloud-safe-area pointer-events-none">
       <div className="pointer-events-auto w-full max-w-2xl surface-elevated pill-accent bg-[var(--notation-bg-elevated)] border border-[color:var(--notation-accent-50)] rounded-xl shadow-2xl shadow-[color:var(--notation-accent-20)] px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <Headphones size={18} className="text-[color:var(--notation-accent)] flex-shrink-0" />
 
@@ -476,6 +476,7 @@ export function ReadAloudBar({
               className="p-1.5 rounded-md text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-border)] disabled:opacity-30"
               disabled={navFiles.indexOf(currentFile) <= 0}
               title="Previous page"
+              aria-label="Previous page"
             >
               <SkipBack size={16} />
             </button>
@@ -483,6 +484,7 @@ export function ReadAloudBar({
               onClick={() => (playing ? pause() : play())}
               className="p-2 rounded-full bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] shadow-md shadow-[color:var(--notation-accent-40)] hover:opacity-90 flex-shrink-0"
               title={playing ? 'Pause' : 'Play'}
+              aria-label={playing ? 'Pause' : 'Play'}
             >
               {playing ? <Pause size={16} /> : <Play size={16} />}
             </button>
@@ -491,6 +493,7 @@ export function ReadAloudBar({
               className="p-1.5 rounded-md text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-border)] disabled:opacity-30"
               disabled={navFiles.indexOf(currentFile) >= navFiles.length - 1}
               title="Next page"
+              aria-label="Next page"
             >
               <SkipForward size={16} />
             </button>
@@ -533,6 +536,7 @@ export function ReadAloudBar({
           onClick={() => { cancelSpeech(); highlight(null); onClose() }}
           className="p-1.5 rounded-md text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-border)] flex-shrink-0"
           title="Close read-aloud"
+          aria-label="Close read-aloud"
         >
           <X size={16} />
         </button>

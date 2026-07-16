@@ -1223,3 +1223,57 @@ article.prose.cv-auto > * {
 }
 /* Print reset for the animation + virtualisation lives in the main
    `@media print` block near the top of this file (search "Print stylesheet"). */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Mobile / touch affordances. These are deliberately UNLAYERED so they win
+   over Tailwind's layered utilities (e.g. the copy button's `opacity-0`).
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* iOS Safari auto-zooms the page when a control with font-size < 16px gains
+   focus. Our comment composers / search inputs use text-sm (14px), which
+   triggers that jarring zoom on every tap. Force 16px for real text inputs on
+   phones (checkbox/radio excluded — they have no text and their size is set). */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* On touch devices there is no hover, so hover-only affordances are invisible.
+   Reveal the code-block "Copy" button whenever the device can't hover (or the
+   block has keyboard focus within it). */
+@media (hover: none) {
+  .prose pre > button {
+    opacity: 1;
+  }
+}
+.prose pre:focus-within > button {
+  opacity: 1;
+}
+
+/* A long unbroken token (a URL, a hash, a path) in INLINE code could otherwise
+   force the whole reader to scroll horizontally on a narrow phone. Block-level
+   code already scrolls inside its own box. */
+.prose :not(pre) > code {
+  overflow-wrap: anywhere;
+}
+
+/* Give icon-only controls a comfortable ≥40px tap target on touch pointers,
+   without inflating text buttons. `:has(> svg:only-child)` matches exactly the
+   buttons whose sole child is an icon. */
+@media (pointer: coarse) {
+  button:has(> svg:only-child),
+  a:has(> svg:only-child),
+  [role="button"]:has(> svg:only-child) {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* Keep the fixed bottom read-aloud bar above the home indicator / gesture area
+   on notched phones (pairs with viewport-fit=cover in the page <head>). */
+.read-aloud-safe-area {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
