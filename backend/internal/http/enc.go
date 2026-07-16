@@ -213,6 +213,62 @@ func (h *adminHandlers) getOps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ops)
 }
 
+// getOpsFloor reports the highest pruned seq (the op-log is served from
+// floor+1). A never-pruned space reports 0. The client trusts this as the
+// legitimate start of the log so a deliberate prune is not mistaken for a
+// truncating server, while a real gap ABOVE the floor still fails loud.
+func (h *adminHandlers) getOpsFloor(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.requireEncrypted(w, r)
+	if !ok {
+		return
+	}
+	floor, err := h.store.ReadOpsFloor(id)
+	if err != nil {
+		h.writeEncError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int64{"floor": floor})
+}
+
+// pruneOps deletes op-log entries the caller's checkpoint has durably folded,
+// bounding the log. The request body is the prune-base checkpoint (the durable
+// fold of {seq<=upTo} the client vouches for and a later re-fold seeds from);
+// ?upTo is the ceiling seq. The store enforces the causal-safety cuts (clean
+// Lamport cut + margin) blindly and refuses (no-op) any unsafe/stale request,
+// returning the resulting floor. Inherits admin auth + CSRF + requireEncrypted.
+func (h *adminHandlers) pruneOps(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.requireEncrypted(w, r)
+	if !ok {
+		return
+	}
+	upToStr := r.URL.Query().Get("upTo")
+	upTo, err := strconv.ParseInt(upToStr, 10, 64)
+	if err != nil || upTo < 0 {
+		writeError(w, http.StatusBadRequest, "invalid upTo (non-negative integer)")
+		return
+	}
+	limited := http.MaxBytesReader(w, r.Body, h.cfg.MaxUploadBytes)
+	defer limited.Close()
+	base, err := io.ReadAll(limited)
+	if err != nil {
+		writeError(w, http.StatusRequestEntityTooLarge, "base checkpoint exceeds size limit")
+		return
+	}
+	// The base is the sole fallback seed for the pruned prefix — an empty body is
+	// never a valid prune.
+	if len(base) == 0 {
+		writeError(w, http.StatusBadRequest, "prune requires a base checkpoint body")
+		return
+	}
+	floor, err := h.store.PruneOps(id, upTo, base, h.cfg.MaxUploadBytes)
+	if err != nil {
+		h.writeEncError(w, err)
+		return
+	}
+	h.git.Schedule(id, adminAuthor(r))
+	writeJSON(w, http.StatusOK, map[string]int64{"floor": floor})
+}
+
 // ---- checkpoint ----
 
 func (h *adminHandlers) putCheckpoint(w http.ResponseWriter, r *http.Request) {
@@ -236,6 +292,21 @@ func (h *adminHandlers) getCheckpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, err := h.store.ReadCheckpoint(id)
+	if err != nil {
+		h.writeEncError(w, err)
+		return
+	}
+	writeRawBytes(w, "application/octet-stream", data)
+}
+
+// getCheckpointBase serves the prune-base checkpoint (404 until the log has been
+// pruned). A client re-folding the retained log after a prune seeds from this.
+func (h *adminHandlers) getCheckpointBase(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.requireEncrypted(w, r)
+	if !ok {
+		return
+	}
+	data, err := h.store.ReadCheckpointBase(id)
 	if err != nil {
 		h.writeEncError(w, err)
 		return

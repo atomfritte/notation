@@ -191,8 +191,14 @@ func NewRouter(d Deps) (http.Handler, error) {
 				er.Delete("/blob/{blobId}", ahdmin.deleteBlob)
 				er.Post("/ops", ahdmin.postOp)
 				er.Get("/ops", ahdmin.getOps)
+				// Bound op-log growth: prune the checkpoint-folded prefix and serve
+				// the pruned floor so a legitimate prune isn't read as truncation.
+				er.Get("/ops/floor", ahdmin.getOpsFloor)
+				er.Post("/ops/prune", ahdmin.pruneOps)
 				er.Put("/checkpoint", ahdmin.putCheckpoint)
 				er.Get("/checkpoint", ahdmin.getCheckpoint)
+				// Durable fallback seed folding exactly the pruned prefix.
+				er.Get("/checkpoint-base", ahdmin.getCheckpointBase)
 				er.Put("/keyrecord", ahdmin.putKeyRecord)
 				er.Get("/keyrecord", ahdmin.getKeyRecord)
 				// One-time migration of pre-encryption plaintext sidecars: read the

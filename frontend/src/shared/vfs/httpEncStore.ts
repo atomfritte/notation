@@ -163,6 +163,30 @@ export class HttpEncStore implements EncStore {
     if (!r.ok) await HttpEncStore.fail(r)
   }
 
+  async getOpsFloor(): Promise<number> {
+    const r = await this.send(`${this.base()}/ops/floor`, {})
+    if (!r.ok) return HttpEncStore.fail(r)
+    const j = (await r.json()) as { floor: number }
+    return j.floor
+  }
+
+  async getCheckpointBase(): Promise<Uint8Array | null> {
+    const r = await this.send(`${this.base()}/checkpoint-base`, {})
+    if (r.status === 404) return null
+    if (!r.ok) return HttpEncStore.fail(r)
+    return new Uint8Array(await r.arrayBuffer())
+  }
+
+  async pruneOps(upToSeq: number, base: Uint8Array): Promise<{ floor: number }> {
+    const r = await this.send(`${this.base()}/ops/prune?upTo=${upToSeq}`, {
+      method: 'POST',
+      headers: { 'Content-Type': RAW },
+      body: asBody(base),
+    })
+    if (!r.ok) return HttpEncStore.fail(r)
+    return (await r.json()) as { floor: number }
+  }
+
   async getKeyRecord(): Promise<SpaceKeyRecord | null> {
     const r = await this.send(`${this.base()}/keyrecord`, {})
     if (r.status === 404) return null

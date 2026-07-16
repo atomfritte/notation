@@ -2,6 +2,8 @@ package space
 
 import (
 	"bytes"
+	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -51,14 +53,26 @@ var encIDPattern = regexp.MustCompile(`^[0-9a-f]{8,64}$`)
 func ValidEncID(id string) bool { return encIDPattern.MatchString(id) }
 
 const (
-	encBlobsDir  = "blobs"
-	encOpsDir    = "ops"
-	encCheckpt   = "checkpoint"
-	encKeyRecord = "spacekey.json"
+	encBlobsDir    = "blobs"
+	encOpsDir      = "ops"
+	encCheckpt     = "checkpoint"
+	encCheckptBase = "checkpoint-base"
+	encOpsFloor    = "ops-floor"
+	encKeyRecord   = "spacekey.json"
 	// opSeqWidth zero-pads <seq> so op filenames sort lexicographically the same
 	// way they sort numerically. 12 digits covers ~10^12 ops per space.
 	opSeqWidth = 12
 )
+
+// PruneLamportMargin is the causal-stability gap the server insists on before it
+// will prune a prefix of the op-log: the highest pruned op's Lamport must sit at
+// least this far below the log's current Lamport frontier. It bounds how "stale"
+// a still-in-flight op would have to be to sort at/before the pruned region (and
+// thus need an op we deleted). A device would have to have committed without
+// observing this many ops for the guarantee to be at risk — at which point the
+// client fails LOUD rather than diverging (see PruneOps + encfs rebuildFromBase).
+// It is a var (not const) so tests can lower it; production keeps it generous.
+var PruneLamportMargin int64 = 500
 
 // seqCounter is a per-space append sequencer. It is seeded lazily from disk (so
 // counts survive a restart) and then advanced purely in memory. Its mutex is
@@ -124,6 +138,50 @@ func (s *Store) WriteCheckpoint(spaceID string, r io.Reader, maxBytes int64) err
 // ReadCheckpoint returns the checkpoint bytes (fs.ErrNotExist if none yet).
 func (s *Store) ReadCheckpoint(spaceID string) ([]byte, error) {
 	return s.ReadFile(spaceID, encCheckpt)
+}
+
+// WriteCheckpointBase overwrites the prune-base checkpoint: the durable snapshot
+// that folds EXACTLY the pruned op prefix ({seq<=floor}). A reload that has to
+// re-fold the retained log (a corrupt latest checkpoint, or a late op that sorts
+// at/before the latest checkpoint) seeds from this base — so it MUST survive as
+// long as any op above the floor exists. See PruneOps for the write ordering.
+func (s *Store) WriteCheckpointBase(spaceID string, r io.Reader, maxBytes int64) error {
+	_, err := s.WriteFile(spaceID, encCheckptBase, r, maxBytes)
+	return err
+}
+
+// ReadCheckpointBase returns the prune-base checkpoint bytes (fs.ErrNotExist if
+// the log has never been pruned).
+func (s *Store) ReadCheckpointBase(spaceID string) ([]byte, error) {
+	return s.ReadFile(spaceID, encCheckptBase)
+}
+
+// ReadOpsFloor returns the highest pruned seq (the log is served from floor+1).
+// A never-pruned space (no floor file) reports 0. The value is non-secret — a
+// count, leaking nothing about content — and lives in files/ so a git restore
+// brings the floor and the retained ops back consistently.
+func (s *Store) ReadOpsFloor(spaceID string) (int64, error) {
+	data, err := s.ReadFile(spaceID, encOpsFloor)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+	if err != nil || n < 0 {
+		// A corrupt floor is treated as "no prune" — conservative: the client then
+		// expects the log to start at seq 1, and a real prune would surface as a
+		// gap (fail loud) rather than silent acceptance of a truncated log.
+		return 0, nil
+	}
+	return n, nil
+}
+
+// writeOpsFloor persists the served floor.
+func (s *Store) writeOpsFloor(spaceID string, floor int64) error {
+	_, err := s.WriteFile(spaceID, encOpsFloor, strings.NewReader(strconv.FormatInt(floor, 10)), 64)
+	return err
 }
 
 // ---- op-log ----
@@ -216,6 +274,169 @@ func (s *Store) maxOpSeq(spaceID string) (int64, error) {
 		}
 	}
 	return max, nil
+}
+
+// opMeta is the cleartext ordering metadata every sealed op envelope carries in
+// its framing prefix (uint32-BE metaLen || meta JSON || ciphertext). The client
+// binds it as AES-GCM AAD, so a tampered value fails every reader's decrypt — the
+// Lamport we read here is exactly the one the op's author committed to.
+type opMeta struct {
+	Lamport int64 `json:"lamport"`
+}
+
+// peekOpLamport extracts the cleartext Lamport from a sealed op envelope WITHOUT
+// the space key. ok=false if the framing is malformed (a stray file); callers
+// treat that conservatively (refuse to prune) rather than guess.
+func peekOpLamport(data []byte) (lamport int64, ok bool) {
+	if len(data) < 4 {
+		return 0, false
+	}
+	metaLen := binary.BigEndian.Uint32(data[:4])
+	end := 4 + uint64(metaLen)
+	if end > uint64(len(data)) {
+		return 0, false
+	}
+	var m opMeta
+	if err := json.Unmarshal(data[4:end], &m); err != nil {
+		return 0, false
+	}
+	return m.Lamport, true
+}
+
+// PruneOps deletes op-log entries with seq<=upToSeq, but ONLY when doing so is
+// causally safe, and atomically installs the caller-supplied `base` checkpoint
+// (which the client vouches folds exactly {seq<=upToSeq}) plus advances the
+// served floor. It returns the resulting floor.
+//
+// It is conservative and idempotent: if the request is stale (upToSeq<=floor) or
+// the prune would NOT be safe (no latest checkpoint yet, not a clean Lamport cut,
+// or insufficient margin below the frontier) it is a NO-OP and returns the
+// current floor unchanged — no error. The client simply retries on a later cycle
+// once enough newer ops have accrued.
+//
+// Safety (all judged from cleartext envelope Lamports — the server stays blind):
+//   - clean cut: max Lamport{seq<=upToSeq} < min Lamport{seq>upToSeq}, so every
+//     pruned op sorts strictly before every retained op (Lamport is the primary
+//     total-order key). This is what makes `base` a valid seed for the retained
+//     log after the prefix is gone.
+//   - margin: max Lamport{seq<=upToSeq} <= frontier-PruneLamportMargin, bounding
+//     how stale a still-in-flight op would have to be to sort into the pruned
+//     region.
+//
+// Concurrency: the per-space append sequencer mutex is held across the whole
+// scan+commit. An append only ever assigns a HIGHER seq (never one we delete),
+// but holding the lock also stops one from slipping a low-Lamport op into the
+// retained set between the safety scan and the delete.
+//
+// Crash-safety: base → floor → delete. A crash after the base+floor write leaves
+// harmless un-deleted ops (>floor readers ignore them; the next prune re-deletes).
+func (s *Store) PruneOps(spaceID string, upToSeq int64, base []byte, maxBytes int64) (int64, error) {
+	if !ValidID(spaceID) {
+		return 0, ErrInvalidID
+	}
+	if int64(len(base)) > maxBytes {
+		return 0, ErrFileTooBig
+	}
+	// A prune without a durable latest checkpoint would leave a reload with
+	// nothing to seed from — refuse (no-op).
+	if _, err := s.ReadCheckpoint(spaceID); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return s.ReadOpsFloor(spaceID)
+		}
+		return 0, err
+	}
+
+	c := s.seqCounterFor(spaceID)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	floor, err := s.ReadOpsFloor(spaceID)
+	if err != nil {
+		return 0, err
+	}
+	if upToSeq <= floor {
+		return floor, nil // stale/no-op; never overwrite the base with an older one
+	}
+
+	// Single pass over the (current) log: gather the pruned prefix's filenames and
+	// the Lamport extremes needed for the safety cuts.
+	root, err := s.openRoot(spaceID)
+	if err != nil {
+		return 0, err
+	}
+	names, err := listDirNames(root, encOpsDir)
+	if err != nil {
+		root.Close()
+		return 0, err
+	}
+	var (
+		prunedNames      []string
+		maxPrunedLamport int64 = -1
+		minRetained      int64 = -1
+		frontier         int64 = -1
+		sawPruned        bool
+		sawRetained      bool
+	)
+	for _, name := range names {
+		seq, _, ok := parseOpName(name)
+		if !ok {
+			continue // stray file, not a real op
+		}
+		data, err := s.ReadFile(spaceID, encOpsDir+"/"+name)
+		if err != nil {
+			continue
+		}
+		lam, ok := peekOpLamport(data)
+		if !ok {
+			// Can't verify safety for an unparseable op → refuse the whole prune.
+			root.Close()
+			return floor, nil
+		}
+		if lam > frontier {
+			frontier = lam
+		}
+		if seq <= upToSeq {
+			sawPruned = true
+			prunedNames = append(prunedNames, name)
+			if lam > maxPrunedLamport {
+				maxPrunedLamport = lam
+			}
+		} else {
+			sawRetained = true
+			if minRetained < 0 || lam < minRetained {
+				minRetained = lam
+			}
+		}
+	}
+	if !sawPruned {
+		root.Close()
+		return floor, nil // nothing in range to prune
+	}
+	// Clean Lamport cut: every pruned op strictly precedes every retained op.
+	if sawRetained && maxPrunedLamport >= minRetained {
+		root.Close()
+		return floor, nil
+	}
+	// Causal-stability margin below the frontier.
+	if maxPrunedLamport > frontier-PruneLamportMargin {
+		root.Close()
+		return floor, nil
+	}
+
+	// Commit — base first (fallback seed), then floor (served start), then delete.
+	if err := s.WriteCheckpointBase(spaceID, bytes.NewReader(base), maxBytes); err != nil {
+		root.Close()
+		return 0, err
+	}
+	if err := s.writeOpsFloor(spaceID, upToSeq); err != nil {
+		root.Close()
+		return 0, err
+	}
+	for _, name := range prunedNames {
+		_ = root.Remove(encOpsDir + "/" + name) // best-effort; lingering files are harmless
+	}
+	root.Close()
+	return upToSeq, nil
 }
 
 // parseOpName splits a "<seq>-<opId>" op filename. The opId is re-validated so a
