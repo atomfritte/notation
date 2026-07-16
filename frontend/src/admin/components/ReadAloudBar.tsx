@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Headphones, Play, Pause, SkipBack, SkipForward, X, Lock, ChevronDown, Server } from 'lucide-react'
 import {
   extractSentences, groupChunks, chunkIndexForSentence, systemEngine, loadReadPos, saveReadPos, ttsStyleForPath,
-  type Sentence, type Chunk, type TtsEngine, type TtsVoice,
+  type Sentence, type Chunk, type TtsEngine, type TtsVoice, type PathCodec,
 } from '../lib/readAloud'
 import { createServerEngine, type ServerVoice } from '../lib/serverTts'
 
@@ -31,7 +31,7 @@ const RATES = [0.75, 1, 1.25, 1.5, 1.75]
  * never to a third party.
  */
 export function ReadAloudBar({
-  navFiles, currentFile, content, onNavigate, storageKey, onClose, serverVoices, ttsURL,
+  navFiles, currentFile, content, onNavigate, storageKey, onClose, serverVoices, ttsURL, posCodec,
 }: {
   navFiles: string[]
   currentFile: string
@@ -43,6 +43,8 @@ export function ReadAloudBar({
   serverVoices?: ServerVoice[]
   /** Build a /tts audio URL for (voiceId, text). Must be stable (memoised). */
   ttsURL?: (voiceId: string, text: string, style?: string) => string
+  /** Encrypted spaces: persist the saved position by nodeId, not a path. */
+  posCodec?: PathCodec
 }) {
   const [systemEng] = useState<TtsEngine | null>(() => systemEngine())
   const serverEng = useMemo<TtsEngine | null>(
@@ -219,7 +221,7 @@ export function ReadAloudBar({
       hlSentRef.current = -1
       const idx = navFiles.indexOf(fileRef.current)
       const next = idx >= 0 && idx < navFiles.length - 1 ? navFiles[idx + 1] : null
-      if (!next) { finish(); saveReadPos(storageKey, null); return }
+      if (!next) { finish(); saveReadPos(storageKey, null, posCodec); return }
       setCurText('— next page —')
       pauseTimer.current = setTimeout(() => {
         if (statusRef.current !== 'playing') return
@@ -231,7 +233,7 @@ export function ReadAloudBar({
     const chunk = chunks[c]
     setCurText(chunk.text)
     highlightSentence(chunk.startIndex)
-    saveReadPos(storageKey, { file: fileRef.current, sentence: chunk.startIndex })
+    saveReadPos(storageKey, { file: fileRef.current, sentence: chunk.startIndex }, posCodec)
     lastVoiceRef.current = voiceId
 
     // Warm the NEXT chunk so there's no gap while it synthesises (neural only),
@@ -374,7 +376,7 @@ export function ReadAloudBar({
     // saved spot elsewhere when the user explicitly opted in (one-shot resumeRef).
     const mode = resumeRef.current
     resumeRef.current = 'current'
-    const saved = loadReadPos(storageKey)
+    const saved = loadReadPos(storageKey, posCodec)
     setStat('playing')
     if (mode === 'continue' && saved && saved.file !== fileRef.current && navFiles.includes(saved.file)) {
       pendingRef.current = saved.sentence
@@ -446,7 +448,7 @@ export function ReadAloudBar({
   const noVoices = engineId === 'system' && !!systemEng && voices.length === 0
   // Offer "continue where you left off" only when idle AND the saved spot is on a
   // different page — pressing play itself always reads the current page.
-  const savedPos = useMemo(() => loadReadPos(storageKey), [storageKey, currentFile, status])
+  const savedPos = useMemo(() => loadReadPos(storageKey, posCodec), [storageKey, currentFile, status, posCodec])
   const canContinue = status === 'idle' && !!savedPos && savedPos.file !== currentFile && navFiles.includes(savedPos.file)
   const engineOptions = [
     ...(systemEng ? [{ value: 'system', label: 'System' }] : []),

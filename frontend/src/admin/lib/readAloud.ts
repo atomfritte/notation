@@ -273,19 +273,33 @@ export function availableEngines(): TtsEngine[] {
 
 export type ReadPos = { file: string; sentence: number }
 
-export function loadReadPos(storageKey: string): ReadPos | null {
+/** Maps a path to its opaque nodeId and back — encrypted spaces persist the
+ *  read-aloud position by nodeId so no cleartext path lands in localStorage. */
+export type PathCodec = { encode: (path: string) => string | undefined; decode: (id: string) => string | undefined }
+
+export function loadReadPos(storageKey: string, codec?: PathCodec): ReadPos | null {
   try {
     const raw = localStorage.getItem(storageKey)
     if (!raw) return null
     const p = JSON.parse(raw)
-    if (typeof p?.file === 'string' && typeof p?.sentence === 'number') return p
+    if (typeof p?.file === 'string' && typeof p?.sentence === 'number') {
+      if (!codec) return p
+      const file = codec.decode(p.file) // stored as a nodeId → resolve to a path
+      return file ? { file, sentence: p.sentence } : null
+    }
   } catch { /* ignore */ }
   return null
 }
 
-export function saveReadPos(storageKey: string, pos: ReadPos | null) {
+export function saveReadPos(storageKey: string, pos: ReadPos | null, codec?: PathCodec) {
   try {
-    if (pos) localStorage.setItem(storageKey, JSON.stringify(pos))
-    else localStorage.removeItem(storageKey)
+    if (!pos) { localStorage.removeItem(storageKey); return }
+    let stored = pos
+    if (codec) {
+      const id = codec.encode(pos.file)
+      if (!id) return // can't resolve → never persist a cleartext path
+      stored = { file: id, sentence: pos.sentence }
+    }
+    localStorage.setItem(storageKey, JSON.stringify(stored))
   } catch { /* quota — non-fatal */ }
 }

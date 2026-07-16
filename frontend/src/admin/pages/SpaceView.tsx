@@ -16,7 +16,7 @@ import { UnlockScreen } from '../components/UnlockScreen'
 import { getCachedFile, setCachedFile, prefetchFile } from '../lib/contentCache'
 import { isTextFile, isMarkdownFile, findDefaultFile, rendersFromBytes } from '../lib/fileTypes'
 import { downloadDecryptedFile } from '../lib/decryptedFile'
-import { useNewPages } from '../lib/newPages'
+import { useNewPages, type NodeIdCodec } from '../lib/newPages'
 import { FileTree } from '../components/FileTree'
 import { MarkdownView, stripMdExt } from '../components/MarkdownView'
 import { FormView } from '../components/FormView'
@@ -123,8 +123,20 @@ export function SpaceView() {
 
   // "New since last visit" badges in the tree — pages that appeared while
   // this client wasn't looking (MCP agents, share guests, form entries).
+  // Encrypted spaces persist the seen-registry by opaque nodeId (never a
+  // cleartext path in localStorage); the codec resolves via the FS, so the
+  // storage key is withheld until the FS is ready.
+  const encPathCodec = useMemo<NodeIdCodec | undefined>(
+    () => (encrypted
+      ? { encode: (p) => fsRef.current?.idAt(p), decode: (id) => fsRef.current?.pathOf(id) }
+      : undefined),
+    // fsReady re-creates the codec once the FS can resolve nodeIds.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [encrypted, fsReady],
+  )
   const { newPaths, markAllSeen } = useNewPages(
-    spaceID ? `notation_new_pages_${spaceID}` : null, tree, file,
+    spaceID && (!encrypted || fsReady) ? `notation_new_pages_${spaceID}` : null,
+    tree, file, encPathCodec,
   )
   
   // Mobile detection drives the sidebar UX: on mobile the aside slides in
@@ -1758,6 +1770,8 @@ export function SpaceView() {
           // text to the server "studio" voice endpoint.
           serverVoices={encrypted ? [] : ttsVoices}
           ttsURL={ttsURL}
+          // Encrypted: persist the saved reading position by nodeId, not a path.
+          posCodec={encPathCodec}
         />
       )}
       {!encrypted && ttsVoices && ttsVoices.length > 0 && (
