@@ -6,6 +6,7 @@ import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
 import { fileComments, allComments as encAllComments, migrateLegacyComments } from '../lib/encComments'
 import { fetchState } from '../lib/auth'
+import { fileParams, fileSearchString, resolveFileParam } from '../lib/fileParam'
 import { downloadDecryptedSpaceZip } from '../lib/spaceZip'
 import { collectPages } from '../lib/pageOrder'
 import { createEncryptedSearchIndex, type EncryptedSearchIndex } from '../lib/encSearch'
@@ -69,7 +70,6 @@ export function SpaceView() {
   const { spaceID = '' } = useParams<{ spaceID: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
-  const file = searchParams.get('file') ?? ''
 
   // ---------- Zero-knowledge encryption ----------
   // spaceMeta tells us whether this space is encrypted. When it is and the key
@@ -91,6 +91,31 @@ export function SpaceView() {
   useEffect(() => { encryptedRef.current = encrypted }, [encrypted])
 
   const [tree, setTree] = useState<api.Entry[]>([])
+
+  // ---------- Open-file URL param ----------
+  // Plaintext spaces carry the file PATH in the query (?file=notes/x.md). For a
+  // zero-knowledge space that path is a secret the server must not see, yet a
+  // full document load (open-in-new-tab, reload, bookmark) puts the query into
+  // the server's / a proxy's access logs. So encrypted spaces route by the
+  // OPAQUE nodeId instead (?n=<hex>): the server already knows every nodeId from
+  // the op-log, so it leaks no name. We resolve it to a path once the FS has
+  // materialized (re-resolving when the tree changes, e.g. after a rename/move).
+  const file = useMemo(
+    () => resolveFileParam(encrypted, searchParams, (n) => fsRef.current?.pathOf(n)),
+    // fsReady + tree are the re-resolution triggers; fsRef itself is a ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchParams, encrypted, fsReady, tree],
+  )
+
+  // Central setter for the open-file URL param, branching plaintext (?file=path)
+  // vs encrypted (?n=nodeId) so no call site has to know the difference.
+  const setFileParam = useCallback(
+    (path: string, opts?: { replace?: boolean }) => {
+      setSearchParams(fileParams(encryptedRef.current, path, (p) => fsRef.current?.idAt(p)), opts)
+    },
+    [setSearchParams],
+  )
+
   const [content, setContent] = useState<string>('')
   const [etag, setEtag] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
@@ -216,7 +241,7 @@ export function SpaceView() {
     if (file) return
     if (!tree || tree.length === 0) return
     const landing = findDefaultFile(tree)
-    if (landing) setSearchParams({ file: landing.path }, { replace: true })
+    if (landing) setFileParam(landing.path, { replace: true })
   }, [file, tree, setSearchParams])
 
   // ---------- Per-file scroll-position memory ----------
@@ -226,11 +251,20 @@ export function SpaceView() {
   // Restore deliberately waits one rAF + a short timeout so MarkdownView /
   // FileViewer have actually rendered their content before we move the
   // scroll, otherwise the layout shifts the value back to 0.
+  // Scroll-position key: keyed by the opaque nodeId for encrypted spaces (never
+  // a cleartext path in localStorage), by path for plaintext.
+  const scrollKey = useMemo(() => {
+    if (!file) return null
+    const id = encrypted ? searchParams.get('n') : file
+    return id ? `notation_scroll_${spaceID}__${id}` : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaceID, file, encrypted, searchParams])
+
   useEffect(() => {
     const el = mainScrollRef.current
-    if (!el || !file) return
+    if (!el || !file || !scrollKey) return
     let timer: ReturnType<typeof setTimeout> | null = null
-    const key = `notation_scroll_${spaceID}__${file}`
+    const key = scrollKey
     function onScroll() {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
@@ -243,7 +277,7 @@ export function SpaceView() {
       if (timer) clearTimeout(timer)
       el.removeEventListener('scroll', onScroll)
     }
-  }, [spaceID, file])
+  }, [file, scrollKey])
 
   useEffect(() => {
     const el = mainScrollRef.current
@@ -254,7 +288,7 @@ export function SpaceView() {
     // Similarly, the user arrived from a search result — MarkdownView will
     // scroll to the first match — don't yank them back to the saved offset.
     if (searchParams.get('q')) return
-    const saved = localStorage.getItem(`notation_scroll_${spaceID}__${file}`)
+    const saved = scrollKey ? localStorage.getItem(scrollKey) : null
     const target = saved ? parseInt(saved, 10) || 0 : 0
     const frame = requestAnimationFrame(() => {
       setTimeout(() => {
@@ -262,7 +296,7 @@ export function SpaceView() {
       }, 30)
     })
     return () => cancelAnimationFrame(frame)
-  }, [spaceID, file, content, location.hash, searchParams])
+  }, [file, scrollKey, content, location.hash, searchParams])
 
   // ---------- Sidebar drag-resize ----------
   // Manual implementation rather than a library — the handle is a vertical
@@ -362,7 +396,13 @@ export function SpaceView() {
   const toggleBookmark = useCallback((path: string) => {
     setBookmarks(prev => {
       const next = prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
-      localStorage.setItem(`notation_bookmarks_${spaceID}`, JSON.stringify(next))
+      // Encrypted spaces persist opaque nodeIds, not cleartext paths, so a
+      // stolen browser profile (without the key) can't read the file structure
+      // from localStorage. `bookmarks` state stays path-based for the UI.
+      const stored = encryptedRef.current
+        ? next.map(p => fsRef.current?.idAt(p)).filter((n): n is string => !!n)
+        : next
+      localStorage.setItem(`notation_bookmarks_${spaceID}`, JSON.stringify(stored))
       return next
     })
   }, [spaceID])
@@ -385,10 +425,10 @@ export function SpaceView() {
       const fs = fsRef.current
       if (fs) { await fs.write(target, utf8Encode(body)); await fs.sync(); setTree(fsToEntries(fs)) }
       else { await api.writeFile(spaceID, target, body); refreshTree() }
-      setSearchParams({ file: target })
+      setFileParam(target)
       setEditing(true)
     } catch (err) { setErr(String(err)) }
-  }, [spaceID, refreshTree, setSearchParams])
+  }, [spaceID, refreshTree, setFileParam])
 
   const createFolderIn = useCallback(async (parentDir: string) => {
     const raw = window.prompt(parentDir ? `New folder name in ${parentDir}:` : 'New folder name:')
@@ -410,7 +450,7 @@ export function SpaceView() {
       const fs = fsRef.current
       if (fs) { await fs.rename(oldPath, newPath); await fs.sync(); setTree(fsToEntries(fs)) }
       else { await api.renameFile(spaceID, oldPath, newPath); refreshTree() }
-      if (file === oldPath) setSearchParams({ file: newPath })
+      if (file === oldPath) setFileParam(newPath)
     } catch (err) { setErr(String(err)) }
   }, [spaceID, file, refreshTree, setSearchParams])
 
@@ -443,7 +483,7 @@ export function SpaceView() {
       const fs = fsRef.current
       if (fs) { await fs.rename(from, target); await fs.sync(); setTree(fsToEntries(fs)) }
       else { await api.renameFile(spaceID, from, target); refreshTree() }
-      if (file === from) setSearchParams({ file: target })
+      if (file === from) setFileParam(target)
     } catch (err) { setErr(String(err)) }
   }, [spaceID, file, refreshTree, setSearchParams])
 
@@ -456,7 +496,7 @@ export function SpaceView() {
       const fs = fsRef.current
       if (fs) { await fs.remove(path); await fs.sync(); setTree(fsToEntries(fs)) }
       else { await api.deleteFile(spaceID, path); refreshTree() }
-      if (file === path) setSearchParams({ file: '' })
+      if (file === path) setFileParam('')
     } catch (err) { setErr(String(err)) }
   }, [spaceID, file, refreshTree, setSearchParams])
 
@@ -536,8 +576,13 @@ export function SpaceView() {
           { label: 'Delete folder',      icon: <Trash size={14} />, danger: true, onClick: () => deletePath(path, true) },
         ]
       : [
-          { label: 'Open',               icon: <FileText size={14} />,   onClick: () => setSearchParams({ file: path }) },
-          { label: 'Open in new tab',    icon: <ExternalLink size={14} />, onClick: () => window.open(`${window.location.pathname}?file=${encodeURIComponent(path)}`, '_blank', 'noopener') },
+          { label: 'Open',               icon: <FileText size={14} />,   onClick: () => setFileParam(path) },
+          { label: 'Open in new tab',    icon: <ExternalLink size={14} />, onClick: () => {
+            // Encrypted: address by opaque nodeId so the new-tab document GET
+            // doesn't put a cleartext path into the server's access log.
+            const q = fileSearchString(encryptedRef.current, path, (p) => fsRef.current?.idAt(p))
+            window.open(`${window.location.pathname}${q}`, '_blank', 'noopener')
+          } },
           { label: 'Download',           icon: <Download size={14} />,   onClick: () => {
             // Encrypted spaces have no server bytes to fetch (the /file endpoint
             // 409s) — download the client-decrypted blob instead.
@@ -666,12 +711,12 @@ export function SpaceView() {
 
   const selectFile = useCallback(
     (p: string) => {
-      setSearchParams({ file: p })
+      setFileParam(p)
       // On mobile, after picking a file we want the content full-screen
       // immediately — keep the drawer behaviour explorer-like.
       if (isMobile) setSidebarOpen(false)
     },
-    [setSearchParams, isMobile],
+    [setFileParam, isMobile],
   )
 
   // Warm a page's text into the cache on hover (file tree, in-document links,
@@ -700,7 +745,7 @@ export function SpaceView() {
       const fs = fsRef.current
       if (fs) { await fs.write(mdPath, utf8Encode(body)); await fs.sync(); setTree(fsToEntries(fs)) }
       else { await api.writeFile(spaceID, mdPath, body); refreshTree() }
-      setSearchParams({ file: mdPath })
+      setFileParam(mdPath)
       setEditing(true)
     } catch (e) { setErr(String(e)) }
   }
@@ -751,11 +796,18 @@ export function SpaceView() {
 
   useEffect(() => {
     if (!spaceID) return
+    // Encrypted spaces store bookmarks as nodeIds; wait for the FS so we can
+    // resolve them back to paths (dropping any that no longer exist).
+    if (encrypted && !fsReady) { setBookmarks([]); return }
     try {
       const stored = localStorage.getItem(`notation_bookmarks_${spaceID}`)
-      if (stored) setBookmarks(JSON.parse(stored))
+      const arr: string[] = stored ? JSON.parse(stored) : []
+      const paths = encrypted
+        ? arr.map(n => fsRef.current?.pathOf(n)).filter((p): p is string => !!p)
+        : arr
+      setBookmarks(paths)
     } catch { /* ignore */ }
-  }, [spaceID])
+  }, [spaceID, encrypted, fsReady])
 
   // Fetch the space's metadata (crucially the `encrypted` flag) so we know
   // whether to drive it through the plaintext API or an EncryptedFS.
@@ -927,7 +979,7 @@ export function SpaceView() {
     )
     setTimeout(() => setUploadStatus(null), 3000)
     refreshTree()
-    if (files.length === 1 && ok === 1) setSearchParams({ file: lastPath })
+    if (files.length === 1 && ok === 1) setFileParam(lastPath)
   }
 
   async function handleDrop(e: React.DragEvent) {
@@ -1482,7 +1534,7 @@ export function SpaceView() {
                     }}
                     uploadImage={(blob) => api.uploadFormImage(spaceID, file, blob)}
                     imageURL={(path) => api.fileURL(spaceID, path)}
-                    onEditTemplate={() => setSearchParams({ file: `${file}/_form.md` })}
+                    onEditTemplate={() => setFileParam(`${file}/_form.md`)}
                   />
                 ) : (
                   <div className="flex-1 flex items-center justify-center text-[var(--notation-fg-muted)] text-sm">Loading form…</div>
@@ -1577,6 +1629,12 @@ export function SpaceView() {
                         navFiles={allFiles}
                         onNavigate={selectFile}
                         onPrefetch={warmFile}
+                        // Encrypted: in-document links address by opaque nodeId
+                        // (?n=) so a resolved wiki/relative link never carries a
+                        // cleartext path in the URL / access logs.
+                        fileSearch={encrypted
+                          ? (p) => fileSearchString(true, p, (x) => fsRef.current?.idAt(x))
+                          : undefined}
                       />
                     ) : encrypted && rendersFromBytes(file) ? (
                       // Zero-knowledge space: the server /file endpoint 409s
@@ -1674,8 +1732,9 @@ export function SpaceView() {
         onClose={() => setSearchOpen(false)}
         onSelect={(p, opts) => {
           // Carry the query into the URL so the viewer can highlight and
-          // scroll to the first match once the file content loads.
-          const next: Record<string, string> = { file: p }
+          // scroll to the first match once the file content loads. Encrypted
+          // spaces address the file by opaque nodeId (?n=) instead of a path.
+          const next: Record<string, string> = fileParams(encryptedRef.current, p, (x) => fsRef.current?.idAt(x))
           if (opts?.query) next.q = opts.query
           setSearchParams(next)
           if (isMobile) setSidebarOpen(false)

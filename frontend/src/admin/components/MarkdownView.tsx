@@ -96,6 +96,10 @@ type Props = {
    *  hover on the prev/next buttons and on resolved in-document links so the
    *  click that follows paints instantly. Best-effort. */
   onPrefetch?: (path: string) => void
+  /** Build the URL search string for an in-document link to `path`. Defaults to
+   *  `?file=<path>`. Encrypted spaces pass a variant that emits `?n=<nodeId>`
+   *  so a resolved link never carries a cleartext path in the URL. */
+  fileSearch?: (path: string) => string
 }
 
 export function MarkdownView({
@@ -111,6 +115,7 @@ export function MarkdownView({
   navFiles,
   onNavigate,
   onPrefetch,
+  fileSearch = (path: string) => `?file=${encodeURIComponent(path)}`,
 }: Props) {
   const location = useLocation()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -458,12 +463,11 @@ export function MarkdownView({
                   // Known-missing target: render inert so the reader isn't sent
                   // to a guaranteed 404. Only when we have a tree to check against.
                   if (haveFileList && !r.exists) return <BrokenLink>{children}</BrokenLink>
-                  url.searchParams.set('file', r.path)
                   target = r.path
                 }
                 return (
                   <Link
-                    to={{ pathname: location.pathname, search: url.search, hash: url.hash }}
+                    to={{ pathname: location.pathname, search: target ? fileSearch(target) : url.search, hash: url.hash }}
                     className={className}
                     onMouseEnter={target ? () => onPrefetch?.(target!) : undefined}
                   >
@@ -487,7 +491,7 @@ export function MarkdownView({
                 <Link
                   to={{
                     pathname: location.pathname,
-                    search: `?file=${encodeURIComponent(r.path)}`,
+                    search: fileSearch(r.path),
                     hash: anchor ? '#' + anchor : '',
                   }}
                   className={className}
