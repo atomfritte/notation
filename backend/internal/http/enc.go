@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/yoogie27/notation/internal/share"
 	"github.com/yoogie27/notation/internal/space"
 )
 
@@ -261,4 +262,63 @@ func (h *adminHandlers) getKeyRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeRawBytes(w, "application/json", data)
+}
+
+// ---- legacy plaintext metadata (one-time migration for encrypted spaces) ----
+//
+// Spaces encrypted before comments joined the crypto system still carry the
+// plaintext .notation/comments.jsonl (and audit.log) that predates encryption —
+// a cleartext leak of paths + text. The client, once unlocked, reads the
+// comments here, re-adds them to the encrypted op-log, then purges both files.
+
+type legacyMetadataResp struct {
+	// HasComments/HasAudit tell the client whether a sweep is needed at all.
+	HasComments bool `json:"has_comments"`
+	HasAudit    bool `json:"has_audit"`
+	// Comments are the orphaned plaintext comments to migrate (empty if none).
+	Comments []share.Comment `json:"comments"`
+}
+
+// getLegacyComments returns any orphaned plaintext comments an ENCRYPTED space
+// still holds, so the client can migrate them into the encrypted op-log. 409s on
+// a plaintext space (requireEncrypted) — a plaintext space uses the normal
+// comment endpoints.
+func (h *adminHandlers) getLegacyComments(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.requireEncrypted(w, r)
+	if !ok {
+		return
+	}
+	hasComments, hasAudit, err := h.store.HasLegacyServerMetadata(id)
+	if err != nil {
+		writeInternal(w, r, "enc.legacy.stat", err)
+		return
+	}
+	resp := legacyMetadataResp{HasComments: hasComments, HasAudit: hasAudit, Comments: []share.Comment{}}
+	if hasComments {
+		list, err := h.comments.ListAll(id)
+		if err != nil {
+			writeInternal(w, r, "enc.legacy.read", err)
+			return
+		}
+		if list != nil {
+			resp.Comments = list
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// purgeLegacyMetadata deletes the plaintext comment + audit sidecars from an
+// encrypted space. Called after the client has migrated the comments into the
+// encrypted op-log (the audit log is dropped outright — it is a server-only
+// tamper-evidence record the server cannot re-encrypt). Idempotent.
+func (h *adminHandlers) purgeLegacyMetadata(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.requireEncrypted(w, r)
+	if !ok {
+		return
+	}
+	if err := h.store.PurgeLegacyServerMetadata(id); err != nil {
+		writeInternal(w, r, "enc.legacy.purge", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

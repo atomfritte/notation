@@ -195,6 +195,10 @@ func NewRouter(d Deps) (http.Handler, error) {
 				er.Get("/checkpoint", ahdmin.getCheckpoint)
 				er.Put("/keyrecord", ahdmin.putKeyRecord)
 				er.Get("/keyrecord", ahdmin.getKeyRecord)
+				// One-time migration of pre-encryption plaintext sidecars: read the
+				// orphaned comments, then purge comments.jsonl + audit.log.
+				er.Get("/legacy-comments", ahdmin.getLegacyComments)
+				er.Post("/purge-legacy-metadata", ahdmin.purgeLegacyMetadata)
 				// Convert an existing space between plaintext and encrypted.
 				// Mode-agnostic (each handler resolves the space itself), so they
 				// sit outside the requireEncrypted / requirePlaintext split — the

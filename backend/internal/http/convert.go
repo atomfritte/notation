@@ -170,6 +170,13 @@ func (h *adminHandlers) finalizeConvert(w http.ResponseWriter, r *http.Request) 
 			writeInternal(w, r, "convert.finalize.purge_plaintext", err)
 			return
 		}
+		// Drop the plaintext server sidecars (.notation/comments.jsonl + audit.log)
+		// so no cleartext path/text survives the encrypt. The client has already
+		// migrated any comments into the encrypted op-log before calling finalize.
+		if err := h.store.PurgeLegacyServerMetadata(id); err != nil {
+			writeInternal(w, r, "convert.finalize.purge_legacy", err)
+			return
+		}
 		if err := h.git.Reinit(id, adminAuthor(r), "convert to encrypted: reinitialize history"); err != nil {
 			writeInternal(w, r, "convert.finalize.reinit", err)
 			return

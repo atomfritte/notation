@@ -11,6 +11,11 @@ type Props = {
   /** Refresh trigger — bump from parent when comments are added/removed
    *  elsewhere so this panel re-fetches. */
   refreshKey?: number
+  /** Encrypted spaces have no server comments; the parent supplies them from
+   *  the client-side {@link EncryptedFS} instead of this panel fetching. When
+   *  set, `onDeleteComment` handles deletion too. */
+  items?: api.AllCommentItem[]
+  onDeleteComment?: (id: string) => Promise<void>
 }
 
 /**
@@ -19,16 +24,20 @@ type Props = {
  * the anchored quote (if any), and the comment body. Clicking the row
  * navigates to the file. The delete control mirrors the inline thread.
  */
-export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKey = 0 }: Props) {
-  const [comments, setComments] = useState<api.AllCommentItem[]>([])
-  const [loading, setLoading] = useState(true)
+export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKey = 0, items, onDeleteComment }: Props) {
+  // Encrypted spaces pass `items` (client-side); plaintext spaces fetch here.
+  const clientMode = items !== undefined
+  const [fetched, setFetched] = useState<api.AllCommentItem[]>([])
+  const [loading, setLoading] = useState(!clientMode)
   const [err, setErr] = useState<string | null>(null)
+  const comments = clientMode ? items : fetched
 
   function reload() {
+    if (clientMode) return
     setLoading(true)
     api.getAllComments(spaceID)
       .then(list => {
-        setComments(list || [])
+        setFetched(list || [])
         setErr(null)
       })
       .catch(e => setErr(String(e)))
@@ -36,16 +45,19 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
   }
 
   useEffect(() => {
-    if (!spaceID) return
+    if (!spaceID || clientMode) return
     reload()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spaceID, refreshKey])
+  }, [spaceID, refreshKey, clientMode])
 
   async function onDelete(id: string) {
     if (!window.confirm('Delete this comment and all replies?')) return
     try {
-      await api.deleteComment(spaceID, id)
-      reload()
+      if (clientMode) await onDeleteComment?.(id)
+      else {
+        await api.deleteComment(spaceID, id)
+        reload()
+      }
     } catch (e) {
       setErr(String(e))
     }

@@ -14,3 +14,4 @@ export type { SpaceFS } from './spacefs'
 // of the admin auth/WebAuthn dependency it pulls in.
 export * from './encStore'
 export * from './encfs'
+export * from './commentLog'
