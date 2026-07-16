@@ -208,55 +208,124 @@ export class EncryptedFS implements SpaceFS {
   /** The (non-secret) key record, if the space has one persisted. */
   keyRecord: SpaceKeyRecord | null = null
 
+  // ── op-log pruning state ────────────────────────────────────────────────
+  //
+  // Pruning deletes op-log entries that a durable checkpoint has folded, bounding
+  // on-disk growth. It is only ever driven off a checkpoint this client itself
+  // opened (so it KNOWS the fold is correct), and only via the store's blind
+  // safety cuts (clean Lamport cut + margin). See docs at maybePrune/rebuildFromBase.
+
+  /** The checkpoint (exact bytes + its seq/hi) this client last seeded from — the
+   *  candidate prune floor. It folds EXACTLY {seq <= seq}, so it is a valid base
+   *  for a later re-fold, and a valid thing to prune UP TO. Null until we seed
+   *  from (or bootstrap) a checkpoint. */
+  private baseCandidate: { bytes: Uint8Array; seq: number; hi: Timestamp } | null = null
+  /** Highest seq the server has pruned (served floor); the log starts at floor+1. */
+  private prunedFloor = 0
+  /** Client-side margin gate to avoid futile prune requests; the store re-checks
+   *  authoritatively over the true (multi-device) frontier. */
+  private readonly pruneMargin: number
+  /** Clock value at the last prune ATTEMPT — throttles retries so a persistently
+   *  refused prune (e.g. an unclean cut) can't trigger a server op-scan on every
+   *  sync. Re-attempted only once the frontier has advanced by a full margin. */
+  private lastPruneAttemptClock = Number.NEGATIVE_INFINITY
+
   constructor(
     private readonly store: EncStore,
     private readonly key: KeyHandle,
     readonly actorId: string,
+    opts?: { pruneMargin?: number },
   ) {
     this.clock = new LamportClock(actorId)
+    this.pruneMargin = opts?.pruneMargin ?? 500
   }
 
   /** Construct and load in one step. */
-  static async open(store: EncStore, key: KeyHandle, actorId: string): Promise<EncryptedFS> {
-    const fs = new EncryptedFS(store, key, actorId)
+  static async open(
+    store: EncStore,
+    key: KeyHandle,
+    actorId: string,
+    opts?: { pruneMargin?: number },
+  ): Promise<EncryptedFS> {
+    const fs = new EncryptedFS(store, key, actorId, opts)
     await fs.load()
     return fs
   }
 
   /**
-   * Load initial state: fetch the key record, seed from a checkpoint if one
-   * exists, then pull and replay the op-log.
+   * Load initial state: fetch the key record + pruned floor, seed from the latest
+   * checkpoint (falling back to the durable prune-base if the latest is corrupt),
+   * then pull and replay the retained op-log.
    */
   async load(): Promise<void> {
     this.keyRecord = await this.store.getKeyRecord()
-    const cpBytes = await this.store.getCheckpoint()
-    if (cpBytes) {
-      // A checkpoint is only an optimization: if it won't open (corrupt, a
-      // future/rejected format, or a byzantine server serving garbage), fall
-      // back to replaying the full op-log rather than bricking the space.
-      try {
-        const cp = await openCheckpoint(cpBytes, this.key)
-        if (!cp.hi || typeof cp.seq !== 'number' || !Array.isArray(cp.nodes)) {
-          throw new VfsError('vfs: malformed checkpoint')
-        }
-        this.replica.seed(cp.nodes)
-        if (cp.comments) this.commentLog.seed(cp.comments)
-        this.checkpointHi = cp.hi
-        this.hi = cp.hi
-        this.lastSeq = cp.seq
-        this.checkpointSeeded = true
-        this.clock.observe(cp.hi.lamport)
-      } catch {
-        // Reset any partial seed and load from scratch.
-        this.replica = new TreeReplica()
-        this.commentLog = new CommentLog()
-        this.checkpointSeeded = false
-        this.checkpointHi = null
-        this.hi = null
-        this.lastSeq = 0
-      }
+    this.prunedFloor = await this.readFloor()
+
+    // Fast path: the latest rolling checkpoint. A checkpoint is only an
+    // optimization — if it won't open (corrupt, a future/rejected format, or a
+    // byzantine server serving garbage) we fall through.
+    const latest = await this.store.getCheckpoint()
+    let seeded = latest != null && (await this.seedFrom(latest))
+    if (!seeded) {
+      // Fallback seed: the prune-base checkpoint (present once the log has been
+      // pruned) folds exactly the deleted prefix, so it lets us re-fold the
+      // retained log even though seq 1..floor are gone.
+      const base = this.store.getCheckpointBase ? await this.store.getCheckpointBase() : null
+      seeded = base != null && (await this.seedFrom(base))
     }
+    if (!seeded && this.prunedFloor > 0) {
+      // The log was pruned but no checkpoint opens: the deleted prefix is
+      // unrecoverable from the op-log alone. Fail LOUD rather than silently
+      // materialize a truncated tree.
+      throw new VfsError('vfs: op-log pruned but no usable checkpoint to seed from')
+    }
+    // If nothing seeded and nothing was pruned, we simply replay the whole log
+    // from scratch (the empty-space / no-checkpoint path) — state is already at
+    // its constructor defaults.
     await this.sync()
+  }
+
+  /** Read the pruned floor (0 if the store doesn't track one / call fails). */
+  private async readFloor(): Promise<number> {
+    if (!this.store.getOpsFloor) return 0
+    try {
+      return await this.store.getOpsFloor()
+    } catch {
+      return 0
+    }
+  }
+
+  /**
+   * Seed the in-memory state from a checkpoint blob. On success the replica +
+   * comment log are seeded, the seed's high-water is installed, and the
+   * checkpoint is remembered as the prune base candidate; returns true. On any
+   * failure the partial seed is reset and false is returned so the caller can try
+   * another source.
+   */
+  private async seedFrom(cpBytes: Uint8Array): Promise<boolean> {
+    try {
+      const cp = await openCheckpoint(cpBytes, this.key)
+      if (!cp.hi || typeof cp.seq !== 'number' || !Array.isArray(cp.nodes)) {
+        throw new VfsError('vfs: malformed checkpoint')
+      }
+      this.replica.seed(cp.nodes)
+      if (cp.comments) this.commentLog.seed(cp.comments)
+      this.checkpointHi = cp.hi
+      this.hi = cp.hi
+      this.lastSeq = cp.seq
+      this.checkpointSeeded = true
+      this.clock.observe(cp.hi.lamport)
+      this.baseCandidate = { bytes: cpBytes, seq: cp.seq, hi: cp.hi }
+      return true
+    } catch {
+      this.replica = new TreeReplica()
+      this.commentLog = new CommentLog()
+      this.checkpointSeeded = false
+      this.checkpointHi = null
+      this.hi = null
+      this.lastSeq = 0
+      return false
+    }
   }
 
   /**
@@ -266,8 +335,19 @@ export class EncryptedFS implements SpaceFS {
    * converges, local-then-remote and remote-then-local yield the same tree.
    */
   async sync(): Promise<void> {
-    await this.applyBatch(await this.store.listOps(this.lastSeq), true)
+    const floor = await this.readFloor()
+    if (floor > this.prunedFloor) this.prunedFloor = floor
+    if (this.prunedFloor > this.lastSeq) {
+      // Ops we have not yet folded were pruned out from under us (another device
+      // advanced the floor past our position). listOps(lastSeq) would return a
+      // batch starting above lastSeq+1 — a legitimate prune, not a gap — so we
+      // recover the missed prefix from the durable base checkpoint.
+      await this.rebuildFromBase()
+    } else {
+      await this.applyBatch(await this.store.listOps(this.lastSeq), true)
+    }
     await this.maybeAutoCheckpoint()
+    await this.maybePrune()
   }
 
   /**
@@ -285,7 +365,7 @@ export class EncryptedFS implements SpaceFS {
    *      checkpoint high-water can't be applied on the seed correctly (the CRDT
    *      can't undo below a seed), so we discard the seed and full-replay.
    */
-  private async applyBatch(stored: StoredOp[], checkForSeed: boolean): Promise<void> {
+  private async applyBatch(stored: StoredOp[], checkForSeed: boolean, seedFloor: Timestamp | null = null): Promise<void> {
     const treeOps: Op[] = []
     const commentOps: CommentOp[] = []
     let batchMax = 0
@@ -299,8 +379,18 @@ export class EncryptedFS implements SpaceFS {
       const rec = await openOpBytes<LogEntryRecord>(s.blob, this.key)
       if (checkForSeed && this.checkpointSeeded && this.checkpointHi &&
           compareTimestamps(tsOf(rec), this.checkpointHi) <= 0) {
-        await this.fullReplay()
+        await this.rebuildFromBase()
         return
+      }
+      // During a base-seeded re-fold (checkForSeed=false), every op MUST sort
+      // strictly after the base's high-water — the CRDT can't order an op below a
+      // seed. An op at/before `seedFloor` means the prune deleted an op this one
+      // is concurrent with (only possible if the causal-stability margin was
+      // violated by an extraordinarily stale writer). Fail LOUD, never diverge.
+      if (!checkForSeed && seedFloor && compareTimestamps(tsOf(rec), seedFloor) <= 0) {
+        throw new VfsError(
+          `vfs: retained op (lamport ${rec.lamport}) sorts at/before the pruned floor — cannot reconstruct (prune margin violated)`,
+        )
       }
       if (isCommentOp(rec)) commentOps.push(rec)
       else treeOps.push(rec)
@@ -322,12 +412,20 @@ export class EncryptedFS implements SpaceFS {
   }
 
   /**
-   * Discard the checkpoint seed and rebuild the whole state from op 1. Triggered
-   * when a late op sorts at/before the seed's high-water (rare — a concurrent op
-   * from a replica whose clock lagged). Guarantees byte-identical convergence
-   * with a from-scratch replay; the checkpoint was only ever an optimization.
+   * Rebuild the whole state from the DURABLE base + retained op-log. Triggered
+   * when a late op sorts at/before the latest checkpoint's high-water (a
+   * concurrent op from a replica whose clock lagged), or when a prune advanced
+   * the floor past our position.
+   *
+   * Before pruning existed this was a from-scratch `listOps(0)` replay. Now the
+   * prefix may be gone, so we seed from the prune-base checkpoint (which folds
+   * EXACTLY the deleted prefix, hi = H_base) and re-fold every retained op
+   * (`seq > base.seq`) on top — all of which sort strictly after H_base (the
+   * server's clean-cut guarantee), so the seed is a valid floor. If no base
+   * exists AND nothing was pruned, we replay the entire log from op 1 exactly as
+   * before (byte-identical convergence with a from-scratch replay).
    */
-  private async fullReplay(): Promise<void> {
+  private async rebuildFromBase(): Promise<void> {
     this.replica = new TreeReplica()
     this.commentLog = new CommentLog()
     this.clock = new LamportClock(this.actorId)
@@ -336,7 +434,43 @@ export class EncryptedFS implements SpaceFS {
     this.hi = null
     this.lastSeq = 0
     this.opsSinceCheckpoint = 0
-    await this.applyBatch(await this.store.listOps(0), false)
+
+    const base = this.store.getCheckpointBase ? await this.store.getCheckpointBase() : null
+    let baseHi: Timestamp | null = null
+    if (base) {
+      try {
+        const cp = await openCheckpoint(base, this.key)
+        if (!cp.hi || typeof cp.seq !== 'number' || !Array.isArray(cp.nodes)) {
+          throw new VfsError('vfs: malformed base checkpoint')
+        }
+        this.replica.seed(cp.nodes)
+        if (cp.comments) this.commentLog.seed(cp.comments)
+        this.hi = cp.hi
+        this.lastSeq = cp.seq
+        this.clock.observe(cp.hi.lamport)
+        baseHi = cp.hi
+        this.baseCandidate = { bytes: base, seq: cp.seq, hi: cp.hi }
+      } catch {
+        // Base corrupt: reset and fall through to a from-scratch replay (only
+        // valid when nothing was pruned).
+        this.replica = new TreeReplica()
+        this.commentLog = new CommentLog()
+        this.hi = null
+        this.lastSeq = 0
+        baseHi = null
+      }
+    }
+    if (!baseHi && this.prunedFloor > 0) {
+      throw new VfsError('vfs: op-log pruned but no usable base checkpoint to seed from')
+    }
+
+    await this.applyBatch(await this.store.listOps(this.lastSeq), false, baseHi)
+    // Re-arm the seed-safety guard: a future op below the base's high-water must
+    // route back here (and fail loud) rather than be mis-ordered on the seed.
+    if (baseHi) {
+      this.checkpointSeeded = true
+      this.checkpointHi = baseHi
+    }
     this.materialize()
   }
 
@@ -369,8 +503,48 @@ export class EncryptedFS implements SpaceFS {
       nodes: this.replica.materialize(),
       comments: this.commentLog.snapshot(),
     }
-    await this.store.putCheckpoint(await sealCheckpoint(cp, this.key))
+    const sealed = await sealCheckpoint(cp, this.key)
+    await this.store.putCheckpoint(sealed)
     this.opsSinceCheckpoint = 0
+    // Bootstrap a prune base for a space that never seeded from one (a fresh,
+    // long-lived session): this freshly-written checkpoint folds exactly
+    // {seq <= lastSeq}, so it is a valid future prune floor once margin accrues.
+    // We do NOT overwrite an existing (older, margin-aged) candidate — pruning
+    // the oldest checkpoint reclaims the most and keeps the widest safety margin.
+    if (!this.baseCandidate) {
+      this.baseCandidate = { bytes: sealed, seq: this.lastSeq, hi: this.hi }
+    }
+  }
+
+  /**
+   * Opportunistically prune the op-log prefix the base candidate has folded, once
+   * it sits comfortably below the observed Lamport frontier. Best-effort and
+   * conservative:
+   *   - only prunes a checkpoint THIS client opened (so the fold is known-good),
+   *   - only asks when `frontier - margin >= base.hi.lamport` (a futile-request
+   *     gate; the store re-checks authoritatively over the true frontier),
+   *   - adopts whatever floor the store reports (unchanged if it refused).
+   * A prune never blocks or fails a sync — a skipped prune just means the log
+   * stays a little longer, reclaimed on a later cycle or session.
+   */
+  private async maybePrune(): Promise<void> {
+    if (!this.store.pruneOps) return
+    const cand = this.baseCandidate
+    if (!cand) return
+    if (cand.seq <= this.prunedFloor) return // already pruned to (or past) here
+    // Futile-request gate: our clock is >= every Lamport we've folded, so it is a
+    // safe lower bound on the true frontier. Only ask once the base is margin-old.
+    if (cand.hi.lamport > this.clock.value - this.pruneMargin) return
+    // Retry throttle: don't re-scan the server for the same base until the
+    // frontier has moved a full margin since the last attempt.
+    if (this.clock.value - this.lastPruneAttemptClock < this.pruneMargin) return
+    this.lastPruneAttemptClock = this.clock.value
+    try {
+      const { floor } = await this.store.pruneOps(cand.seq, cand.bytes)
+      if (floor > this.prunedFloor) this.prunedFloor = floor
+    } catch {
+      /* best-effort — a failed prune just leaves the log longer */
+    }
   }
 
   // ── SpaceFS surface ──────────────────────────────────────────────────────

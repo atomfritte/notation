@@ -3,11 +3,14 @@ package http
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
 	"github.com/yoogie27/notation/internal/share"
+	"github.com/yoogie27/notation/internal/space"
 )
 
 // mkEncSpace creates an encrypted space through the real admin API (so the
@@ -189,6 +192,107 @@ func TestEnc_CheckpointAndKeyRecord(t *testing.T) {
 	rec = e.admin(http.MethodPut, "/api/admin/spaces/vault/enc/keyrecord", []byte("not json{"))
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("PUT non-JSON keyrecord: code=%d, want 400", rec.Code)
+	}
+}
+
+// frameOpHTTP builds a sealed-op envelope carrying a cleartext framing Lamport
+// (uint32-BE metaLen || meta JSON || ciphertext) — the shape the server peeks for
+// prune safety without decrypting.
+func frameOpHTTP(lamport int64) []byte {
+	meta := fmt.Sprintf(`{"opId":"%016x","lamport":%d,"actorId":"dev"}`, lamport, lamport)
+	out := make([]byte, 4+len(meta)+2)
+	binary.BigEndian.PutUint32(out[:4], uint32(len(meta)))
+	copy(out[4:], meta)
+	return out
+}
+
+// TestEnc_Prune drives the prune endpoints through the real router: post framed
+// ops, write a checkpoint, prune the folded prefix, and confirm the floor is
+// served, the base is stored, and only the retained suffix remains.
+func TestEnc_Prune(t *testing.T) {
+	prev := space.PruneLamportMargin
+	space.PruneLamportMargin = 5
+	t.Cleanup(func() { space.PruneLamportMargin = prev })
+
+	e := newIsoEnv(t)
+	e.mkEncSpace("vault")
+
+	// Floor starts at 0.
+	rec := e.admin(http.MethodGet, "/api/admin/spaces/vault/enc/ops/floor", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET floor: code=%d", rec.Code)
+	}
+	var fr struct {
+		Floor int64 `json:"floor"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &fr)
+	if fr.Floor != 0 {
+		t.Fatalf("initial floor = %d, want 0", fr.Floor)
+	}
+
+	// 20 ops, Lamports 1..20 (strictly increasing → clean cut anywhere).
+	for i := int64(1); i <= 20; i++ {
+		opID := fmt.Sprintf("%016x", i)
+		rec := e.admin(http.MethodPost, "/api/admin/spaces/vault/enc/ops?opId="+opID, frameOpHTTP(i))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("POST op %d: code=%d body=%s", i, rec.Code, rec.Body.String())
+		}
+	}
+	// A latest checkpoint must exist for the prune to be allowed.
+	if rec := e.admin(http.MethodPut, "/api/admin/spaces/vault/enc/checkpoint", []byte("latest-cp")); rec.Code != http.StatusNoContent {
+		t.Fatalf("PUT checkpoint: code=%d", rec.Code)
+	}
+
+	// Base checkpoint 404 until the first prune.
+	if rec := e.admin(http.MethodGet, "/api/admin/spaces/vault/enc/checkpoint-base", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("GET checkpoint-base before prune: code=%d, want 404", rec.Code)
+	}
+
+	// Prune up to seq 10, installing the base.
+	base := []byte("prune-base-bytes")
+	rec = e.admin(http.MethodPost, "/api/admin/spaces/vault/enc/ops/prune?upTo=10", base)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST prune: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &fr)
+	if fr.Floor != 10 {
+		t.Fatalf("prune floor = %d, want 10", fr.Floor)
+	}
+
+	// Floor now served as 10; base retrievable; ops start at seq 11.
+	rec = e.admin(http.MethodGet, "/api/admin/spaces/vault/enc/ops/floor", nil)
+	_ = json.Unmarshal(rec.Body.Bytes(), &fr)
+	if fr.Floor != 10 {
+		t.Fatalf("served floor = %d, want 10", fr.Floor)
+	}
+	if rec := e.admin(http.MethodGet, "/api/admin/spaces/vault/enc/checkpoint-base", nil); rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), base) {
+		t.Fatalf("GET checkpoint-base: code=%d bytesEqual=%v", rec.Code, bytes.Equal(rec.Body.Bytes(), base))
+	}
+	rec = e.admin(http.MethodGet, "/api/admin/spaces/vault/enc/ops?since=0", nil)
+	var ops []struct {
+		Seq int64 `json:"seq"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &ops)
+	if len(ops) != 10 || ops[0].Seq != 11 {
+		t.Fatalf("after prune, ListOps(0) = %d ops starting at %d; want 10 starting at 11", len(ops), func() int64 {
+			if len(ops) > 0 {
+				return ops[0].Seq
+			}
+			return -1
+		}())
+	}
+
+	// An empty-body prune is rejected (the base is the sole fallback seed).
+	if rec := e.admin(http.MethodPost, "/api/admin/spaces/vault/enc/ops/prune?upTo=15", []byte{}); rec.Code != http.StatusBadRequest {
+		t.Errorf("empty-body prune: code=%d, want 400", rec.Code)
+	}
+
+	// Enc-prune endpoints 409 on a plaintext space.
+	if rec := e.admin(http.MethodGet, "/api/admin/spaces/alpha/enc/ops/floor", nil); rec.Code != http.StatusConflict {
+		t.Errorf("floor on plaintext space: code=%d, want 409", rec.Code)
+	}
+	if rec := e.admin(http.MethodPost, "/api/admin/spaces/alpha/enc/ops/prune?upTo=1", []byte("b")); rec.Code != http.StatusConflict {
+		t.Errorf("prune on plaintext space: code=%d, want 409", rec.Code)
 	}
 }
 
