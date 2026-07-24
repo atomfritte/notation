@@ -161,7 +161,7 @@ export function FileTree({
         <button
           onClick={onMarkAllSeen}
           className="text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:underline"
-          title="Clear all new-page badges"
+          title="Clear all new/changed badges"
         >
           mark all seen
         </button>
@@ -439,7 +439,7 @@ function DirRow({
         {hasNewDescendant(entry, newPaths) && (
           <span
             className="w-1.5 h-1.5 rounded-full bg-[color:var(--notation-accent)] flex-shrink-0"
-            title="New pages inside"
+            title="New or changed pages inside"
           />
         )}
       </div>
