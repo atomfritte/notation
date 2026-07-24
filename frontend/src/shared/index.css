@@ -398,11 +398,12 @@
   }
 
   /* --- Tables ------------------------------------------------------------ */
+  article.prose .prose-table-frame { margin: 1.1em 0 !important; }
   article.prose .prose-table-wrap {
     border: 0 !important;
     border-radius: 0 !important;
     overflow: visible !important;
-    margin: 1.1em 0 !important;
+    margin: 0 !important;
   }
   article.prose table {
     width: 100% !important;
@@ -985,21 +986,98 @@ mark.comment-reaction::after {
    layout — that means short tables stretch their columns to fill the wrap
    (zebra striping reaches the right edge), and wide tables overflow the
    wrap horizontally so it can scroll. */
-.prose .prose-table-wrap {
+.prose .prose-table-frame {
+  position: relative;
   margin: 1.6em 0;
+}
+.prose .prose-table-wrap {
   border: 1px solid var(--notation-border);
   border-radius: 8px;
-  overflow-x: auto;
 }
 .prose .prose-table-wrap table {
   width: 100%;
-  min-width: max-content;
   margin: 0;
   font-size: 0.9em;
   border: 0;
   border-radius: 0;
   border-collapse: separate;
   border-spacing: 0;
+}
+/* Full-width mode: natural column widths, scroll sideways (better for wide
+   numeric tables). */
+.prose .prose-table-wrap.mode-wide {
+  overflow-x: auto;
+}
+.prose .prose-table-wrap.mode-wide table {
+  min-width: max-content;
+}
+/* Fit mode (default): the table fits the page; long cell content wraps so
+   nothing scrolls sideways. */
+.prose .prose-table-wrap.mode-fit {
+  overflow-x: clip;
+}
+.prose .prose-table-wrap.mode-fit table {
+  min-width: 0;
+  table-layout: auto;
+}
+.prose .prose-table-wrap.mode-fit th,
+.prose .prose-table-wrap.mode-fit td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Per-table toolbar (view-mode toggle + copy/download), top-right, revealed on
+   hover / focus, always visible on touch, never printed. */
+.prose .prose-table-frame .table-tools {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--notation-bg-elevated), transparent 6%);
+  border: 1px solid var(--notation-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.prose .prose-table-frame:hover .table-tools,
+.prose .prose-table-frame:focus-within .table-tools {
+  opacity: 1;
+}
+@media (hover: none) {
+  .prose .prose-table-frame .table-tools { opacity: 1; }
+}
+.prose .prose-table-frame .table-tools button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 5px;
+  color: var(--notation-fg-muted);
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+.prose .prose-table-frame .table-tools button:hover {
+  background: var(--notation-border);
+  color: var(--notation-fg);
+}
+.prose .prose-table-frame .table-tools button[aria-pressed='true'] {
+  background: var(--notation-accent-15);
+  color: var(--color-lime-600);
+}
+.dark .prose .prose-table-frame .table-tools button[aria-pressed='true'] {
+  color: var(--notation-accent);
+}
+.prose .prose-table-frame .table-tools .table-tools-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 1px;
+  background: var(--notation-border);
 }
 .prose table thead {
   background-color: color-mix(in srgb, var(--notation-bg-elevated), var(--notation-border) 40%);
