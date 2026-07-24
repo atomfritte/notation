@@ -30,7 +30,8 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
   const [fetched, setFetched] = useState<api.AllCommentItem[]>([])
   const [loading, setLoading] = useState(!clientMode)
   const [err, setErr] = useState<string | null>(null)
-  const comments = clientMode ? items : fetched
+  // Emoji reactions are inline markers, not thread entries — exclude them here.
+  const comments = (clientMode ? items : fetched).filter(c => !c.emoji)
 
   function reload() {
     if (clientMode) return

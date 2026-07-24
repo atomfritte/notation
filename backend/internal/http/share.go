@@ -277,6 +277,15 @@ type postCommentReq struct {
 	Text     string        `json:"text"`
 	ParentID string        `json:"parent_id,omitempty"`
 	Anchor   *share.Anchor `json:"anchor,omitempty"`
+	// Emoji makes this an anchored reaction (no text). Capped tight so it can't
+	// carry a payload — a single emoji (incl. ZWJ sequences) fits in 32 bytes.
+	Emoji string `json:"emoji,omitempty"`
+}
+
+// commentContentInvalid reports whether a comment request has neither text nor a
+// (short-enough) emoji — used by both the admin and share post handlers.
+func commentContentInvalid(text, emoji string) bool {
+	return strings.TrimSpace(text) == "" && strings.TrimSpace(emoji) == "" || len(emoji) > 32
 }
 
 func (h *shareHandlers) postComment(w http.ResponseWriter, r *http.Request) {
@@ -305,14 +314,15 @@ func (h *shareHandlers) postComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if strings.TrimSpace(req.Text) == "" {
-		writeError(w, http.StatusBadRequest, "text required")
+	if commentContentInvalid(req.Text, req.Emoji) {
+		writeError(w, http.StatusBadRequest, "text or emoji required")
 		return
 	}
 	c, err := h.comments.Add(spaceID, upath, actor(sh), share.CommentInput{
 		Text:     req.Text,
 		ParentID: req.ParentID,
 		Anchor:   req.Anchor,
+		Emoji:    req.Emoji,
 	})
 	if err != nil {
 		writeCommentError(w, err)

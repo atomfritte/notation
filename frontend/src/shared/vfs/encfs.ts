@@ -662,10 +662,11 @@ export class EncryptedFS implements SpaceFS {
    */
   async addComment(
     nodeId: string,
-    input: { text: string; author: string; parentId?: string; anchor?: CommentAnchor; createdAt?: string },
+    input: { text: string; author: string; parentId?: string; anchor?: CommentAnchor; createdAt?: string; emoji?: string },
   ): Promise<EncComment> {
     const text = input.text.trim()
-    if (!text) throw new VfsError('vfs: comment text required')
+    const emoji = input.emoji?.trim() || undefined
+    if (!text && !emoji) throw new VfsError('vfs: comment text or emoji required')
     if (input.parentId) {
       const parent = this.commentLog.materialize().find((c) => c.id === input.parentId)
       if (!parent) throw new VfsCommentError('parent comment not found')
@@ -681,6 +682,7 @@ export class EncryptedFS implements SpaceFS {
       author: input.author,
       text,
       anchor: input.anchor,
+      emoji,
     }
     await this.commitComment(this.mkCommentAdd(comment))
     return comment

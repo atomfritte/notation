@@ -21,6 +21,7 @@ export function toCommentItem(c: EncComment): CommentItem {
     author: c.author,
     text: c.text,
     anchor: c.anchor,
+    emoji: c.emoji,
   }
 }
 

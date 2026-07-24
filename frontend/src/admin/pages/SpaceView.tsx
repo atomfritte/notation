@@ -191,6 +191,10 @@ export function SpaceView() {
   
   const [comments, setComments] = useState<api.CommentItem[]>([])
   const [allComments, setAllComments] = useState<api.AllCommentItem[]>([])
+  // Emoji reactions ride the comment list but are pure inline markers — exclude
+  // them from the thread panel + badges (they still render as marks in the body).
+  const textComments = useMemo(() => comments.filter(c => !c.emoji), [comments])
+  const textAllComments = useMemo(() => allComments.filter(c => !c.emoji), [allComments])
   // Bumping this triggers re-fetch in AllCommentsPanel (after add/delete).
   const [allCommentsRefresh, setAllCommentsRefresh] = useState(0)
   const [showComments, setShowComments] = useState(false)
@@ -783,6 +787,26 @@ export function SpaceView() {
     setAllCommentsRefresh(v => v + 1)
   }
 
+  // An emoji reaction: an anchored comment with an emoji and no text, pinned to
+  // the selected passage. Rides the same (encrypted) op-log as comments.
+  const handleAddReaction = async (anchor: api.CommentAnchor, emoji: string) => {
+    if (!spaceID || !file) return
+    try {
+      if (encryptedRef.current) {
+        const fs = fsRef.current
+        const nodeId = fs?.idAt(file)
+        if (!fs || !nodeId) throw new Error('space is locked or file not found')
+        await fs.addComment(nodeId, { text: '', emoji, author: commentAuthor, anchor })
+      } else {
+        await api.postComment(spaceID, file, '', { anchor, emoji })
+      }
+      refreshComments()
+      setAllCommentsRefresh(v => v + 1)
+    } catch (e) {
+      setErr(String(e))
+    }
+  }
+
   function onNewAnchorComment(anchor: api.CommentAnchor) {
     setPendingAnchor(anchor)
     setShowComments(true)
@@ -1075,7 +1099,7 @@ export function SpaceView() {
   if (isMarkdownFile(file) && !isForm) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
   if (!isForm && !encrypted) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { setHistoryMode(v => !v); setEditing(false) } })
   if (!isForm) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove favorite' : 'Add favorite', icon: <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />, active: isBookmarked, onClick: () => toggleBookmark(file) })
-  if (!isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: comments.length, onClick: () => setShowComments(v => !v) })
+  if (!isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: textComments.length, onClick: () => setShowComments(v => !v) })
   if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={18} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
   if (isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={18} />, onClick: () => window.print() })
   // Whole-space PDF — sibling of the single-page print; available for any space.
@@ -1173,7 +1197,7 @@ export function SpaceView() {
               active={sidebarTab}
               onPick={setSidebarTab}
               badges={{
-                comments: allComments.length,
+                comments: textAllComments.length,
                 bookmarks: bookmarks.length,
               }}
               // Encrypted spaces expose the client-side tabs plus Comments
@@ -1636,6 +1660,7 @@ export function SpaceView() {
                           setActiveCommentId(id)
                         }}
                         onNewAnchorComment={onNewAnchorComment}
+                        onNewReaction={handleAddReaction}
                         files={allFilesAny}
                         currentFile={file}
                         navFiles={allFiles}
@@ -1713,7 +1738,7 @@ export function SpaceView() {
               )}
               <div className="flex-1 overflow-y-auto bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/50">
                  <CommentThread
-                   comments={comments}
+                   comments={textComments}
                    canAdd={true}
                    initialText={pendingComment}
                    activeID={activeCommentId}

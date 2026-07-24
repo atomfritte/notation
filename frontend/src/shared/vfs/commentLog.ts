@@ -49,10 +49,13 @@ export interface EncComment {
   createdAt: string
   /** Display name of the author (the unlocked admin, client-supplied). */
   author: string
-  /** The comment body. */
+  /** The comment body. Empty for a reaction (see {@link emoji}). */
   text: string
   /** Optional text-range anchor. */
   anchor?: CommentAnchor
+  /** When set, this is an anchored REACTION (a single emoji pinned to a passage)
+   *  rather than a text comment: rendered as an emoji marker, never a thread. */
+  emoji?: string
 }
 
 /** Append a comment. */

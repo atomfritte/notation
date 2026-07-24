@@ -33,12 +33,16 @@ type Comment struct {
 	Author    string    `json:"author"`
 	Text      string    `json:"text"`
 	Anchor    *Anchor   `json:"anchor,omitempty"`
+	// Emoji marks this entry as an anchored REACTION rather than a text comment:
+	// a single emoji pinned to a passage, with no thread. When set, Text is empty.
+	Emoji string `json:"emoji,omitempty"`
 }
 
 type CommentInput struct {
 	Text     string
 	ParentID string
 	Anchor   *Anchor
+	Emoji    string
 }
 
 var (
@@ -133,6 +137,7 @@ func (c *CommentStore) Add(spaceID, filePath, author string, in CommentInput) (C
 		Author:    author,
 		Text:      strings.TrimSpace(in.Text),
 		Anchor:    in.Anchor,
+		Emoji:     in.Emoji,
 	}
 	list = append(list, nc)
 	if err := c.save(spaceID, list); err != nil {

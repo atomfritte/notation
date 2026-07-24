@@ -442,6 +442,8 @@ export type CommentItem = {
   author: string
   text: string
   anchor?: CommentAnchor
+  /** Set when this is an anchored emoji reaction (no text). */
+  emoji?: string
 }
 
 // URL builders shared by the fetchers + offline sync, so the cached URL is
@@ -492,7 +494,7 @@ export const postComment = (
   id: string,
   path: string,
   text: string,
-  opts: { parentID?: string; anchor?: CommentAnchor } = {},
+  opts: { parentID?: string; anchor?: CommentAnchor; emoji?: string } = {},
 ) =>
   fetchJSON<CommentItem>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/${encodePath(path)}`, {
     method: 'POST',
@@ -501,6 +503,7 @@ export const postComment = (
       text,
       parent_id: opts.parentID,
       anchor: opts.anchor,
+      emoji: opts.emoji,
     }),
   })
 

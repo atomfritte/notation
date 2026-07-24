@@ -95,6 +95,8 @@ export type Comment = {
   author: string
   text: string
   anchor?: CommentAnchor
+  /** Set when this is an anchored emoji reaction (no text). */
+  emoji?: string
 }
 
 function tokenFromPath(): string {
@@ -191,7 +193,7 @@ export async function uploadFormImage(folder: string, blob: Blob): Promise<strin
 export async function postComment(
   path: string,
   text: string,
-  opts: { parentID?: string; anchor?: CommentAnchor } = {},
+  opts: { parentID?: string; anchor?: CommentAnchor; emoji?: string } = {},
 ): Promise<Comment> {
   const r = await fetch(`${API}/comments/${encodePath(path)}`, {
     method: 'POST',
@@ -200,6 +202,7 @@ export async function postComment(
       text,
       parent_id: opts.parentID,
       anchor: opts.anchor,
+      emoji: opts.emoji,
     }),
   })
   if (!r.ok) throw await asError(r)

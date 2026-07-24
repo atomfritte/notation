@@ -8,7 +8,7 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
-import { MessageSquare } from 'lucide-react'
+import { MessageSquare, Smile } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
 import { buildFileIndex, resolveTarget as resolveWikiTarget } from '../lib/wikiLinks'
@@ -62,7 +62,12 @@ type CommentLite = {
   text?: string
   author?: string
   created_at?: string
+  /** Set when this is an anchored emoji reaction — rendered as an emoji marker. */
+  emoji?: string
 }
+
+/** Quick-pick reactions in the selection toolbar (plus free emoji entry). */
+const QUICK_EMOJIS = ['❤️', '👍', '⭐', '🔥', '😂', '🎉', '🤔', '✅'] as const
 
 type Props = {
   content: string
@@ -78,6 +83,8 @@ type Props = {
   /** Called when the user selects text in the viewer and clicks the "Comment"
    *  toolbar. Receives a text-quote selector payload. */
   onNewAnchorComment?: (anchor: AnchorPayload) => void
+  /** Called when the user picks an emoji reaction for a text selection. */
+  onNewReaction?: (anchor: AnchorPayload, emoji: string) => void
   /** All paths in the Space — when present, prose mentions of any of these
    *  filenames get a small `[File]` link badge appended next to them. Also
    *  powers link resolution: relative / wiki-link targets are matched against
@@ -110,6 +117,7 @@ export function MarkdownView({
   onHoverMark,
   onSelectAnchor,
   onNewAnchorComment,
+  onNewReaction,
   files,
   currentFile,
   navFiles,
@@ -161,6 +169,10 @@ export function MarkdownView({
     return buildAutoFileLink({ files, currentFile })
   }, [files, currentFile])
   const [tool, setTool] = useState<{ x: number; y: number; anchor: AnchorPayload } | null>(null)
+  // Whether the selection toolbar is showing its emoji-reaction picker.
+  const [reacting, setReacting] = useState(false)
+  // Reset the picker whenever the selection (and thus the toolbar) changes.
+  useEffect(() => { setReacting(false) }, [tool])
   const [hoverTip, setHoverTip] = useState<
     { x: number; y: number; comment: CommentLite } | null
   >(null)
@@ -222,7 +234,7 @@ export function MarkdownView({
   // Listen for selection changes inside the article and surface the toolbar.
   useEffect(() => {
     function update() {
-      if (!onNewAnchorComment || !articleRef.current) return
+      if ((!onNewAnchorComment && !onNewReaction) || !articleRef.current) return
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
         setTool(null)
@@ -262,7 +274,7 @@ export function MarkdownView({
       document.removeEventListener('selectionchange', update)
       document.removeEventListener('mousedown', clear)
     }
-  }, [onNewAnchorComment])
+  }, [onNewAnchorComment, onNewReaction])
 
   // Hover / click interactions on rendered marks.
   useEffect(() => {
@@ -615,21 +627,64 @@ export function MarkdownView({
         </nav>
       )}
 
-      {tool && onNewAnchorComment && (
+      {tool && (onNewAnchorComment || onNewReaction) && (
         <div
           className="selection-toolbar"
           style={{ left: tool.x, top: tool.y }}
           onMouseDown={e => e.preventDefault()}
         >
-          <button
-            onClick={() => {
-              onNewAnchorComment(tool.anchor)
-              window.getSelection()?.removeAllRanges()
-              setTool(null)
-            }}
-          >
-            <MessageSquare size={12} /> Comment
-          </button>
+          {reacting && onNewReaction ? (
+            <div className="reaction-picker">
+              {QUICK_EMOJIS.map(em => (
+                <button
+                  key={em}
+                  className="reaction-emoji"
+                  title={`React ${em}`}
+                  onClick={() => {
+                    onNewReaction(tool.anchor, em)
+                    window.getSelection()?.removeAllRanges()
+                    setTool(null)
+                  }}
+                >
+                  {em}
+                </button>
+              ))}
+              <input
+                className="reaction-custom"
+                placeholder="🙂"
+                maxLength={8}
+                aria-label="Custom emoji"
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key !== 'Enter') return
+                  const em = (e.currentTarget.value || '').trim()
+                  if (!em) return
+                  onNewReaction(tool.anchor, em)
+                  window.getSelection()?.removeAllRanges()
+                  setTool(null)
+                }}
+              />
+            </div>
+          ) : (
+            <>
+              {onNewAnchorComment && (
+                <button
+                  onClick={() => {
+                    onNewAnchorComment(tool.anchor)
+                    window.getSelection()?.removeAllRanges()
+                    setTool(null)
+                  }}
+                >
+                  <MessageSquare size={12} /> Comment
+                </button>
+              )}
+              {onNewReaction && (
+                <button onClick={() => setReacting(true)} title="Add an emoji reaction">
+                  <Smile size={12} /> React
+                </button>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -922,7 +977,7 @@ function applyAnchorMarks(article: HTMLElement, comments: CommentLite[]) {
     if (!c.anchor) continue
     const range = findAnchorRange(article, c.anchor)
     if (!range) continue
-    wrapRangeWithMark(range, c.id)
+    wrapRangeWithMark(range, c.id, c.emoji)
   }
 }
 
@@ -985,20 +1040,26 @@ function rangeForOffsets(root: HTMLElement, start: number, end: number): Range |
 
 // Make a comment-anchor mark focusable + semantic so keyboard / screen-reader
 // users can reach it (Enter/Space opens its thread — see the interaction effect).
-function newAnchorMark(commentID: string): HTMLElement {
+function newAnchorMark(commentID: string, emoji?: string): HTMLElement {
   const m = document.createElement('mark')
-  m.className = 'comment-anchor'
+  m.className = emoji ? 'comment-anchor comment-reaction' : 'comment-anchor'
   m.dataset.commentId = commentID
   m.tabIndex = 0
   m.setAttribute('role', 'button')
-  m.setAttribute('aria-label', 'Open comment on this passage')
+  if (emoji) {
+    // Rendered as a trailing badge via CSS `content: attr(data-emoji)`.
+    m.dataset.emoji = emoji
+    m.setAttribute('aria-label', `Reaction ${emoji} on this passage`)
+  } else {
+    m.setAttribute('aria-label', 'Open comment on this passage')
+  }
   return m
 }
 
-function wrapRangeWithMark(range: Range, commentID: string) {
+function wrapRangeWithMark(range: Range, commentID: string, emoji?: string) {
   // Easy case: range within a single text node → surroundContents works cleanly.
   if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
-    const m = newAnchorMark(commentID)
+    const m = newAnchorMark(commentID, emoji)
     try {
       range.surroundContents(m)
     } catch {
@@ -1031,7 +1092,8 @@ function wrapRangeWithMark(range: Range, commentID: string) {
       } else {
         sub.setEnd(n, (n.textContent ?? '').length)
       }
-      sub.surroundContents(newAnchorMark(commentID))
+      // Only the last slice carries the emoji badge, so it renders once.
+      sub.surroundContents(newAnchorMark(commentID, i === candidates.length - 1 ? emoji : undefined))
     } catch {
       /* skip slivers we can't wrap */
     }
