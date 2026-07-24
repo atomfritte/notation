@@ -2,18 +2,23 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Entry } from './api'
 
 /**
- * New-page tracking for the sidebar tree: a page is "new" when it appeared in
- * the tree after this client last saw the space, and stays badged until it is
- * opened (or "mark all seen"). Form folders count as new when their submission
- * count grows, so incoming form entries are spottable too.
+ * New/edited-page tracking for the sidebar tree: a page is badged when it
+ * appeared, OR changed, since this client last saw the space — so imports and
+ * MCP/agent edits are both spottable. It stays badged until the page is opened
+ * (or "mark all seen"). Form folders badge when their submission count grows.
  *
- * The registry of seen paths lives in localStorage per space (admin) or per
- * share link — it's a per-device reading aid, never round-tripped to the
- * server. First visit on a device seeds the registry with the current tree so
- * a fresh browser doesn't badge every page at once.
+ * Edit detection compares a per-file SIGNATURE (server mtime + size). Encrypted
+ * spaces have no signature (content edits overwrite the ciphertext blob without
+ * touching the op-log/tree, so there's no cheap change signal) — they get
+ * new-page badges only. MCP is sealed for encrypted spaces anyway, so the
+ * edit-badge use case is inherently a plaintext one.
  *
- * Encrypted spaces pass a {@link NodeIdCodec} so the registry is PERSISTED as
- * opaque nodeIds, never cleartext paths — otherwise a stolen browser profile
+ * The registry lives in localStorage per space (admin) / per share link — a
+ * per-device reading aid, never round-tripped. First visit seeds from the
+ * current tree so a fresh browser doesn't badge everything at once.
+ *
+ * Encrypted spaces pass a {@link NodeIdCodec} so the registry is PERSISTED by
+ * opaque nodeId, never cleartext paths — otherwise a stolen browser profile
  * (without the key) could read the file structure from localStorage. In memory
  * the registry is always path-based; the codec only maps at the storage edge.
  */
@@ -24,19 +29,26 @@ export type NodeIdCodec = {
   decode: (id: string) => string | undefined
 }
 
+/** Per-file change signature (mtime|size); '' when unavailable (encrypted). */
+type FileMap = Record<string, string>
+
 type Registry = {
-  files: string[]
+  files: FileMap
   // form folder path -> last seen submission count
   forms: Record<string, number>
 }
 
-type Snapshot = {
-  files: string[]
-  forms: Record<string, number>
+type Snapshot = Registry
+
+/** The change signature of a file — its server mtime + size. Empty for
+ *  encrypted spaces (fsToEntries leaves modified/size blank), which disables
+ *  edit detection there. */
+function sigOf(e: Entry): string {
+  return e.modified ? `${e.modified}|${e.size}` : ''
 }
 
 function collectSnapshot(tree: Entry[]): Snapshot {
-  const files: string[] = []
+  const files: FileMap = {}
   const forms: Record<string, number> = {}
   const walk = (entries: Entry[]) => {
     for (const e of entries) {
@@ -45,7 +57,7 @@ function collectSnapshot(tree: Entry[]): Snapshot {
       } else if (e.is_dir) {
         if (e.children) walk(e.children)
       } else {
-        files.push(e.path)
+        files[e.path] = sigOf(e)
       }
     }
   }
@@ -54,20 +66,29 @@ function collectSnapshot(tree: Entry[]): Snapshot {
 }
 
 /** Exported for tests: reads the registry, decoding nodeIds → paths when a
- *  codec is given (encrypted spaces). */
+ *  codec is given (encrypted spaces). Tolerates the legacy `files: string[]`
+ *  format (no signatures) by treating every entry's signature as unknown (''),
+ *  so nothing false-flags as edited right after the format change. */
 export function loadRegistry(key: string, codec?: NodeIdCodec): Registry | null {
   try {
     const raw = localStorage.getItem(key)
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    if (!parsed || !Array.isArray(parsed.files)) return null
-    if (!codec) return { files: parsed.files, forms: parsed.forms ?? {} }
-    // Encrypted: stored as nodeIds → resolve to paths, dropping any that no
+    if (!parsed) return null
+    const rawFiles: FileMap | null = Array.isArray(parsed.files)
+      ? Object.fromEntries((parsed.files as string[]).map((p) => [p, '']))
+      : parsed.files && typeof parsed.files === 'object'
+        ? (parsed.files as FileMap)
+        : null
+    if (!rawFiles) return null
+    const rawForms: Record<string, number> = parsed.forms ?? {}
+    if (!codec) return { files: rawFiles, forms: rawForms }
+    // Encrypted: keys are nodeIds → resolve to paths, dropping any that no
     // longer exist in the tree.
-    const files: string[] = []
-    for (const id of parsed.files as string[]) { const p = codec.decode(id); if (p) files.push(p) }
+    const files: FileMap = {}
+    for (const [id, sig] of Object.entries(rawFiles)) { const p = codec.decode(id); if (p) files[p] = sig }
     const forms: Record<string, number> = {}
-    for (const [id, count] of Object.entries(parsed.forms ?? {})) { const p = codec.decode(id); if (p) forms[p] = count as number }
+    for (const [id, count] of Object.entries(rawForms)) { const p = codec.decode(id); if (p) forms[p] = count as number }
     return { files, forms }
   } catch {
     return null
@@ -80,9 +101,8 @@ export function saveRegistry(key: string, reg: Registry, codec?: NodeIdCodec) {
   try {
     let out: Registry = reg
     if (codec) {
-      // Encrypted: persist opaque nodeIds, never cleartext paths.
-      const files: string[] = []
-      for (const p of reg.files) { const id = codec.encode(p); if (id) files.push(id) }
+      const files: FileMap = {}
+      for (const [p, sig] of Object.entries(reg.files)) { const id = codec.encode(p); if (id) files[id] = sig }
       const forms: Record<string, number> = {}
       for (const [p, count] of Object.entries(reg.forms)) { const id = codec.encode(p); if (id) forms[id] = count }
       out = { files, forms }
@@ -91,12 +111,17 @@ export function saveRegistry(key: string, reg: Registry, codec?: NodeIdCodec) {
   } catch { /* quota / private mode — badges just won't persist */ }
 }
 
-/** Pure diff: which current paths does the registry not know yet? Exported
- *  for tests. */
+/** Pure diff: which current paths are NEW (unknown) or EDITED (known but the
+ *  signature changed)? A signature change only counts when BOTH the remembered
+ *  and current signatures are known (non-empty), so a legacy '' registry and
+ *  encrypted spaces never false-flag edits. Exported for tests. */
 export function diffNewPaths(reg: Registry, snap: Snapshot): Set<string> {
-  const known = new Set(reg.files)
   const out = new Set<string>()
-  for (const f of snap.files) if (!known.has(f)) out.add(f)
+  for (const [p, sig] of Object.entries(snap.files)) {
+    const prev = reg.files[p]
+    if (prev === undefined) out.add(p) // new
+    else if (prev && sig && prev !== sig) out.add(p) // edited
+  }
   for (const [p, count] of Object.entries(snap.forms)) {
     const prev = reg.forms[p]
     if (prev === undefined || count > prev) out.add(p)
@@ -104,13 +129,13 @@ export function diffNewPaths(reg: Registry, snap: Snapshot): Set<string> {
   return out
 }
 
-/** Pure: registry after marking one path (file or form folder) seen. Also
- *  prunes registry entries whose path vanished from the tree, so renames and
- *  deletes don't accumulate. Exported for tests. */
+/** Pure: registry after marking one path (file or form folder) seen — records
+ *  its current signature so a later edit re-badges it. Also prunes registry
+ *  entries whose path vanished from the tree. Exported for tests. */
 export function registryMarkSeen(reg: Registry, path: string, snap: Snapshot): Registry {
-  const live = new Set(snap.files)
-  const files = reg.files.filter(f => live.has(f))
-  if (live.has(path) && !files.includes(path)) files.push(path)
+  const files: FileMap = {}
+  for (const [p, sig] of Object.entries(reg.files)) if (p in snap.files) files[p] = sig
+  if (path in snap.files) files[path] = snap.files[path]
   const forms: Record<string, number> = {}
   for (const [p, prev] of Object.entries(reg.forms)) {
     if (p in snap.forms) forms[p] = prev
@@ -142,6 +167,24 @@ export function useNewPages(
     setReg(seeded)
     saveRegistry(storageKey, seeded, codec)
   }, [storageKey, reg, tree.length, snapshot, codec])
+
+  // Backfill signatures for a registry that predates edit-detection (legacy
+  // format, or an entry seeded before a signature was available): adopt the
+  // current signature as "seen" so edit detection activates from the NEXT change
+  // instead of false-flagging the current state. Fires at most once per gap.
+  useEffect(() => {
+    if (!storageKey || !reg || tree.length === 0) return
+    let changed = false
+    const files = { ...reg.files }
+    for (const [p, sig] of Object.entries(snapshot.files)) {
+      if (files[p] === '' && sig) { files[p] = sig; changed = true }
+    }
+    if (changed) {
+      const next: Registry = { files, forms: reg.forms }
+      setReg(next)
+      saveRegistry(storageKey, next, codec)
+    }
+  }, [storageKey, reg, snapshot, tree.length, codec])
 
   const newPaths = useMemo(() => {
     if (!storageKey || !reg || tree.length === 0) return new Set<string>()

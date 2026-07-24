@@ -24,25 +24,30 @@ beforeEach(() => {
 
 describe('new-page registry — encrypted keying', () => {
   it('persists nodeIds, never cleartext paths, and round-trips back to paths', () => {
-    saveRegistry('k', { files: ['notes/secret.md', 'readme.md'], forms: {} }, codec)
+    saveRegistry('k', { files: { 'notes/secret.md': '', 'readme.md': '' }, forms: {} }, codec)
     const raw = localStorage.getItem('k')!
     // The secret path must not appear in localStorage; the opaque nodeId does.
     expect(raw).not.toContain('secret')
     expect(raw).not.toContain('notes')
     expect(raw).toContain('n1a2b3')
     // Reading back resolves nodeIds → paths.
-    expect(loadRegistry('k', codec)).toEqual({ files: ['notes/secret.md', 'readme.md'], forms: {} })
+    expect(loadRegistry('k', codec)).toEqual({ files: { 'notes/secret.md': '', 'readme.md': '' }, forms: {} })
   })
 
   it('drops entries whose nodeId no longer resolves (deleted file)', () => {
-    localStorage.setItem('k', JSON.stringify({ files: ['n1a2b3', 'gone999'], forms: {} }))
-    expect(loadRegistry('k', codec)).toEqual({ files: ['notes/secret.md'], forms: {} })
+    localStorage.setItem('k', JSON.stringify({ files: { n1a2b3: '', gone999: '' }, forms: {} }))
+    expect(loadRegistry('k', codec)).toEqual({ files: { 'notes/secret.md': '' }, forms: {} })
   })
 
   it('plaintext spaces (no codec) keep storing paths as-is', () => {
-    saveRegistry('k', { files: ['notes/secret.md'], forms: {} })
+    saveRegistry('k', { files: { 'notes/secret.md': 'm1' }, forms: {} })
     expect(localStorage.getItem('k')).toContain('notes/secret.md')
-    expect(loadRegistry('k')).toEqual({ files: ['notes/secret.md'], forms: {} })
+    expect(loadRegistry('k')).toEqual({ files: { 'notes/secret.md': 'm1' }, forms: {} })
+  })
+
+  it('reads the legacy string[] file format (no signatures)', () => {
+    localStorage.setItem('k', JSON.stringify({ files: ['readme.md', 'notes/a.md'], forms: {} }))
+    expect(loadRegistry('k')).toEqual({ files: { 'readme.md': '', 'notes/a.md': '' }, forms: {} })
   })
 })
 
