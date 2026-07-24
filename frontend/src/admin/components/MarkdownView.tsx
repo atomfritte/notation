@@ -336,25 +336,40 @@ export function MarkdownView({
   // registered earlier, so its rAF (which inserts the marks) runs before this
   // one (which finds and scrolls to them) in the same frame.
   useEffect(() => {
-    const article = articleRef.current
-    if (!article) return
-    const frame = requestAnimationFrame(() => {
-      article.querySelectorAll<HTMLElement>('mark.comment-anchor').forEach(m => {
+    const setActive = () => {
+      articleRef.current?.querySelectorAll<HTMLElement>('mark.comment-anchor').forEach(m => {
         m.dataset.active = m.dataset.commentId === activeCommentID ? 'true' : 'false'
       })
-      if (!activeCommentID) return
+    }
+    setActive()
+    if (!activeCommentID) return
+    // Retry until the target mark is in the DOM: opening a comment from the
+    // panel navigates to another page whose document must load, render, and —
+    // for encrypted spaces — decrypt before applyAnchorMarks runs, so the mark
+    // often isn't there on the first frame. Poll briefly (a few hundred ms of
+    // async decode is well within reach) instead of relying on effect timing.
+    let cancelled = false
+    let tries = 0
+    const attempt = () => {
+      if (cancelled) return
+      const article = articleRef.current
+      if (!article) return
+      setActive()
       const marks = article.querySelectorAll<HTMLElement>(
         `mark.comment-anchor[data-comment-id="${CSS.escape(activeCommentID)}"]`,
       )
-      if (marks.length === 0) return
-      // Scroll the first matching mark roughly into the middle of the viewport.
-      marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' })
-      marks.forEach(m => {
-        m.classList.add('comment-anchor-blink')
-        window.setTimeout(() => m.classList.remove('comment-anchor-blink'), 1400)
-      })
-    })
-    return () => cancelAnimationFrame(frame)
+      if (marks.length > 0) {
+        marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' })
+        marks.forEach(m => {
+          m.classList.add('comment-anchor-blink')
+          window.setTimeout(() => m.classList.remove('comment-anchor-blink'), 1400)
+        })
+        return
+      }
+      if (tries++ < 40) window.setTimeout(attempt, 50) // up to ~2s, then give up
+    }
+    const frame = requestAnimationFrame(attempt)
+    return () => { cancelled = true; cancelAnimationFrame(frame) }
   }, [activeCommentID, comments, content])
 
   // Horizontal swipe (touch only) flips to the prev/next page. Guards keep it
