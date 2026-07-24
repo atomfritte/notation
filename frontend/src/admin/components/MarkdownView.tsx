@@ -8,9 +8,10 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
-import { MessageSquare, Smile } from 'lucide-react'
+import { MessageSquare, Smile, Minimize2, Maximize2, Copy, Check, Download } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { remarkWikiLink } from '../lib/remarkWikiLink'
+import { tableToRows, toCSV } from '../lib/tableExport'
 import { buildFileIndex, resolveTarget as resolveWikiTarget } from '../lib/wikiLinks'
 import { buildAutoFileLink } from '../lib/remarkAutoFileLink'
 import { Mermaid } from './Mermaid'
@@ -451,16 +452,11 @@ export function MarkdownView({
             [rehypeHighlight, { detect: true, ignoreMissing: true }],
           ]}
           components={{
-            // Wrap every table in a div + thin sortable shim. The wrap div
-            // handles horizontal scroll on overflow + outer border / radius;
-            // SortableTable below attaches click-to-sort handlers to each
-            // <th> after mount. Styling for both lives in shared/index.css
-            // under `.prose-table-wrap`.
-            table: ({ node, ...props }) => (
-              <div className="prose-table-wrap">
-                <SortableTable {...props} />
-              </div>
-            ),
+            // Wrap every table in a TableFrame: a view-mode toggle (fit-to-page
+            // by default vs. full-width scroll) + copy/download tools in a
+            // top-right bar, plus the click-to-sort SortableTable. Styling lives
+            // in shared/index.css under `.prose-table-wrap`.
+            table: ({ node, ...props }) => <TableFrame {...props} />,
             a: ({ href, children, className, ...rest }) => {
               if (!href) {
                 return (
@@ -816,6 +812,77 @@ function SortableTable(props: React.HTMLAttributes<HTMLTableElement>) {
 
   return <table ref={ref} {...props} />
 }
+
+/**
+ * TableFrame — wraps a rendered markdown table with a top-right toolbar:
+ *   - View mode: "fit" (default — the table fits the page width, cells wrap so
+ *     nothing scrolls sideways) vs. "wide" (natural column widths, horizontal
+ *     scroll — the old behaviour, better for wide numeric tables).
+ *   - Tools: copy the table as CSV to the clipboard, or download it as a .csv.
+ * The toolbar is hidden until hover/focus (always shown on touch) and never
+ * prints. The inner table is still the click-to-sort {@link SortableTable}.
+ */
+function TableFrame(props: React.HTMLAttributes<HTMLTableElement>) {
+  const [mode, setMode] = useState<'fit' | 'wide'>('fit')
+  const [copied, setCopied] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  const rows = () => {
+    const table = wrapRef.current?.querySelector('table')
+    return table ? tableToRows(table) : []
+  }
+  const copyCSV = () => {
+    const csv = toCSV(rows())
+    navigator.clipboard?.writeText(csv).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    }).catch(() => { /* clipboard blocked — ignore */ })
+  }
+  const downloadCSV = () => {
+    const url = URL.createObjectURL(new Blob([toCSV(rows())], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'table.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div ref={wrapRef} className="prose-table-frame">
+      <div className="table-tools no-print" contentEditable={false}>
+        <button
+          type="button"
+          title="Fit table to the page"
+          aria-label="Fit table to the page"
+          aria-pressed={mode === 'fit'}
+          onClick={() => setMode('fit')}
+        >
+          <Minimize2 size={13} />
+        </button>
+        <button
+          type="button"
+          title="Full width (scroll sideways)"
+          aria-label="Full width, scroll sideways"
+          aria-pressed={mode === 'wide'}
+          onClick={() => setMode('wide')}
+        >
+          <Maximize2 size={13} />
+        </button>
+        <span className="table-tools-sep" aria-hidden="true" />
+        <button type="button" title="Copy as CSV" aria-label="Copy table as CSV" onClick={copyCSV}>
+          {copied ? <Check size={13} /> : <Copy size={13} />}
+        </button>
+        <button type="button" title="Download as CSV" aria-label="Download table as CSV" onClick={downloadCSV}>
+          <Download size={13} />
+        </button>
+      </div>
+      <div className={`prose-table-wrap mode-${mode}`}>
+        <SortableTable {...props} />
+      </div>
+    </div>
+  )
+}
+
 
 function sortByColumn(tbody: HTMLTableSectionElement, col: number, asc: boolean) {
   const rows = Array.from(tbody.querySelectorAll(':scope > tr'))
