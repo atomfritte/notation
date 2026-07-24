@@ -936,8 +936,8 @@ func (h *adminHandlers) postComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if strings.TrimSpace(req.Text) == "" {
-		writeError(w, http.StatusBadRequest, "text required")
+	if commentContentInvalid(req.Text, req.Emoji) {
+		writeError(w, http.StatusBadRequest, "text or emoji required")
 		return
 	}
 	author := adminAuthor(r).Name
@@ -945,6 +945,7 @@ func (h *adminHandlers) postComment(w http.ResponseWriter, r *http.Request) {
 		Text:     req.Text,
 		ParentID: req.ParentID,
 		Anchor:   req.Anchor,
+		Emoji:    req.Emoji,
 	})
 	if err != nil {
 		writeCommentError(w, err)

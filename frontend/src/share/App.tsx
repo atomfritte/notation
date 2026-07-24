@@ -91,6 +91,10 @@ function ShareUI() {
   // Every comment in the Space — powers the sidebar "Comments" tab + its badge
   // (only fetched for shares that allow commenting).
   const [allComments, setAllComments] = useState<api.Comment[]>([])
+  // Emoji reactions ride the comment list but are inline markers — exclude them
+  // from the thread panel + badge (they still render as marks in the body).
+  const textComments = useMemo(() => comments.filter(c => !c.emoji), [comments])
+  const textAllComments = useMemo(() => allComments.filter(c => !c.emoji), [allComments])
   const [err, setErr] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const file = searchParams.get('file') ?? ''
@@ -449,6 +453,18 @@ function ShareUI() {
     if (wasAnchored && openedBySelectionRef.current) setShowComments(false)
     if (wasAnchored) openedBySelectionRef.current = false
   }
+  // An anchored emoji reaction (no text) on the selected passage.
+  async function addReaction(anchor: api.CommentAnchor, emoji: string) {
+    if (!file) return
+    try {
+      await api.postComment(file, '', { anchor, emoji })
+      refreshComments()
+      refreshAllComments()
+    } catch (e) {
+      setErr(String(e))
+    }
+  }
+
   // Selecting text and clicking "Comment" reveals the (default-collapsed)
   // comment panel and pre-anchors the new comment to the selection.
   function onNewAnchorComment(anchor: api.CommentAnchor) {
@@ -487,7 +503,7 @@ function ShareUI() {
   const sidebarTabs: { key: 'files' | 'comments' | 'bookmarks'; label: string; icon: React.ReactNode; badge?: number }[] = [
     { key: 'files', label: 'Pages', icon: <Folder size={13} /> },
   ]
-  if (canComment) sidebarTabs.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={13} />, badge: allComments.length })
+  if (canComment) sidebarTabs.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={13} />, badge: textAllComments.length })
   if (features?.bookmarks) sidebarTabs.push({ key: 'bookmarks', label: 'Bookmarks', icon: <Bookmark size={13} />, badge: bookmarks.length })
 
   // Open a page from the Comments tab, focusing the clicked comment.
@@ -615,7 +631,7 @@ function ShareUI() {
           )}
           {canComment && sidebarTab === 'comments' && (
             <ShareCommentsPanel
-              comments={allComments}
+              comments={textAllComments}
               currentFile={file}
               onSelect={openComment}
             />
@@ -747,6 +763,7 @@ function ShareUI() {
                     onHoverMark={setActiveCommentId}
                     onSelectAnchor={setActiveCommentId}
                     onNewAnchorComment={canComment ? onNewAnchorComment : undefined}
+                    onNewReaction={canComment ? addReaction : undefined}
                     files={allFiles}
                     currentFile={file}
                     navFiles={navFiles}
@@ -792,7 +809,7 @@ function ShareUI() {
                       </div>
                     )}
                     <CommentThread
-                      comments={comments}
+                      comments={textComments}
                       canAdd={canComment}
                       initialText={pendingComment}
                       activeID={activeCommentId}

@@ -52,6 +52,31 @@ describe('EncryptedFS comments', () => {
     expect(reloaded.commentsForNode(nodeId).map((c) => c.text).sort()).toEqual(['first', 'second'])
   })
 
+  it('stores an emoji reaction (emoji, no text) and reads it back', async () => {
+    const store = new InMemoryEncStore()
+    const key = await newKey()
+    const fs = await fsWithFile(store, key)
+    const nodeId = fs.idAt('docs/note.md')!
+    await fs.addComment(nodeId, {
+      text: '',
+      emoji: '❤️',
+      author: 'a',
+      anchor: { quote: 'secret note', prefix: '', suffix: '' },
+    })
+    const reloaded = await EncryptedFS.open(store, key, 'B')
+    const c = reloaded.commentsForNode(nodeId)[0]
+    expect(c.emoji).toBe('❤️')
+    expect(c.text).toBe('')
+  })
+
+  it('rejects a comment with neither text nor emoji', async () => {
+    const store = new InMemoryEncStore()
+    const key = await newKey()
+    const fs = await fsWithFile(store, key)
+    const nodeId = fs.idAt('docs/note.md')!
+    await expect(fs.addComment(nodeId, { text: '  ', author: 'a' })).rejects.toThrow()
+  })
+
   it('round-trips a comment anchor (quote/prefix/suffix) through a reload', async () => {
     const store = new InMemoryEncStore()
     const key = await newKey()

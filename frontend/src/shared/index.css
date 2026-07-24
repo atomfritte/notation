@@ -814,6 +814,30 @@ mark.comment-anchor.comment-anchor-blink {
   50%      { background-color: rgba(245, 158, 11, 0.9);  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.6); }
 }
 
+/* Emoji reactions: an anchored passage with an emoji marker (no thread). A
+   rose tint distinguishes it from an amber comment; the emoji renders as a
+   small trailing badge via `content: attr(data-emoji)`. */
+mark.comment-reaction {
+  background-color: rgba(244, 114, 182, 0.18);
+  border-bottom-color: rgba(236, 72, 153, 0.55);
+}
+.dark mark.comment-reaction {
+  background-color: rgba(236, 72, 153, 0.16);
+  border-bottom-color: rgba(236, 72, 153, 0.5);
+}
+mark.comment-reaction:hover,
+mark.comment-reaction[data-active="true"] {
+  background-color: rgba(244, 114, 182, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.6);
+}
+mark.comment-reaction::after {
+  content: attr(data-emoji);
+  font-size: 0.82em;
+  margin-left: 1px;
+  vertical-align: super;
+  line-height: 1;
+}
+
 /* SheetJS sheet_to_html output — give the raw <table> a readable look that
    matches the rest of the app. Borders + zebra striping + readable padding. */
 .sheetjs-table table {
@@ -857,6 +881,25 @@ mark.comment-anchor.comment-anchor-blink {
 }
 .selection-toolbar button {
   @apply px-3 py-1.5 hover:bg-zinc-700 dark:hover:bg-zinc-300 transition-colors cursor-pointer flex items-center gap-1.5 first:rounded-l-md last:rounded-r-md;
+}
+/* Emoji-reaction picker inside the selection toolbar. */
+.selection-toolbar .reaction-picker {
+  @apply flex items-center gap-0.5 px-1;
+}
+.selection-toolbar .reaction-picker .reaction-emoji {
+  @apply px-1 py-1 rounded hover:bg-zinc-700 dark:hover:bg-zinc-300;
+  font-size: 15px;
+  line-height: 1;
+}
+.selection-toolbar .reaction-picker .reaction-custom {
+  @apply ml-0.5 rounded border border-zinc-600 dark:border-zinc-400 bg-transparent text-center;
+  width: 2.4em;
+  padding: 2px 3px;
+  font-size: 15px;
+  color: inherit;
+}
+.selection-toolbar .reaction-picker .reaction-custom::placeholder {
+  @apply text-zinc-400 dark:text-zinc-500;
 }
 
 /* ------- Reader typography (overrides @tailwindcss/typography defaults) -----
