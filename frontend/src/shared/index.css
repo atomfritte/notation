@@ -38,6 +38,7 @@
   /* Chrome surface (sidebar/header/panels). Same as bg-elevated for a uniform
      theme; a split-tone theme sets it apart. See `.surface-elevated`. */
   --notation-chrome-bg: #FAFAFA;
+  --notation-chrome-bg-alt: #F4F4F5;
   --notation-bg-alt: #F4F4F5;
   --notation-fg: #18181B;
   --notation-fg-muted: #71717A;
@@ -77,6 +78,7 @@
   --notation-bg: #0A0A0A;
   --notation-bg-elevated: #111111;
   --notation-chrome-bg: #111111;
+  --notation-chrome-bg-alt: #1F1F23;
   --notation-bg-alt: #1F1F23;
   --notation-fg: #E4E4E7;
   --notation-fg-muted: #A1A1AA;
@@ -601,6 +603,10 @@
    uniform theme the two are the same colour and nothing changes. */
 .surface-elevated {
   --notation-bg-elevated: var(--notation-chrome-bg);
+  /* …and the subtle surface with it, or a chrome panel paints a content-toned
+     row (light) and then writes chrome-toned text (near-white) onto it. That is
+     what made comment cards unreadable in the split-tone themes. */
+  --notation-bg-alt: var(--notation-chrome-bg-alt);
   --notation-fg: var(--notation-fg-on-elevated);
   --notation-fg-muted: var(--notation-fg-on-elevated-muted);
   --notation-border: var(--notation-border-on-elevated);

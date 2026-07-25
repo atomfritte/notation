@@ -293,6 +293,8 @@ function EditTab({
           value={palette.chromeBg} onChange={v => onChangePalette(editMode, { chromeBg: v })} />
         <ColorRow label="Elevated surface" help="Cards, inputs, popovers and viewers inside the content area."
           value={palette.bgElevated} onChange={v => onChangePalette(editMode, { bgElevated: v })} />
+        <ColorRow label="Chrome card / hover" help="Rows, comment cards, inputs and hover states INSIDE chrome. Keep it close to the chrome background — text on it uses the chrome text colour."
+          value={palette.chromeBgAlt} onChange={v => onChangePalette(editMode, { chromeBgAlt: v })} />
         <ColorRow label="Chrome text" help="Primary text painted on the chrome surface."
           value={palette.chromeFg} onChange={v => onChangePalette(editMode, { chromeFg: v })} />
         <ColorRow label="Chrome muted text" help="Captions and hints on the chrome surface."
