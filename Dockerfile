@@ -29,7 +29,7 @@ RUN cd backend \
 # are auto-discovered from /opt/piper/models, so override TTS_VOICES (or mount
 # more *.onnx + *.onnx.json) to add languages/voices. Model paths on HuggingFace
 # are derived from each voice key (locale-name-quality).
-FROM alpine:3.23 AS piper
+FROM alpine:3.24 AS piper
 ARG TARGETARCH
 ARG PIPER_VERSION=2023.11.14-2
 ARG TTS_VOICES="de_DE-thorsten-high de_DE-thorsten_emotional-medium en_US-lessac-medium en_US-ryan-high"
