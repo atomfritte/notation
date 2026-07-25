@@ -130,7 +130,7 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
               return (
                 <li key={c.id}>
                   <div
-                    className="group rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg)] hover:border-[color:var(--notation-accent-40)] transition-colors"
+                    className="group rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] hover:border-[color:var(--notation-accent-40)] transition-colors"
                   >
                     <button
                       onClick={() => onSelectFile(c.path, c.id)}

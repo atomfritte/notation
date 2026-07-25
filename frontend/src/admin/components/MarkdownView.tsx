@@ -541,9 +541,29 @@ export function MarkdownView({
       if (marks.length > 0) {
         // Only travel if the passage isn't already comfortably on screen —
         // clicking a mark you can see shouldn't recenter the page under you.
-        const r = marks[0].getBoundingClientRect()
+        const target = marks[0]
+        const r = target.getBoundingClientRect()
         if (r.top < 64 || r.bottom > window.innerHeight - 64) {
-          marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' })
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // …then re-aim. A long document renders with `content-visibility:
+          // auto`, so blocks above the target are height ESTIMATES until they
+          // materialise: the first scroll lands short and the passage drifts,
+          // often ending up hard against the bottom edge. Check a few times and
+          // correct instantly (never smoothly — that would fight itself) until
+          // the mark stops moving.
+          let attempts = 0
+          let lastTop = Number.NaN
+          const settle = () => {
+            if (cancelled || !target.isConnected) return
+            const rect = target.getBoundingClientRect()
+            const comfortable = rect.top > window.innerHeight * 0.15 && rect.bottom < window.innerHeight * 0.85
+            const stable = Math.abs(rect.top - lastTop) < 2
+            lastTop = rect.top
+            if (comfortable && stable) return
+            if (!comfortable) target.scrollIntoView({ behavior: 'auto', block: 'center' })
+            if (attempts++ < 10) window.setTimeout(settle, 80)
+          }
+          window.setTimeout(settle, 380)
         }
         marks.forEach(m => {
           m.classList.add('comment-anchor-blink')
@@ -908,6 +928,7 @@ export function MarkdownView({
           onReply={onReplyToComment}
           onMouseEnter={cancelBubbleClose}
           onMouseLeave={scheduleBubbleClose}
+          onInteract={() => { cancelBubbleClose(); setBubble(prev => (prev && !prev.pinned ? { ...prev, pinned: true } : prev)) }}
           onClose={() => setBubble(null)}
         />
       )}
@@ -921,7 +942,7 @@ export function MarkdownView({
  * comments sidebar at all.
  */
 function CommentBubble({
-  ids, pinned, pos, byID, replies, onReply, onMouseEnter, onMouseLeave, onClose,
+  ids, pinned, pos, byID, replies, onReply, onMouseEnter, onMouseLeave, onInteract, onClose,
 }: {
   ids: string[]
   pinned: boolean
@@ -931,6 +952,8 @@ function CommentBubble({
   onReply?: (parentID: string, text: string) => Promise<void>
   onMouseEnter: () => void
   onMouseLeave: () => void
+  /** Touching the bubble (click or focus) pins it — see the className note. */
+  onInteract: () => void
   onClose: () => void
 }) {
   const items = ids.map(id => byID.get(id)).filter((c): c is CommentLite => !!c)
@@ -964,10 +987,16 @@ function CommentBubble({
 
   return (
     <div
-      className={`comment-bubble fixed z-50 w-[340px] max-h-[60vh] overflow-y-auto rounded-lg shadow-xl bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-xs no-print ${pinned ? '' : 'pointer-events-none'}`}
+      // Always interactive, pinned or not: an unpinned bubble used to be
+      // pointer-events-none, so moving the cursor from the passage toward it
+      // never fired mouseenter — the grace timer elapsed and the bubble
+      // vanished right as you reached the reply box.
+      className="comment-bubble fixed z-50 w-[340px] max-h-[60vh] overflow-y-auto rounded-lg shadow-xl bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-xs no-print"
       style={{ left: pos.x, top: pos.y, transform: pos.above ? 'translateY(-100%)' : undefined }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      onMouseDown={onInteract}
+      onFocusCapture={onInteract}
       role="dialog"
       aria-label="Comments on this passage"
     >

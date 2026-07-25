@@ -327,6 +327,11 @@ export function SpaceView() {
     // Similarly, the user arrived from a search result — MarkdownView will
     // scroll to the first match — don't yank them back to the saved offset.
     if (searchParams.get('q')) return
+    // …and the same for arriving via a comment: the viewer is about to scroll
+    // to that passage. This effect re-runs when `content` lands, which for a
+    // freshly-opened (or decrypted) page is AFTER the jump — so without this it
+    // would quietly pull you back to the top of the page you just jumped into.
+    if (selectedCommentId) return
     const saved = scrollKey ? localStorage.getItem(scrollKey) : null
     const target = saved ? parseInt(saved, 10) || 0 : 0
     const frame = requestAnimationFrame(() => {
@@ -335,7 +340,7 @@ export function SpaceView() {
       }, 30)
     })
     return () => cancelAnimationFrame(frame)
-  }, [file, scrollKey, content, location.hash, searchParams])
+  }, [file, scrollKey, content, location.hash, searchParams, selectedCommentId])
 
   // ---------- Sidebar drag-resize ----------
   // Manual implementation rather than a library — the handle is a vertical
@@ -751,6 +756,10 @@ export function SpaceView() {
 
   const selectFile = useCallback(
     (p: string) => {
+      // Opening a page directly is not a comment jump; clear any pending focus
+      // so the scroll-restore below applies normally. (The comments panel sets
+      // the id again right after calling this.)
+      setSelectedCommentId(null)
       setFileParam(p)
       // On mobile, after picking a file we want the content full-screen
       // immediately — keep the drawer behaviour explorer-like.
