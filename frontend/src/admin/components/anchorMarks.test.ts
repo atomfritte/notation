@@ -123,3 +123,21 @@ describe('applyAnchorMarks', () => {
     expect(el.innerHTML.indexOf('<mark')).toBeGreaterThan('<p>run here and '.length - 1)
   })
 })
+
+describe('spoofed marks', () => {
+  it('ignores a hand-written comment anchor from document HTML', () => {
+    // The sanitizer no longer lets document HTML declare `data-comment-id`, but
+    // the second line of defence is what this pins: a mark that LOOKS like an
+    // anchor stays inert, because only the `data-comment-ids` our own code
+    // writes counts as a real one.
+    const el = article('<p>see <mark class="comment-anchor" data-comment-id="c1">this</mark></p>')
+    const planted = el.querySelector('mark.comment-anchor') as HTMLElement
+    expect(planted.dataset.commentIds).toBeUndefined()
+
+    // Our own marking still works on the same document.
+    applyAnchorMarks(el, [{ id: 'real', anchor: anchor('see ') }])
+    const real = [...el.querySelectorAll('mark.comment-anchor')]
+      .find(m => (m as HTMLElement).dataset.commentIds) as HTMLElement
+    expect(real.dataset.commentIds).toBe('real')
+  })
+})

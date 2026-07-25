@@ -42,7 +42,10 @@ const sanitizeSchema = {
     span: [...(defaultSchema.attributes?.span ?? []), 'className'],
     code: [...(defaultSchema.attributes?.code ?? []), 'className'],
     div: [...(defaultSchema.attributes?.div ?? []), 'className'],
-    mark: [...(defaultSchema.attributes?.mark ?? []), 'className', 'data-comment-id'],
+    // No data-comment-id here: comment anchors are applied by us, imperatively,
+    // after render. Letting document HTML declare one would let a guest-authored
+    // page paint a fake (and now interactive) comment anchor anywhere.
+    mark: [...(defaultSchema.attributes?.mark ?? []), 'className'],
     details: [...(defaultSchema.attributes?.details ?? []), 'open'],
   },
   protocols: {
@@ -1339,11 +1342,19 @@ export function applyAnchorMarks(article: HTMLElement, comments: CommentLite[]) 
   }
 }
 
-/** The comment ids a rendered mark stands for (first = the primary thread). */
+/**
+ * The comment ids a rendered mark stands for (first = the primary thread).
+ *
+ * Deliberately keyed on `data-comment-ids`, which ONLY {@link newAnchorMark}
+ * ever writes: `data-comment-id` is in the HTML sanitizer's allowlist, so a
+ * hand-written `<mark class="comment-anchor" data-comment-id="…">` inside a
+ * guest-authored document would otherwise open a real, replyable thread bubble
+ * at a position of the author's choosing. Marks we didn't build yield no ids
+ * and stay inert.
+ */
 function markCommentIDs(m: HTMLElement): string[] {
   const all = m.dataset.commentIds
-  if (all) return all.split(',').filter(Boolean)
-  return m.dataset.commentId ? [m.dataset.commentId] : []
+  return all ? all.split(',').filter(Boolean) : []
 }
 
 /** Viewport position for the bubble hanging off `mark`, clamped on-screen. */
