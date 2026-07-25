@@ -9,7 +9,12 @@
  *
  * Surfaces:
  *   - `bg`         : main content area background
- *   - `bgElevated` : chrome surface (sidebars, header, modals, popovers)
+ *   - `bgElevated` : elevated surface inside the content (cards, inputs,
+ *                    popovers, viewers)
+ *   - `chromeBg`   : chrome surface (sidebars, header, comments panel,
+ *                    palettes). Equal to `bgElevated` in a uniform theme;
+ *                    a SPLIT-TONE theme pulls the two apart — e.g. a deep
+ *                    sidebar framing a bright reading area
  *   - `bgAlt`      : subtle off-bg (hover bg, alt-row stripe, inline code)
  *
  * Foregrounds:
@@ -47,6 +52,13 @@ export type ModePalette = {
   // Subtle surface tint — hover bg, alt-row stripes, inline code highlights.
   bgAlt: string
 
+  // Chrome surface (sidebars, header, comments panel, palettes). Defaults to
+  // bgElevated, which is what every uniform theme wants. Setting it apart is
+  // what makes a SPLIT-TONE theme: a deep sidebar around a bright reading area
+  // (or the reverse), without dragging inputs/cards/viewers along — those keep
+  // using bgElevated, which stays in the content's tone.
+  chromeBg: string
+
   // Chrome surface foregrounds — were auto-derived by luminance, now user-
   // controlled with the same auto-derivation as defaults when unset.
   chromeFg: string
@@ -83,7 +95,7 @@ function isValidPalette(p: any): p is ModePalette {
   if (!p) return false
   const hexFields = [
     'accent', 'bg', 'bgElevated', 'fg', 'fgMuted', 'border',
-    'bgAlt', 'chromeFg', 'chromeFgMuted', 'chromeBorder',
+    'bgAlt', 'chromeBg', 'chromeFg', 'chromeFgMuted', 'chromeBorder',
     'danger', 'warning', 'success', 'info', 'fgOnAccent',
   ] as const
   for (const f of hexFields) if (!HEX_RE.test(p[f])) return false
@@ -117,7 +129,7 @@ const DEFAULT_STATUS_LIGHT = {
 } as const
 
 const NEUTRAL_DARK = {
-  bg: '#0A0A0A', bgElevated: '#111111', bgAlt: '#1F1F23',
+  bg: '#0A0A0A', bgElevated: '#111111', bgAlt: '#1F1F23', chromeBg: '#111111',
   fg: '#E4E4E7', fgMuted: '#A1A1AA', border: '#27272A',
   // chromeBorder defaults to a sleek hairline barely above bgElevated. Set it
   // equal to bgElevated for a fully borderless sidebar, or pick a stronger
@@ -128,7 +140,7 @@ const NEUTRAL_DARK = {
   ...DEFAULT_STATUS_DARK,
 } as const
 const NEUTRAL_LIGHT = {
-  bg: '#FFFFFF', bgElevated: '#FAFAFA', bgAlt: '#F4F4F5',
+  bg: '#FFFFFF', bgElevated: '#FAFAFA', bgAlt: '#F4F4F5', chromeBg: '#FAFAFA',
   fg: '#18181B', fgMuted: '#71717A', border: '#E4E4E7',
   chromeFg: '#18181B', chromeFgMuted: '#71717A', chromeBorder: '#ECECEC',
   fgOnAccent: '#FFFFFF',
@@ -187,6 +199,79 @@ export const BUILTIN_THEMES: Theme[] = [
     dark:  fillPalette({ accent: '#7AA2F7', bg: '#1A1B26', bgElevated: '#16161E', fg: '#C0CAF5', fgMuted: '#565F89', border: '#292E42' }, NEUTRAL_DARK),
     light: fillPalette({ accent: '#2E7DE9', bg: '#E1E2E7', bgElevated: '#D5D6DB', fg: '#343B58', fgMuted: '#6172B0', border: '#C4C8DA' }, NEUTRAL_LIGHT),
   },
+  // ---- Split-tone themes -------------------------------------------------
+  // Chrome and content deliberately DON'T share a tone: a deep, quiet sidebar
+  // frames a bright reading area (and in dark mode the reverse — the page is
+  // lifted out of an almost-black frame). Everything is tuned around the prose:
+  // the reading surface stays near-paper, body text lands well past AA, and the
+  // accent is dark enough to read on the page while staying bright enough to
+  // read on the chrome. `chromeFg`/`chromeFgMuted`/`chromeBorder` are set
+  // explicitly rather than derived, because a hand-picked chrome tone deserves
+  // hand-picked ink.
+  {
+    name: 'Studio', builtIn: true,
+    light: fillPalette({
+      accent: '#2563EB',
+      bg: '#FDFDFE', bgElevated: '#F4F6FA', bgAlt: '#EEF1F6',
+      fg: '#171A21', fgMuted: '#5A6172', border: '#E1E5EE',
+      chromeBg: '#1B1F29', chromeFg: '#F3F5F9', chromeFgMuted: '#9AA3B6', chromeBorder: '#272C38',
+      backdrop: 'rgba(16, 19, 26, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#7DA2FF',
+      bg: '#15171D', bgElevated: '#1B1E26', bgAlt: '#20242D',
+      fg: '#E7EAF2', fgMuted: '#98A1B4', border: '#272B35',
+      chromeBg: '#0C0E13', chromeFg: '#EDF0F7', chromeFgMuted: '#8B94A8', chromeBorder: '#171A21',
+    }, NEUTRAL_DARK),
+  },
+  {
+    name: 'Manuscript', builtIn: true,
+    light: fillPalette({
+      accent: '#A45A16',
+      bg: '#FCFAF6', bgElevated: '#F5F0E7', bgAlt: '#F0EADE',
+      fg: '#221E19', fgMuted: '#6B6155', border: '#E7DFD1',
+      chromeBg: '#241F1A', chromeFg: '#F6F1E8', chromeFgMuted: '#B0A392', chromeBorder: '#312A23',
+      backdrop: 'rgba(28, 23, 18, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#E8A33D',
+      bg: '#1D1A17', bgElevated: '#242019', bgAlt: '#2A251F',
+      fg: '#EFE7DA', fgMuted: '#A6998A', border: '#302A23',
+      chromeBg: '#131110', chromeFg: '#F2EADD', chromeFgMuted: '#9A8D7E', chromeBorder: '#1E1B18',
+    }, NEUTRAL_DARK),
+  },
+  {
+    name: 'Evergreen', builtIn: true,
+    light: fillPalette({
+      accent: '#0F766E',
+      bg: '#FAFCFA', bgElevated: '#EFF4F0', bgAlt: '#E9F0EB',
+      fg: '#14201A', fgMuted: '#526158', border: '#DDE7E0',
+      chromeBg: '#13241D', chromeFg: '#EFF6F1', chromeFgMuted: '#9AB2A4', chromeBorder: '#1D3128',
+      backdrop: 'rgba(12, 26, 20, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#5EEAD4',
+      bg: '#141A17', bgElevated: '#19211D', bgAlt: '#1E2823',
+      fg: '#DEE9E1', fgMuted: '#8CA398', border: '#232F29',
+      chromeBg: '#0A100D', chromeFg: '#E6F1EA', chromeFgMuted: '#7F978B', chromeBorder: '#141C18',
+    }, NEUTRAL_DARK),
+  },
+  {
+    name: 'Nocturne', builtIn: true,
+    light: fillPalette({
+      accent: '#6D28D9',
+      bg: '#FCFBFE', bgElevated: '#F3F2FA', bgAlt: '#EDECF7',
+      fg: '#1A1826', fgMuted: '#5B5878', border: '#E4E2F0',
+      chromeBg: '#171827', chromeFg: '#EFEFFA', chromeFgMuted: '#A2A2C2', chromeBorder: '#23243A',
+      backdrop: 'rgba(18, 18, 32, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#A78BFA',
+      bg: '#181927', bgElevated: '#1E1F30', bgAlt: '#242539',
+      fg: '#E4E5F5', fgMuted: '#9A9DBE', border: '#292B42',
+      chromeBg: '#0F1019', chromeFg: '#ECEDFA', chromeFgMuted: '#8C8FB0', chromeBorder: '#191A28',
+    }, NEUTRAL_DARK),
+  },
   {
     name: 'Catppuccin', builtIn: true,
     dark:  fillPalette({ accent: '#CBA6F7', bg: '#1E1E2E', bgElevated: '#181825', fg: '#CDD6F4', fgMuted: '#9399B2', border: '#313244' }, NEUTRAL_DARK),
@@ -202,10 +287,14 @@ function fillPalette(partial: Partial<ModePalette>, neutral: typeof NEUTRAL_DARK
   // chrome* defaults: derive from bgElevated via luminance, like we did in v4.
   // The previous version did this inline in applyTheme; we now bake it into
   // the palette so the theme editor can show + override the derived values.
-  if (partial.chromeFg === undefined) merged.chromeFg = pickOnSurface(merged.bgElevated)
-  if (partial.chromeFgMuted === undefined) merged.chromeFgMuted = mix(merged.chromeFg, merged.bgElevated, 0.45)
-  // Sleeker default: barely-there hairline (92% bgElevated + 8% chromeFg).
-  if (partial.chromeBorder === undefined) merged.chromeBorder = mix(merged.chromeFg, merged.bgElevated, 0.92)
+  // A theme that doesn't distinguish chrome from the elevated surface is the
+  // uniform case: chromeBg IS bgElevated, and every derived chrome colour
+  // follows whichever surface ends up in play.
+  if (partial.chromeBg === undefined) merged.chromeBg = merged.bgElevated
+  if (partial.chromeFg === undefined) merged.chromeFg = pickOnSurface(merged.chromeBg)
+  if (partial.chromeFgMuted === undefined) merged.chromeFgMuted = mix(merged.chromeFg, merged.chromeBg, 0.45)
+  // Sleeker default: barely-there hairline (92% chromeBg + 8% chromeFg).
+  if (partial.chromeBorder === undefined) merged.chromeBorder = mix(merged.chromeFg, merged.chromeBg, 0.92)
   if (partial.fgOnAccent === undefined) merged.fgOnAccent = pickOnAccent(merged.accent)
   return merged
 }
@@ -242,7 +331,10 @@ export function loadCustomThemes(): Theme[] {
 }
 
 // Migration history (newest first):
-//   v5 (current): adds bgAlt + chromeFg/chromeFgMuted/chromeBorder +
+//   v6 (current): adds chromeBg (the chrome surface, split from bgElevated) —
+//                 a v5 theme migrates by taking chromeBg = bgElevated, which
+//                 reproduces its previous uniform look exactly
+//   v5: adds bgAlt + chromeFg/chromeFgMuted/chromeBorder +
 //                 danger/warning/success/info + fgOnAccent + backdrop
 //   v4: per-mode fg/fgMuted/border
 //   v3: per-mode {accent, bg, bgElevated}
@@ -337,6 +429,9 @@ function paletteToVars(p: ModePalette): Record<string, string> {
     '--notation-accent': p.accent,
     '--notation-bg': p.bg,
     '--notation-bg-elevated': p.bgElevated,
+    // Fall back to the elevated surface: a hand-edited or imported theme JSON
+    // without chromeBg must still paint chrome, not an invalid var().
+    '--notation-chrome-bg': p.chromeBg || p.bgElevated,
     '--notation-bg-alt': p.bgAlt,
     '--notation-fg': p.fg,
     '--notation-fg-muted': p.fgMuted,

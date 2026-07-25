@@ -288,8 +288,10 @@ function EditTab({
           value={palette.border} onChange={v => onChangePalette(editMode, { border: v })} />
       </PaletteSection>
 
-      <PaletteSection title="Chrome (sidebars, header, modals)">
-        <ColorRow label="Chrome background" help="Sidebars, header, outline + comments panels, modals."
+      <PaletteSection title="Chrome (sidebars, header, panels)">
+        <ColorRow label="Chrome background" help="Sidebars, header, outline + comments panels, palettes. Set it apart from the elevated surface for a split-tone look — e.g. a deep sidebar around a bright reading area."
+          value={palette.chromeBg} onChange={v => onChangePalette(editMode, { chromeBg: v })} />
+        <ColorRow label="Elevated surface" help="Cards, inputs, popovers and viewers inside the content area."
           value={palette.bgElevated} onChange={v => onChangePalette(editMode, { bgElevated: v })} />
         <ColorRow label="Chrome text" help="Primary text painted on the chrome surface."
           value={palette.chromeFg} onChange={v => onChangePalette(editMode, { chromeFg: v })} />
@@ -495,7 +497,7 @@ function PreviewCard({ label, palette, isDark }: { label: string; palette: ModeP
   return (
     <div className="rounded-lg overflow-hidden border border-[var(--notation-border)]">
       <div className="flex h-24" style={{ background: palette.bg }}>
-        <div className="w-1/3 p-2 flex flex-col gap-1.5" style={{ background: palette.bgElevated }}>
+        <div className="w-1/3 p-2 flex flex-col gap-1.5" style={{ background: palette.chromeBg || palette.bgElevated }}>
           <div className="h-1.5 rounded" style={{ background: palette.accent, width: '80%' }} />
           <div className="h-1 rounded" style={{ background: lineColor }} />
           <div className="h-1 rounded" style={{ background: lineColor, width: '70%' }} />
