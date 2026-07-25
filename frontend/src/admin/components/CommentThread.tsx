@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { MessageSquare, Quote, Trash2 } from 'lucide-react'
+import { type CommentFilter } from '../lib/commentView'
 
 export type CommentItem = {
   id: string
@@ -8,6 +9,8 @@ export type CommentItem = {
   author: string
   text: string
   anchor?: { quote: string; prefix: string; suffix: string }
+  /** Set when this entry is an emoji reaction on a passage, not a written comment. */
+  emoji?: string
 }
 
 type Props = {
@@ -27,6 +30,10 @@ type Props = {
   /** Notify parent when a comment row is CLICKED. That is the deliberate act
    *  that scrolls the viewer to the anchored passage and keeps it highlighted. */
   onSelectComment?: (id: string) => void
+  /** Current comments-vs-everything filter + its setter. Omit to hide the
+   *  switcher entirely (the caller then decides what `comments` contains). */
+  filter?: CommentFilter
+  onFilterChange?: (v: CommentFilter) => void
 }
 
 /**
@@ -36,7 +43,7 @@ type Props = {
  * snippet so the author of the comment has context even when the original
  * paragraph scrolls out of view.
  */
-export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, activeID, onHoverComment, onSelectComment }: Props) {
+export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, activeID, onHoverComment, onSelectComment, filter, onFilterChange }: Props) {
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -50,11 +57,13 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, 
   }, [initialText])
 
   // Group: parents → replies (sorted by creation time within each group).
+  // A reaction is neither: it carries no text and nothing replies to it, so it
+  // sits at the top level and renders as its own compact row.
   const { tops, repliesByParent } = useMemo(() => {
     const tops: CommentItem[] = []
     const repliesByParent: Record<string, CommentItem[]> = {}
     for (const c of comments) {
-      if (c.parent_id) {
+      if (c.parent_id && !c.emoji) {
         ;(repliesByParent[c.parent_id] ??= []).push(c)
       } else {
         tops.push(c)
@@ -86,20 +95,36 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, 
 
   return (
     <aside className="p-4">
-      <h3 className="font-semibold text-sm mb-3 text-[var(--notation-fg)] flex items-center gap-2">
-        Comments
-        {comments.length > 0 && (
-          <span className="bg-[var(--notation-bg-alt)] text-lime-600 dark:text-[color:var(--notation-accent)] px-2 py-0.5 rounded-full text-xs font-bold">
-            {comments.length}
-          </span>
-        )}
-      </h3>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h3 className="font-semibold text-sm text-[var(--notation-fg)] flex items-center gap-2">
+          Comments
+          {comments.length > 0 && (
+            <span className="bg-[var(--notation-bg-alt)] text-lime-600 dark:text-[color:var(--notation-accent)] px-2 py-0.5 rounded-full text-xs font-bold">
+              {comments.length}
+            </span>
+          )}
+        </h3>
+        {filter && onFilterChange && <FilterSwitch value={filter} onChange={onFilterChange} />}
+      </div>
 
-      {tops.length === 0 && <p className="text-xs text-[var(--notation-fg-muted)] italic mb-3">No comments yet.</p>}
+      {tops.length === 0 && (
+        <p className="text-xs text-[var(--notation-fg-muted)] italic mb-3">
+          {filter === 'comments' ? 'No comments yet.' : 'Nothing here yet.'}
+        </p>
+      )}
 
       <ul className="space-y-4 mb-4">
         {tops.map(c => (
           <li key={c.id}>
+            {c.emoji ? (
+              <ReactionRow
+                comment={c}
+                active={activeID === c.id}
+                onDelete={onDelete}
+                onHoverComment={onHoverComment}
+                onSelectComment={onSelectComment}
+              />
+            ) : (
             <CommentRow
               comment={c}
               active={activeID === c.id}
@@ -109,6 +134,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, 
               onReply={canAdd && onAdd ? (text) => submitReply(c.id, text) : undefined}
               onDelete={onDelete}
             />
+            )}
             {repliesByParent[c.id]?.length ? (
               <ul className="pl-5 mt-2 border-l-2 border-[var(--notation-border)] space-y-2">
                 {repliesByParent[c.id].map(r => (
@@ -150,6 +176,95 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, 
       )}
       {err && <p className="text-[var(--notation-danger)] text-xs mt-2">{err}</p>}
     </aside>
+  )
+}
+
+/**
+ * Two-way switch between written comments and everything (comments + emoji
+ * reactions). Deliberately tiny — it sits in the panel header, not in the way.
+ */
+function FilterSwitch({ value, onChange }: { value: CommentFilter; onChange: (v: CommentFilter) => void }) {
+  const btn = (v: CommentFilter, label: string, title: string) => (
+    <button
+      onClick={() => onChange(v)}
+      title={title}
+      aria-pressed={value === v}
+      className={
+        'px-2 py-0.5 rounded transition-colors ' +
+        (value === v
+          ? 'bg-[var(--notation-bg-elevated)] text-[var(--notation-fg)] shadow-sm'
+          : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]')
+      }
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div className="flex items-center gap-0.5 text-[11px] font-medium rounded-md border border-[var(--notation-border)] p-0.5 flex-shrink-0">
+      {btn('comments', 'Comments', 'Written comments only')}
+      {btn('all', 'All', 'Comments and emoji reactions')}
+    </div>
+  )
+}
+
+/** A reaction: an emoji on a passage, with no body and nothing to reply to. */
+function ReactionRow({
+  comment, active, onDelete, onHoverComment, onSelectComment,
+}: {
+  comment: CommentItem
+  active: boolean
+  onDelete?: (id: string) => Promise<void>
+  onHoverComment?: (id: string | null) => void
+  onSelectComment?: (id: string) => void
+}) {
+  const [deleting, setDeleting] = useState(false)
+  return (
+    <div
+      data-comment-id={comment.id}
+      onMouseEnter={() => onHoverComment?.(comment.id)}
+      onMouseLeave={() => onHoverComment?.(null)}
+      onClick={e => {
+        if ((e.target as HTMLElement).closest('button')) return
+        onSelectComment?.(comment.id)
+      }}
+      title={onSelectComment && comment.anchor ? 'Jump to the passage' : undefined}
+      className={
+        'group flex items-start gap-2 rounded-md border p-2 text-sm transition-all ' +
+        (active
+          ? 'border-[color:var(--notation-accent)] bg-[color:var(--notation-accent-10)]'
+          : 'border-[var(--notation-border)] bg-[var(--notation-bg-alt)]') +
+        (onSelectComment && comment.anchor ? ' cursor-pointer' : '')
+      }
+    >
+      <span className="text-lg leading-none flex-shrink-0" aria-hidden="true">{comment.emoji}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex justify-between text-xs text-[var(--notation-fg-muted)] gap-2">
+          <span className="font-semibold text-[var(--notation-fg)] truncate">{comment.author}</span>
+          <span className="flex-shrink-0">{new Date(comment.created_at).toLocaleString()}</span>
+        </div>
+        {comment.anchor?.quote && (
+          <div className="text-xs text-[var(--notation-fg-muted)] italic flex items-start gap-1 mt-0.5">
+            <Quote size={10} className="mt-0.5 flex-shrink-0 opacity-60" />
+            <span className="line-clamp-1">{comment.anchor.quote}</span>
+          </div>
+        )}
+      </div>
+      {onDelete && (
+        <button
+          onClick={async () => {
+            if (deleting) return
+            if (!window.confirm('Remove this reaction?')) return
+            setDeleting(true)
+            try { await onDelete(comment.id) } finally { setDeleting(false) }
+          }}
+          disabled={deleting}
+          title="Remove reaction"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--notation-fg-muted)] hover:text-[var(--notation-danger)] flex-shrink-0 disabled:opacity-40"
+        >
+          <Trash2 size={11} />
+        </button>
+      )}
+    </div>
   )
 }
 
