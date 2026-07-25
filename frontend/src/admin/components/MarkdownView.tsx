@@ -222,6 +222,75 @@ export function MarkdownView({
     return () => cancelAnimationFrame(frame)
   }, [location.hash, content])
 
+  // ---- Reading progress ---------------------------------------------------
+  // How far through the PROSE the reader is, as a hairline under the top bar.
+  //
+  // Two things make this less trivial than it looks:
+  //   - The element that actually scrolls is NOT this component's own
+  //     overflow-y-auto div; in the admin layout an ancestor takes the scroll
+  //     and ours just grows to content height. So find the real scroll parent
+  //     at runtime instead of assuming, and it keeps working if the layout
+  //     changes again.
+  //   - Progress is measured against the ARTICLE's bottom edge, not the
+  //     scroller's full height: the prev/next page links live below the prose,
+  //     and counting them would leave the bar short of full exactly when the
+  //     last line of text is on screen.
+  const [progress, setProgress] = useState<number | null>(null)
+  // The scroller's viewport box, so the (fixed) bar can align to the reading
+  // pane — it must not stretch under the sidebar.
+  const [barBox, setBarBox] = useState<{ top: number; left: number; width: number } | null>(null)
+  useEffect(() => {
+    const article = articleRef.current
+    if (!article) return
+    // Resolved lazily and re-resolved while null: right after a navigation the
+    // document hasn't laid out yet, so nothing overflows and no ancestor looks
+    // like a scroller.
+    let scroller: HTMLElement | null = null
+    let frame = 0
+    const measure = () => {
+      frame = 0
+      if (!scroller || !scroller.isConnected) scroller = scrollParentOf(article)
+      if (!scroller) { setProgress(null); return }
+      // Nothing to track when the whole article fits on screen — a bar pinned
+      // at 100% is just noise. (The pane may still scroll a little for the
+      // padding and the prev/next links; that isn't reading progress.)
+      if (article.getBoundingClientRect().height <= scroller.clientHeight + 8) { setProgress(null); return }
+      // Work in viewport coordinates: how much of the article has passed above
+      // the bottom edge of the reading pane. Deliberately NOT scrollTop over
+      // scrollHeight — long documents render with `content-visibility: auto`,
+      // so heights are estimates that change as blocks materialise, and the
+      // prev/next links below the prose would keep the bar short of full.
+      // This way the bar reads exactly 100% the moment the last line of text
+      // is on screen, whatever is (or isn't) laid out below it.
+      const r = scroller.getBoundingClientRect()
+      const a = article.getBoundingClientRect()
+      const paneBottom = r.top + scroller.clientHeight
+      const consumed = Math.min(Math.max(paneBottom - a.top, 0), a.height)
+      setProgress(a.height > 0 ? consumed / a.height : null)
+      setBarBox(prev =>
+        prev && prev.top === r.top && prev.left === r.left && prev.width === r.width
+          ? prev
+          : { top: r.top, left: r.left, width: r.width },
+      )
+    }
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(measure) }
+    measure()
+    // Capture-phase on window catches the scroll of whichever element ends up
+    // being the scroller, so this doesn't depend on having resolved it yet.
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    window.addEventListener('resize', onScroll)
+    // The article grows as images load, code blocks get highlighted, mermaid
+    // renders… so re-measure on any size change rather than only on navigation.
+    const ro = new ResizeObserver(onScroll)
+    ro.observe(article)
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions)
+      window.removeEventListener('resize', onScroll)
+      ro.disconnect()
+    }
+  }, [content])
+
   // Colour code blocks AFTER the document is on screen. The reader gets the
   // text on the first frame; highlighting trickles in over the next few idle
   // slices and is abandoned outright if they navigate away. `beforeprint`
@@ -698,6 +767,27 @@ export function MarkdownView({
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
+      {/* Reading progress. Sits flush against the top bar as a hairline that
+          fills left-to-right as you read. Sticky (not fixed) so it belongs to
+          the reading pane and never overlaps the sidebar; no-print because it
+          is a screen affordance. Hidden when the page fits without scrolling —
+          a permanently full bar would say nothing. */}
+      {progress !== null && barBox && (
+        <div
+          className="fixed h-[3px] z-30 bg-[var(--notation-border)]/40 no-print pointer-events-none"
+          style={{ top: barBox.top, left: barBox.left, width: barBox.width }}
+          role="progressbar"
+          aria-label="Reading progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+        >
+          <div
+            className="h-full bg-[color:var(--notation-accent)] transition-[width] duration-75 ease-out"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
+      )}
       {/* Print-only document masthead: breadcrumb + date, plus a serif title
           when the body has no leading H1 of its own. Sits above the article so
           it lands at the very top of page one; display:none on screen so it
@@ -965,6 +1055,22 @@ function CommentBubble({
       </div>
     </div>
   )
+}
+
+/**
+ * The nearest ancestor that actually scrolls. The viewer's own overflow-y-auto
+ * div is not always the scroller — in the admin layout an ancestor takes the
+ * scroll and ours simply grows — so anything that needs real scroll geometry
+ * (the reading-progress bar) resolves it at runtime.
+ */
+function scrollParentOf(el: HTMLElement): HTMLElement | null {
+  let cur: HTMLElement | null = el.parentElement
+  while (cur && cur !== document.body) {
+    const oy = getComputedStyle(cur).overflowY
+    if ((oy === 'auto' || oy === 'scroll') && cur.scrollHeight > cur.clientHeight + 8) return cur
+    cur = cur.parentElement
+  }
+  return null
 }
 
 // Walk up from the touch target to the scroll root; true if any ancestor is
