@@ -331,6 +331,14 @@ export const renameFile = (id: string, from: string, to: string) =>
     body: JSON.stringify({ to }),
   })
 
+/** Delete folders that hold nothing at all. The server decides what "empty"
+ *  means — the tree hides dotfiles, so a folder that merely LOOKS empty here may
+ *  still hold real content. Returns the removed paths. */
+export const pruneEmptyDirs = (id: string) =>
+  fetchJSON<{ removed: string[] }>(`/api/admin/spaces/${encodeURIComponent(id)}/prune-empty-dirs`, {
+    method: 'POST',
+  })
+
 export const mkdir = (id: string, path: string) =>
   fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/mkdir`, {
     method: 'POST',

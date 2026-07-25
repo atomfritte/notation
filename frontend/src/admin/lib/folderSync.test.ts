@@ -385,6 +385,18 @@ class FakePlaintextTransport implements PlaintextTransport {
 
   async listFiles(): Promise<string[]> { return [...this.files.keys()] }
 
+  /** Mirrors the server: a directory with no files under it disappears. */
+  async pruneEmptyDirs(): Promise<string[]> {
+    const removed: string[] = []
+    for (const d of [...this.emptyDirs].sort((a, b) => b.split('/').length - a.split('/').length)) {
+      if (![...this.files.keys()].some(f => f.startsWith(d + '/'))) {
+        this.emptyDirs.delete(d)
+        removed.push(d)
+      }
+    }
+    return removed
+  }
+
   /** Rebuild the recursive tree the server would return (dirs + files). */
   async listTree(): Promise<api.Entry[]> {
     const roots: api.Entry[] = []
@@ -527,5 +539,48 @@ describe('folderSync over a plaintext space', () => {
     expect(prepared.plan.entries).toHaveLength(0)
     expect(t.reads - before).toBe(2) // exactly the two real files
     expect(t.files.has(MANIFEST_FILENAME)).toBe(false)
+  })
+})
+
+describe('empty folders after a push', () => {
+  it('drops folders left holding nothing, and keeps the ones that still have files', async () => {
+    const t = new FakePlaintextTransport()
+    t.set('keep/note.md', enc('still here'))
+    t.set('gone/only.md', enc('about to be deleted'))
+    t.emptyDirs.add('keep')
+    t.emptyDirs.add('gone')
+    t.emptyDirs.add('never-had-anything')
+    const sp = plaintextSyncSpace(t)
+
+    const dir = new FakeDirHandle()
+    await pull(sp, dir)
+    // The local side loses the file, and with deletions on the space follows —
+    // which is exactly how a folder ends up empty in the tree.
+    await (dir.children.get('gone') as FakeDirHandle).removeEntry('only.md')
+
+    const res = await applyPush(sp, dir, await preparePush(sp, dir), { applyDeletions: true })
+
+    expect(res.applied.deleted).toBe(1)
+    expect(res.prunedDirs.sort()).toEqual(['gone', 'never-had-anything'])
+    expect(t.files.has('keep/note.md')).toBe(true)
+    expect([...t.emptyDirs]).toEqual(['keep'])
+  })
+
+  it('reports a prune failure without failing the push', async () => {
+    const t = new FakePlaintextTransport()
+    t.set('a.md', enc('one'))
+    t.pruneEmptyDirs = async () => { throw new Error('server said no') }
+    const sp = plaintextSyncSpace(t)
+    const dir = new FakeDirHandle()
+    await pull(sp, dir)
+    await writeFileTo(dir, 'b.md', enc('two'))
+
+    const res = await applyPush(sp, dir, await preparePush(sp, dir), { applyDeletions: false })
+    // The real work still landed…
+    expect(res.applied.new).toBe(1)
+    expect(dec(t.files.get('b.md')!)).toBe('two')
+    // …and the cleanup failure is surfaced rather than swallowed.
+    expect(res.prunedDirs).toEqual([])
+    expect(res.failed.map(f => f.path)).toContain('(empty folders)')
   })
 })

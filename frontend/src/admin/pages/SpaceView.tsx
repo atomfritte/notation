@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
-import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync } from 'lucide-react'
+import { FolderPlus, FolderMinus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync } from 'lucide-react'
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
@@ -799,6 +799,26 @@ export function SpaceView() {
     } catch (e) { setErr(String(e)) }
   }
 
+  // Folders that hold nothing are clutter the user never made — they pile up
+  // after a folder-sync push or a round of deletions. The server decides what
+  // counts as empty (the tree hides dotfiles, so a folder can look empty while
+  // holding a real .env); an encrypted space decides it from the op-log.
+  const pruneEmptyFolders = useCallback(async () => {
+    if (!syncSpace) return
+    try {
+      const removed = await syncSpace.pruneEmptyDirs()
+      setUploadStatus(
+        removed.length === 0
+          ? 'No empty folders to remove.'
+          : `Removed ${removed.length} empty folder${removed.length === 1 ? '' : 's'}.`,
+      )
+      setTimeout(() => setUploadStatus(null), 4000)
+      refreshTree()
+    } catch (e) {
+      setErr(String(e))
+    }
+  }, [syncSpace, refreshTree])
+
   const handleAddComment = async (
     text: string,
     opts?: { parentID?: string; anchor?: api.CommentAnchor },
@@ -1159,6 +1179,12 @@ export function SpaceView() {
   const sidebarActions: HeaderAction[] = []
   sidebarActions.push({ key: 'new-folder', label: 'New top-level folder', icon: <FolderPlus size={16} />, onClick: () => createFolderIn('') })
   sidebarActions.push({ key: 'upload', label: 'Upload files (or drag-drop anywhere)', icon: <Upload size={16} />, onClick: () => uploadInputRef.current?.click() })
+  if (syncSpace) sidebarActions.push({
+    key: 'prune-dirs',
+    label: 'Remove empty folders',
+    icon: <FolderMinus size={16} />,
+    onClick: () => { void pruneEmptyFolders() },
+  })
   sidebarActions.push({ key: 'zip', label: encrypted ? 'Download decrypted ZIP of this Space' : 'Download whole Space as ZIP', icon: <Archive size={16} />, onClick: () => { void downloadAllZip() } })
   if (syncSpace && folderSyncSupported()) sidebarActions.push({ key: 'folder-sync', label: 'Local folder sync', icon: <FolderSync size={16} />, onClick: () => setFolderSyncOpen(true) })
   if (!spaceMeta?.converting) sidebarActions.push({ key: 'convert', label: encrypted ? 'Decrypt this Space' : 'Encrypt this Space (zero-knowledge)', icon: encrypted ? <Unlock size={16} /> : <Lock size={16} />, onClick: () => setConvertDir(encrypted ? 'to-plaintext' : 'to-encrypted') })

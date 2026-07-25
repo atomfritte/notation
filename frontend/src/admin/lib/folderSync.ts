@@ -380,6 +380,8 @@ export async function preparePush(
 
 export interface PushApplyResult {
   applied: { new: number; modified: number; deleted: number }
+  /** Folders removed afterwards because they ended up holding nothing. */
+  prunedDirs: string[]
   /** Deletion candidates left in place because `applyDeletions` was off. */
   skippedDeletions: number
   /** Paths actually written to / removed from the space (for cache eviction). */
@@ -393,7 +395,8 @@ export interface PushApplyResult {
 /**
  * Apply a previewed {@link PreparedPush} to the space: write every new /
  * modified file (folder-wins for conflicts), and — only when `applyDeletions` is
- * set — delete the paths the folder dropped. Then {@link SyncSpace.flush} and
+ * set — delete the paths the folder dropped. Then {@link SyncSpace.flush},
+ * drop any folder left holding nothing ({@link SyncSpace.pruneEmptyDirs}), and
  * refresh the manifest to the folder's file set (the agreed source of truth, so
  * deletion-not-applied and browser-only files never become false deletions on
  * the next push). Renames surface as delete+create with content preserved.
@@ -442,6 +445,16 @@ export async function applyPush(
   }
 
   await space.flush()
+
+  // Folders the push emptied (or that never had anything the folder knows
+  // about) would otherwise linger in the tree as clutter the user never made.
+  // Best-effort: a failure here must not fail an otherwise-applied push.
+  let prunedDirs: string[] = []
+  try {
+    prunedDirs = await space.pruneEmptyDirs()
+  } catch (err) {
+    failed.push({ path: '(empty folders)', error: String((err as Error)?.message ?? err) })
+  }
   // A failed path must not enter the baseline as "synced" — drop it so the next
   // diff still sees it as new/modified.
   const nextManifest = { ...plan.folderManifest }
@@ -449,6 +462,7 @@ export async function applyPush(
   const manifest = await writeManifestFile(dir, nextManifest)
   return {
     applied: { new: nNew, modified: nMod, deleted: nDel },
+    prunedDirs,
     skippedDeletions,
     changedPaths,
     failed,

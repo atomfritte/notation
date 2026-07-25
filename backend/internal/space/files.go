@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -262,4 +263,73 @@ func tmpSibling(parent string) string {
 		return ".tmp-" + suffix
 	}
 	return parent + "/.tmp-" + suffix
+}
+
+// PruneEmptyDirs removes every directory under the Space's files/ that holds
+// nothing at all, deepest-first so a chain of nested empties collapses in one
+// pass. Returns the removed paths (slash-delimited, relative to files/).
+//
+// "Empty" means empty on DISK, not empty in the file tree: the tree hides
+// dotfiles, so a folder containing only `.env` looks empty to a client. Deleting
+// it would destroy real content — hence the emptiness check reads the directory
+// itself, and the removal uses Remove (which refuses a non-empty directory)
+// rather than RemoveAll. A directory that becomes non-empty between the check
+// and the removal therefore survives.
+func (s *Store) PruneEmptyDirs(spaceID string) ([]string, error) {
+	if !ValidID(spaceID) {
+		return nil, ErrInvalidID
+	}
+	root, err := s.openRoot(spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
+	// Collect directories deepest-first.
+	var dirs []string
+	base := s.FilesDir(spaceID)
+	err = filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(base, p)
+		if relErr != nil || rel == "." {
+			return relErr
+		}
+		// Never descend into (or prune) the reserved ciphertext/meta artifacts.
+		if strings.HasPrefix(d.Name(), ".") {
+			return filepath.SkipDir
+		}
+		dirs = append(dirs, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(dirs, func(i, j int) bool {
+		return strings.Count(dirs[i], "/") > strings.Count(dirs[j], "/")
+	})
+
+	var removed []string
+	for _, rel := range dirs {
+		f, openErr := root.Open(rel)
+		if openErr != nil {
+			continue
+		}
+		entries, readErr := f.ReadDir(1)
+		_ = f.Close()
+		if readErr != nil && readErr != io.EOF {
+			continue
+		}
+		if len(entries) > 0 {
+			continue
+		}
+		if root.Remove(rel) == nil {
+			removed = append(removed, rel)
+		}
+	}
+	return removed, nil
 }

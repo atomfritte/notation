@@ -158,6 +158,7 @@ export function FolderSyncPanel({
       if (res.applied.modified) parts.push(`${res.applied.modified} updated`)
       if (res.applied.deleted) parts.push(`${res.applied.deleted} deleted`)
       if (res.skippedDeletions) parts.push(`${res.skippedDeletions} deletion${res.skippedDeletions === 1 ? '' : 's'} skipped`)
+      if (res.prunedDirs.length) parts.push(`${res.prunedDirs.length} empty folder${res.prunedDirs.length === 1 ? '' : 's'} removed`)
       setResult(parts.length ? `Applied: ${parts.join(' · ')}.` : 'Nothing to apply — the space was already up to date.')
       setFailed(res.failed)
       setPrepared(null)

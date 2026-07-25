@@ -229,6 +229,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 				pr.Get("/tts", ahdmin.getTTS) // scope = this space → audio isolated per space
 				pr.Get("/export", ahdmin.exportSpace)
 				pr.Post("/mkdir", ahdmin.mkdir)
+				pr.Post("/prune-empty-dirs", ahdmin.pruneEmptyDirs)
 				pr.Get("/file/*", ahdmin.getFile)
 				pr.Put("/file/*", ahdmin.putFile)
 				pr.Delete("/file/*", ahdmin.deleteFile)
