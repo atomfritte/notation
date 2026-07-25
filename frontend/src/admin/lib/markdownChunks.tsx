@@ -27,24 +27,11 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeRaw from 'rehype-raw'
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+import rehypeSanitize from 'rehype-sanitize'
+import { sanitizeSchema } from './sanitizeSchema'
 import rehypeKatex from 'rehype-katex'
 import { remarkWikiLink } from './remarkWikiLink'
 import { extractSentences, groupChunks } from './readAloud'
-
-// Mirror of MarkdownView's sanitize schema (the prose-affecting parts). Raw HTML
-// in a doc is parsed by rehype-raw then sanitised — same as the live view — so
-// its text is extracted the same way.
-const sanitizeSchema = {
-  ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames ?? []), 'mark', 'details', 'summary', 'kbd', 'sub', 'sup'],
-  attributes: {
-    ...defaultSchema.attributes,
-    '*': [...(defaultSchema.attributes?.['*'] ?? []), 'className', 'id'],
-    span: [...(defaultSchema.attributes?.span ?? []), 'className'],
-    details: [...(defaultSchema.attributes?.details ?? []), 'open'],
-  },
-}
 
 // react-dom/server is heavy + only needed for the (opt-in) vertonen flow, so it's
 // loaded lazily the first time a page is voiced rather than shipped in the main

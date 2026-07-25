@@ -1265,6 +1265,11 @@ export function SpaceView() {
                 onMove={movePathToDir}
                 onExternalDrop={uploadInto}
                 collapseStorageKey={`notation_tree_collapsed_${spaceID}`}
+                // Encrypted spaces persist the collapsed map by opaque nodeId —
+                // a cleartext folder path in localStorage would hand a stolen
+                // browser profile the very structure the encryption hides.
+                pathCodec={encPathCodec}
+                pathCodecReady={fsReady}
                 newPaths={newPaths}
                 onMarkAllSeen={markAllSeen}
               />

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yoogie27/notation/internal/share"
 	"github.com/yoogie27/notation/internal/tts"
 )
 
@@ -33,7 +34,13 @@ func ttsInfo(synth *tts.Synth) ttsInfoResponse {
 // serveTTS synthesises (or cache-hits) one text chunk and streams Ogg/Opus with
 // immutable caching headers + Range support. `scope` isolates cache entries per
 // security context; auth is the caller's concern.
-func serveTTS(synth *tts.Synth, scope string, w http.ResponseWriter, r *http.Request) {
+//
+// `allowCacheOnly` gates the X-TTS-Cache-Only branch. That header answers "is
+// this exact text already synthesised for this scope?" without synthesising —
+// which is an existence oracle over everything the scope has ever spoken, so it
+// is admin-only (it exists for the admin's offline "include voice" flow). A
+// share request always takes the synthesise path.
+func serveTTS(synth *tts.Synth, scope string, allowCacheOnly bool, w http.ResponseWriter, r *http.Request) {
 	if synth == nil || !synth.Available() {
 		writeError(w, http.StatusServiceUnavailable, "server tts not available")
 		return
@@ -50,7 +57,7 @@ func serveTTS(synth *tts.Synth, scope string, w http.ResponseWriter, r *http.Req
 	var audio []byte
 	var etag string
 	var err error
-	if r.Header.Get("X-TTS-Cache-Only") != "" {
+	if allowCacheOnly && r.Header.Get("X-TTS-Cache-Only") != "" {
 		audio, etag, err = synth.GetCached(scope, voice, style, text)
 	} else {
 		audio, etag, err = synth.Get(r.Context(), scope, voice, style, text)
@@ -103,7 +110,24 @@ func (h *adminHandlers) getTTS(w http.ResponseWriter, r *http.Request) {
 		writeSpaceError(w, err)
 		return
 	}
-	serveTTS(h.tts, m.ID, w, r)
+	serveTTS(h.tts, m.ID, true, w, r)
+}
+
+// ttsCacheScope isolates a SCOPED share's audio cache from the space-wide one.
+//
+// The cache is content-addressed by scope+voice+style+text, so sharing one
+// namespace across credentials makes a cache hit observable across them: a guest
+// holding a page-scoped link could otherwise confirm that a given passage from
+// OUTSIDE its scope had been read aloud (and be served that audio) by asking for
+// the exact text. A scoped share therefore gets its own namespace, where the
+// only entries are the ones that share itself produced. An unscoped share can
+// read the whole space anyway, so it keeps sharing the space-wide namespace and
+// the cache reuse that comes with it.
+func ttsCacheScope(spaceID string, sh share.Share) string {
+	if sh.Scope == "" {
+		return spaceID
+	}
+	return spaceID + "\x00share:" + sh.ID
 }
 
 // ---- share ----
@@ -127,9 +151,13 @@ func (h *shareHandlers) getTTS(w http.ResponseWriter, r *http.Request) {
 		writeShareError(w, err)
 		return
 	}
+	// Every other share endpoint refuses an encrypted space; this one did not.
+	if h.refuseEncrypted(w, spaceID) {
+		return
+	}
 	if !sh.Permission.AllowsRead() {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
-	serveTTS(h.tts, spaceID, w, r)
+	serveTTS(h.tts, ttsCacheScope(spaceID, sh), false, w, r)
 }
