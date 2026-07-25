@@ -232,13 +232,16 @@ export function SpaceView() {
   const [contentNonce, setContentNonce] = useState(0)
   const syncSpace = useMemo<SyncSpace | null>(
     () => {
-      if (!spaceID) return null
+      // `encrypted` is false until spaceMeta arrives, so withhold the port
+      // entirely until we KNOW which kind of space this is — never hand the
+      // plaintext transport to what may turn out to be a zero-knowledge space.
+      if (!spaceID || !spaceMeta) return null
       if (!encrypted) return plaintextSyncSpace(httpPlaintextTransport(spaceID))
       return fsReady && fsRef.current ? encryptedSyncSpace(fsRef.current) : null
     },
     // fsReady flips once the encrypted FS has replayed its op-log; fsRef is a ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [spaceID, encrypted, fsReady],
+    [spaceID, spaceMeta, encrypted, fsReady],
   )
 
   // Form folders: when the selected path is a folder with a _form.md template,
