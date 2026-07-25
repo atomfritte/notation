@@ -279,6 +279,102 @@ export const BUILTIN_THEMES: Theme[] = [
     }, NEUTRAL_DARK),
   },
   {
+    name: 'Terracotta', builtIn: true,
+    light: fillPalette({
+      accent: '#B44413',
+      bg: '#FDF8F4', bgElevated: '#F6EDE5', bgAlt: '#F1E5DA',
+      fg: '#241611', fgMuted: '#6B4E42', border: '#E8D9CB',
+      chromeBg: '#38211A', chromeBgAlt: '#45291F', chromeFg: '#FBF1E9', chromeFgMuted: '#C4A392', chromeBorder: '#472B22',
+      backdrop: 'rgba(36, 22, 17, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#FB923C',
+      bg: '#221714', bgElevated: '#2A1D18', bgAlt: '#33231D',
+      fg: '#F2E4DA', fgMuted: '#B39586', border: '#3B2A22',
+      chromeBg: '#150E0B', chromeBgAlt: '#1F1511', chromeFg: '#F6E9E0', chromeFgMuted: '#A88B7C', chromeBorder: '#201612',
+    }, NEUTRAL_DARK),
+  },
+  {
+    name: 'Sunset', builtIn: true,
+    light: fillPalette({
+      accent: '#C0286B',
+      bg: '#FFF9F7', bgElevated: '#FBEEEC', bgAlt: '#F7E5E2',
+      fg: '#2A1520', fgMuted: '#6E4A57', border: '#EED9D6',
+      chromeBg: '#2E1A28', chromeBgAlt: '#3A2233', chromeFg: '#FDEFF4', chromeFgMuted: '#C79FB4', chromeBorder: '#3C2334',
+      backdrop: 'rgba(34, 18, 28, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#F472B6',
+      bg: '#241823', bgElevated: '#2C1E2B', bgAlt: '#342334',
+      fg: '#F6E3EC', fgMuted: '#BC94A8', border: '#3B2839',
+      chromeBg: '#170E15', chromeBgAlt: '#21151F', chromeFg: '#F9E9F0', chromeFgMuted: '#AE889C', chromeBorder: '#22161F',
+    }, NEUTRAL_DARK),
+  },
+  {
+    name: 'Lagoon', builtIn: true,
+    light: fillPalette({
+      accent: '#0E7490',
+      bg: '#F7FCFC', bgElevated: '#E9F5F4', bgAlt: '#DFEFEE',
+      fg: '#0E2225', fgMuted: '#47646A', border: '#CFE5E4',
+      chromeBg: '#0E2A2E', chromeBgAlt: '#16383C', chromeFg: '#EAF7F6', chromeFgMuted: '#93B8BA', chromeBorder: '#17383C',
+      backdrop: 'rgba(10, 32, 35, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#22D3EE',
+      bg: '#12201F', bgElevated: '#172826', bgAlt: '#1D302E',
+      fg: '#DCEDEB', fgMuted: '#8FAEAB', border: '#23342F',
+      chromeBg: '#081413', chromeBgAlt: '#101E1D', chromeFg: '#E6F4F2', chromeFgMuted: '#82A5A2', chromeBorder: '#0F1D1B',
+    }, NEUTRAL_DARK),
+  },
+  {
+    name: 'Marigold', builtIn: true,
+    light: fillPalette({
+      accent: '#946104',
+      bg: '#FDFBF3', bgElevated: '#F5F0E1', bgAlt: '#EFE8D5',
+      fg: '#22200F', fgMuted: '#5E5A3C', border: '#E4DCC5',
+      chromeBg: '#292711', chromeBgAlt: '#343119', chromeFg: '#F9F6E9', chromeFgMuted: '#BDB68F', chromeBorder: '#35321A',
+      backdrop: 'rgba(30, 28, 14, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#FACC15',
+      bg: '#1E1D14', bgElevated: '#262418', bgAlt: '#2E2B1D',
+      fg: '#EFEBD8', fgMuted: '#ADA687', border: '#33301F',
+      chromeBg: '#121109', chromeBgAlt: '#1B1A10', chromeFg: '#F4F1E1', chromeFgMuted: '#A29B7C', chromeBorder: '#1A1810',
+    }, NEUTRAL_DARK),
+  },
+  {
+    name: 'Blueprint', builtIn: true,
+    light: fillPalette({
+      accent: '#4338CA',
+      bg: '#FAFBFF', bgElevated: '#EDF0FB', bgAlt: '#E4E9F8',
+      fg: '#10142E', fgMuted: '#4A5378', border: '#D9E0F3',
+      chromeBg: '#151A3A', chromeBgAlt: '#1E2449', chromeFg: '#EDF0FC', chromeFgMuted: '#9AA4CE', chromeBorder: '#1F2648',
+      backdrop: 'rgba(14, 18, 44, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#818CF8',
+      bg: '#14172B', bgElevated: '#1A1E36', bgAlt: '#212642',
+      fg: '#E2E6F7', fgMuted: '#99A2C8', border: '#272D4A',
+      chromeBg: '#0B0D1C', chromeBgAlt: '#14172B', chromeFg: '#EAEDFB', chromeFgMuted: '#8B94BC', chromeBorder: '#12152A',
+    }, NEUTRAL_DARK),
+  },
+  {
+    name: 'Mulberry', builtIn: true,
+    light: fillPalette({
+      accent: '#9333EA',
+      bg: '#FDF9FC', bgElevated: '#F4EBF3', bgAlt: '#EDE1EC',
+      fg: '#23112A', fgMuted: '#644A6B', border: '#E7D6E6',
+      chromeBg: '#2A1330', chromeBgAlt: '#35193C', chromeFg: '#F8EEF9', chromeFgMuted: '#BE9CC4', chromeBorder: '#371B3E',
+      backdrop: 'rgba(30, 14, 34, 0.45)',
+    }, NEUTRAL_LIGHT),
+    dark: fillPalette({
+      accent: '#C084FC',
+      bg: '#201526', bgElevated: '#281B2E', bgAlt: '#2F2136',
+      fg: '#EFE1F2', fgMuted: '#B295BA', border: '#362545',
+      chromeBg: '#150B18', chromeBgAlt: '#1E1122', chromeFg: '#F3E8F5', chromeFgMuted: '#A487AC', chromeBorder: '#1D1220',
+    }, NEUTRAL_DARK),
+  },
+  {
     name: 'Catppuccin', builtIn: true,
     dark:  fillPalette({ accent: '#CBA6F7', bg: '#1E1E2E', bgElevated: '#181825', fg: '#CDD6F4', fgMuted: '#9399B2', border: '#313244' }, NEUTRAL_DARK),
     light: fillPalette({ accent: '#8839EF', bg: '#EFF1F5', bgElevated: '#E6E9EF', fg: '#4C4F69', fgMuted: '#6C6F85', border: '#CCD0DA' }, NEUTRAL_LIGHT),

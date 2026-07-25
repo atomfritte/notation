@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
-import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync } from 'lucide-react'
+import { FolderPlus, FolderMinus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync } from 'lucide-react'
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
@@ -327,6 +327,11 @@ export function SpaceView() {
     // Similarly, the user arrived from a search result — MarkdownView will
     // scroll to the first match — don't yank them back to the saved offset.
     if (searchParams.get('q')) return
+    // …and the same for arriving via a comment: the viewer is about to scroll
+    // to that passage. This effect re-runs when `content` lands, which for a
+    // freshly-opened (or decrypted) page is AFTER the jump — so without this it
+    // would quietly pull you back to the top of the page you just jumped into.
+    if (selectedCommentId) return
     const saved = scrollKey ? localStorage.getItem(scrollKey) : null
     const target = saved ? parseInt(saved, 10) || 0 : 0
     const frame = requestAnimationFrame(() => {
@@ -335,7 +340,7 @@ export function SpaceView() {
       }, 30)
     })
     return () => cancelAnimationFrame(frame)
-  }, [file, scrollKey, content, location.hash, searchParams])
+  }, [file, scrollKey, content, location.hash, searchParams, selectedCommentId])
 
   // ---------- Sidebar drag-resize ----------
   // Manual implementation rather than a library — the handle is a vertical
@@ -751,6 +756,10 @@ export function SpaceView() {
 
   const selectFile = useCallback(
     (p: string) => {
+      // Opening a page directly is not a comment jump; clear any pending focus
+      // so the scroll-restore below applies normally. (The comments panel sets
+      // the id again right after calling this.)
+      setSelectedCommentId(null)
       setFileParam(p)
       // On mobile, after picking a file we want the content full-screen
       // immediately — keep the drawer behaviour explorer-like.
@@ -789,6 +798,26 @@ export function SpaceView() {
       setEditing(true)
     } catch (e) { setErr(String(e)) }
   }
+
+  // Folders that hold nothing are clutter the user never made — they pile up
+  // after a folder-sync push or a round of deletions. The server decides what
+  // counts as empty (the tree hides dotfiles, so a folder can look empty while
+  // holding a real .env); an encrypted space decides it from the op-log.
+  const pruneEmptyFolders = useCallback(async () => {
+    if (!syncSpace) return
+    try {
+      const removed = await syncSpace.pruneEmptyDirs()
+      setUploadStatus(
+        removed.length === 0
+          ? 'No empty folders to remove.'
+          : `Removed ${removed.length} empty folder${removed.length === 1 ? '' : 's'}.`,
+      )
+      setTimeout(() => setUploadStatus(null), 4000)
+      refreshTree()
+    } catch (e) {
+      setErr(String(e))
+    }
+  }, [syncSpace, refreshTree])
 
   const handleAddComment = async (
     text: string,
@@ -1150,6 +1179,12 @@ export function SpaceView() {
   const sidebarActions: HeaderAction[] = []
   sidebarActions.push({ key: 'new-folder', label: 'New top-level folder', icon: <FolderPlus size={16} />, onClick: () => createFolderIn('') })
   sidebarActions.push({ key: 'upload', label: 'Upload files (or drag-drop anywhere)', icon: <Upload size={16} />, onClick: () => uploadInputRef.current?.click() })
+  if (syncSpace) sidebarActions.push({
+    key: 'prune-dirs',
+    label: 'Remove empty folders',
+    icon: <FolderMinus size={16} />,
+    onClick: () => { void pruneEmptyFolders() },
+  })
   sidebarActions.push({ key: 'zip', label: encrypted ? 'Download decrypted ZIP of this Space' : 'Download whole Space as ZIP', icon: <Archive size={16} />, onClick: () => { void downloadAllZip() } })
   if (syncSpace && folderSyncSupported()) sidebarActions.push({ key: 'folder-sync', label: 'Local folder sync', icon: <FolderSync size={16} />, onClick: () => setFolderSyncOpen(true) })
   if (!spaceMeta?.converting) sidebarActions.push({ key: 'convert', label: encrypted ? 'Decrypt this Space' : 'Encrypt this Space (zero-knowledge)', icon: encrypted ? <Unlock size={16} /> : <Lock size={16} />, onClick: () => setConvertDir(encrypted ? 'to-plaintext' : 'to-encrypted') })

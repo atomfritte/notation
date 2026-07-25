@@ -535,7 +535,16 @@ Open a Space → **Encrypt this Space** (the lock icon in the sidebar footer, or
 
 Every theme ships a full palette for **both** light and dark mode; the palette editor (Accent colour in the header) lets you edit each token, import a VS Code theme, and save your own.
 
-Beyond the accent tints and the editor classics (Dracula, Monokai, Solarized, Nord, Gruvbox, Tokyo Night, Catppuccin), there are four **split-tone** themes — **Studio**, **Manuscript**, **Evergreen** and **Nocturne** — where the chrome and the reading area deliberately don't share a tone: in light mode a deep, quiet sidebar frames a near-paper page; in dark mode it inverts and the page is lifted out of an almost-black frame. Body text clears 9:1 contrast on both surfaces.
+Beyond the accent tints and the editor classics (Dracula, Monokai, Solarized, Nord, Gruvbox, Tokyo Night, Catppuccin), there are ten **split-tone** themes, where the chrome and the reading area deliberately don't share a tone: in light mode a deep, quiet sidebar frames a near-paper page; in dark mode it inverts and the page is lifted out of an almost-black frame.
+
+| | | |
+|---|---|---|
+| **Studio** graphite & paper | **Manuscript** espresso & ivory | **Evergreen** pine & mist |
+| **Nocturne** midnight & lilac | **Terracotta** clay & cream | **Sunset** plum & blush |
+| **Lagoon** deep teal & aqua | **Marigold** olive & gold | **Blueprint** indigo & cool white |
+| **Mulberry** aubergine & orchid | | |
+
+Every one of them is contrast-tested: body and chrome text clear 9:1, text on a card inside the chrome clears 7:1, and text on the accent clears 3.5:1 — enforced in the test suite, not eyeballed.
 
 That split is one palette token, `chromeBg`, so you can build your own: set the **Chrome background** swatch apart from **Elevated surface**. Chrome (sidebars, header, outline + comments panels, palettes) follows the first; cards, inputs, popovers and file viewers inside the content area follow the second — which is why a text field in a dialog never ends up dark-on-dark. Leave them equal for a uniform theme.
 

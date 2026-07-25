@@ -22,7 +22,10 @@ function luminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
-const SPLIT_TONE = ['Studio', 'Manuscript', 'Evergreen', 'Nocturne']
+const SPLIT_TONE = [
+  'Studio', 'Manuscript', 'Evergreen', 'Nocturne',
+  'Terracotta', 'Sunset', 'Lagoon', 'Marigold', 'Blueprint', 'Mulberry',
+]
 
 // This jsdom build doesn't expose localStorage globally; the migration test only
 // needs get/set/remove, so stand one up when it's missing.

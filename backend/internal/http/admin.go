@@ -318,6 +318,28 @@ func (h *adminHandlers) mkdir(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// pruneEmptyDirs deletes folders that hold nothing at all. Folder sync calls it
+// after a push: pushing content in (or letting the folder's deletions through)
+// routinely leaves behind directories whose files are gone, and an empty folder
+// in the tree is noise the user never created. The store only removes genuinely
+// empty directories — see space.PruneEmptyDirs for why that distinction matters.
+func (h *adminHandlers) pruneEmptyDirs(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	removed, err := h.store.PruneEmptyDirs(id)
+	if err != nil {
+		writeInternal(w, r, "spaces.prune_empty_dirs", err)
+		return
+	}
+	if removed == nil {
+		removed = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"removed": removed})
+}
+
 func (h *adminHandlers) getLog(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "spaceID")
 	if _, err := h.store.Get(id); err != nil {

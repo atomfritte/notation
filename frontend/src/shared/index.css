@@ -607,6 +607,13 @@
      row (light) and then writes chrome-toned text (near-white) onto it. That is
      what made comment cards unreadable in the split-tone themes. */
   --notation-bg-alt: var(--notation-chrome-bg-alt);
+  /* The PAGE background is rebound too, to the chrome card tone. Several chrome
+     panels (all-comments cards, the theme editor's inputs, prepare-audio) paint
+     `--notation-bg` to lift an element off the panel; left alone that is a
+     content-toned slab — a white card inside a dark sidebar, with chrome-toned
+     text on it. Mapping it to the card surface keeps the "slightly off the
+     panel" intent AND keeps it in the chrome's own tonal family. */
+  --notation-bg: var(--notation-chrome-bg-alt);
   --notation-fg: var(--notation-fg-on-elevated);
   --notation-fg-muted: var(--notation-fg-on-elevated-muted);
   --notation-border: var(--notation-border-on-elevated);

@@ -52,6 +52,13 @@ export interface SyncSpace {
   remove(path: string): Promise<void>
   /** Settle a batch of mutations (encrypted: push the op-log). */
   flush(): Promise<void>
+  /**
+   * Delete folders left holding nothing. A push that removes files (or that
+   * simply never had any for a folder) leaves the folder behind, and an empty
+   * folder in the tree is noise the user never created. Returns the paths that
+   * were removed.
+   */
+  pruneEmptyDirs(): Promise<string[]>
 }
 
 /**
@@ -83,6 +90,35 @@ export function encryptedSyncSpace(fs: EncryptedFS): SyncSpace {
     write: (path, bytes) => fs.write(path, bytes),
     remove: (path) => fs.remove(path),
     flush: () => fs.sync(),
+    // The op-log knows every node, including ones the ignore set hides from
+    // listNodes, so "empty" can be decided exactly here — no server round-trip
+    // and no risk of deleting a folder that only looks empty.
+    pruneEmptyDirs: async () => {
+      const removed: string[] = []
+      for (;;) {
+        const nodes = fs.tree()
+        const hasChild = new Set<string>()
+        for (const n of nodes) {
+          const p = fs.pathOf(n.nodeId)
+          if (!p) continue
+          const slash = p.lastIndexOf('/')
+          if (slash > 0) hasChild.add(p.slice(0, slash))
+        }
+        const empties = nodes
+          .filter(n => n.type === 'dir')
+          .map(n => fs.pathOf(n.nodeId))
+          .filter((p): p is string => !!p && !hasChild.has(p))
+        if (empties.length === 0) break
+        // Deepest first, so a chain of nested empties collapses across passes.
+        empties.sort((a, b) => b.split('/').length - a.split('/').length)
+        for (const p of empties) {
+          await fs.remove(p)
+          removed.push(p)
+        }
+      }
+      if (removed.length > 0) await fs.sync()
+      return removed
+    },
   }
 }
 
@@ -92,6 +128,8 @@ export function encryptedSyncSpace(fs: EncryptedFS): SyncSpace {
 export interface PlaintextTransport {
   /** Every file path in the space, flat (form-folder contents NOT collapsed). */
   listFiles(): Promise<string[]>
+  /** Remove genuinely-empty folders; returns the removed paths. */
+  pruneEmptyDirs(): Promise<string[]>
   /** The recursive tree — used for DIRECTORIES only (incl. empty ones). */
   listTree(): Promise<api.Entry[]>
   readBytes(path: string): Promise<Uint8Array>
@@ -103,6 +141,7 @@ export interface PlaintextTransport {
 export function httpPlaintextTransport(spaceID: string): PlaintextTransport {
   return {
     listFiles: () => api.listFilesFlat(spaceID),
+    pruneEmptyDirs: () => api.pruneEmptyDirs(spaceID).then(r => r.removed),
     listTree: () => api.getTree(spaceID),
     readBytes: (path) => api.readFileBytes(spaceID, path),
     writeBytes: (path, bytes) => api.writeFileBinary(spaceID, path, new Blob([bytes as BlobPart])),
@@ -144,5 +183,6 @@ export function plaintextSyncSpace(transport: PlaintextTransport): SyncSpace {
     // Server-side writes are already durable when their request resolves; the
     // debounced git commit needs no client-side settle.
     flush: async () => {},
+    pruneEmptyDirs: () => transport.pruneEmptyDirs(),
   }
 }

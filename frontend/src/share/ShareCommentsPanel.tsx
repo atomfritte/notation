@@ -76,7 +76,7 @@ export function ShareCommentsPanel({ comments, currentFile, onSelect }: Props) {
                 <li key={c.id}>
                   <button
                     onClick={() => onSelect(c.path, c.id)}
-                    className="w-full text-left p-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg)] hover:border-[color:var(--notation-accent-40)] transition-colors"
+                    className="w-full text-left p-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] hover:border-[color:var(--notation-accent-40)] transition-colors"
                   >
                     <div className="flex items-baseline gap-2 mb-0.5">
                       <span className="font-semibold text-xs text-[var(--notation-fg)] truncate">{c.author}</span>
