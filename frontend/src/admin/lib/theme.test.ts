@@ -8,7 +8,7 @@ import { BUILTIN_THEMES, applyTheme, loadCustomThemes, type ModePalette } from '
 
 const REQUIRED: (keyof ModePalette)[] = [
   'accent', 'bg', 'bgElevated', 'bgAlt', 'fg', 'fgMuted', 'border',
-  'chromeBg', 'chromeFg', 'chromeFgMuted', 'chromeBorder',
+  'chromeBg', 'chromeBgAlt', 'chromeFg', 'chromeFgMuted', 'chromeBorder',
   'danger', 'warning', 'success', 'info', 'fgOnAccent', 'backdrop',
 ]
 
@@ -55,6 +55,10 @@ describe('built-in themes', () => {
     for (const t of BUILTIN_THEMES.filter(t => !SPLIT_TONE.includes(t.name))) {
       expect(t.light.chromeBg, t.name).toBe(t.light.bgElevated)
       expect(t.dark.chromeBg, t.name).toBe(t.dark.bgElevated)
+      // …including the subtle surface, so hover rows and comment cards in a
+      // uniform theme render exactly as they did before chromeBgAlt existed.
+      expect(t.light.chromeBgAlt, t.name).toBe(t.light.bgAlt)
+      expect(t.dark.chromeBgAlt, t.name).toBe(t.dark.bgAlt)
     }
   })
 
@@ -70,6 +74,36 @@ describe('built-in themes', () => {
       expect(luminance(t.light.bgElevated), `${name} light elevated`).toBeGreaterThan(0.7)
       // Dark mode inverts the relationship: the page is lifted out of the frame.
       expect(luminance(t.dark.bg), `${name} dark page`).toBeGreaterThan(luminance(t.dark.chromeBg))
+    }
+  })
+
+  it('keeps chrome text readable on the chrome CARD surface', () => {
+    // The regression this pins: comment cards, hover rows and inputs inside
+    // chrome paint bgAlt. Before chromeBgAlt existed a split-tone theme painted
+    // the CONTENT's light tint there and then wrote near-white chrome text on
+    // it — comments were invisible.
+    const contrast = (a: string, b: string) => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+      return (hi + 0.05) / (lo + 0.05)
+    }
+    for (const t of BUILTIN_THEMES) {
+      for (const mode of ['dark', 'light'] as const) {
+        expect(contrast(t[mode].chromeFg, t[mode].chromeBgAlt), `${t.name} ${mode} card`).toBeGreaterThan(7)
+        expect(contrast(t[mode].chromeFgMuted, t[mode].chromeBgAlt), `${t.name} ${mode} card muted`).toBeGreaterThan(3.5)
+      }
+    }
+  })
+
+  it('picks accent text on the readable side of the white/black crossover', () => {
+    // A mid-bright accent (#7DA2FF, #A5B4FC…) used to get white text at ~2.5:1.
+    const contrast = (a: string, b: string) => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+      return (hi + 0.05) / (lo + 0.05)
+    }
+    for (const t of BUILTIN_THEMES) {
+      for (const mode of ['dark', 'light'] as const) {
+        expect(contrast(t[mode].fgOnAccent, t[mode].accent), `${t.name} ${mode} on-accent`).toBeGreaterThan(3.5)
+      }
     }
   })
 
