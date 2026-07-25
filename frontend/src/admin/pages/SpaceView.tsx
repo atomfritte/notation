@@ -1142,6 +1142,26 @@ export function SpaceView() {
   headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
   if (syncSpace && folderSyncSupported()) headerActions.push({ key: 'folder-sync', label: 'Local folder sync', icon: <FolderSync size={18} />, onClick: () => setFolderSyncOpen(true) })
   if (encrypted) headerActions.push({ key: 'lock', label: 'Lock space', icon: <Lock size={18} />, onClick: () => { setContent(''); setTree([]); keyStore.lock(spaceID) } })
+  // ---- Sidebar footer tools ------------------------------------------------
+  // Same treatment as the page header: one list drives both the inline icons
+  // and the overflow menu, so an action can never exist in one and not the
+  // other. What differs is the budget — the sidebar is user-resizable, so the
+  // count is derived from ITS width, not the viewport's.
+  const sidebarActions: HeaderAction[] = []
+  sidebarActions.push({ key: 'new-folder', label: 'New top-level folder', icon: <FolderPlus size={16} />, onClick: () => createFolderIn('') })
+  sidebarActions.push({ key: 'upload', label: 'Upload files (or drag-drop anywhere)', icon: <Upload size={16} />, onClick: () => uploadInputRef.current?.click() })
+  sidebarActions.push({ key: 'zip', label: encrypted ? 'Download decrypted ZIP of this Space' : 'Download whole Space as ZIP', icon: <Archive size={16} />, onClick: () => { void downloadAllZip() } })
+  if (syncSpace && folderSyncSupported()) sidebarActions.push({ key: 'folder-sync', label: 'Local folder sync', icon: <FolderSync size={16} />, onClick: () => setFolderSyncOpen(true) })
+  if (!spaceMeta?.converting) sidebarActions.push({ key: 'convert', label: encrypted ? 'Decrypt this Space' : 'Encrypt this Space (zero-knowledge)', icon: encrypted ? <Unlock size={16} /> : <Lock size={16} />, onClick: () => setConvertDir(encrypted ? 'to-plaintext' : 'to-encrypted') })
+  if (!encrypted && ttsVoices && ttsVoices.length > 0) sidebarActions.push({ key: 'audio', label: 'Prepare audio (voice a folder, listen offline)', icon: <Headphones size={16} />, onClick: () => setPrepareAudioOpen(true) })
+  // ~34px per icon button, and "New Page" keeps a readable minimum beside them.
+  const sidebarIconBudget = Math.max(0, Math.floor((sidebarWidth - 16 - 108) / 34))
+  const inlineSidebarActions = sidebarActions.length <= sidebarIconBudget
+    ? sidebarActions
+    // One slot goes to the hamburger itself.
+    : sidebarActions.slice(0, Math.max(0, sidebarIconBudget - 1))
+  const overflowSidebarActions = sidebarActions.slice(inlineSidebarActions.length)
+
   const editVisible = isTextFile(file) && !historyMode && !isForm
   const compactHeader = headerIsCompact(headerWidth, headerActions.length, 120 + (editVisible ? 64 : 0), isMobile)
 
@@ -1325,60 +1345,21 @@ export function SpaceView() {
             {!encrypted && sidebarTab === 'audit' && <AuditPanel spaceID={spaceID} />}
           </div>
 
-          <div className="p-2 border-t border-[var(--notation-border)] flex gap-1">
+          <div className="p-2 border-t border-[var(--notation-border)] flex gap-1 items-center">
             <button
               onClick={onNewFile}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors text-sm font-medium"
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors text-sm font-medium"
             >
-              <Plus size={16} /> New Page
+              <Plus size={16} className="flex-shrink-0" /> <span className="truncate">New Page</span>
             </button>
-            <button
-              onClick={() => createFolderIn('')}
-              title="New top-level folder"
-              className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
-            >
-              <FolderPlus size={16} />
-            </button>
-            <button
-              onClick={() => uploadInputRef.current?.click()}
-              title="Upload files (or drag-drop anywhere)"
-              className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
-            >
-              <Upload size={16} />
-            </button>
-            <button
-              onClick={() => { void downloadAllZip() }}
-              title={encrypted ? 'Download decrypted ZIP of this Space' : 'Download whole Space as ZIP'}
-              className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
-            >
-              <Archive size={16} />
-            </button>
-            {syncSpace && folderSyncSupported() && (
-              <button
-                onClick={() => setFolderSyncOpen(true)}
-                title="Local folder sync (work on this Space as plain files)"
-                className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
-              >
-                <FolderSync size={16} />
-              </button>
-            )}
-            {!spaceMeta?.converting && (
-              <button
-                onClick={() => setConvertDir(encrypted ? 'to-plaintext' : 'to-encrypted')}
-                title={encrypted ? 'Decrypt this Space' : 'Encrypt this Space (zero-knowledge)'}
-                className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
-              >
-                {encrypted ? <Unlock size={16} /> : <Lock size={16} />}
-              </button>
-            )}
-            {!encrypted && ttsVoices && ttsVoices.length > 0 && (
-              <button
-                onClick={() => setPrepareAudioOpen(true)}
-                title="Audio vorbereiten (Ordner vertonen, offline hören)"
-                className="px-3 py-2 text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 dark:text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]/50 rounded-md transition-colors"
-              >
-                <Headphones size={16} />
-              </button>
+            {/* Space tools. The sidebar is resizable, so the row is laid out
+                against its measured width: whatever doesn't fit moves into a
+                hamburger that opens upward. Without this the icons squashed
+                into each other (and eventually out of the panel) as soon as
+                the sidebar was dragged narrow. */}
+            {inlineSidebarActions.map(a => <HeaderActionBtn key={a.key} action={a} />)}
+            {overflowSidebarActions.length > 0 && (
+              <HeaderOverflowMenu actions={overflowSidebarActions} placement="up" label="More space tools" />
             )}
             <input
               ref={uploadInputRef}
