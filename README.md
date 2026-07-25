@@ -58,6 +58,7 @@ Most note tools force you to pick a side: either a SaaS that owns your data, or 
 - [MCP integration](#mcp-integration)
 - [Supported file types](#supported-file-types)
 - [Markdown features](#markdown-features)
+- [Themes](#themes)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Security](#security)
 - [Backup & recovery](#backup--recovery)
@@ -486,6 +487,16 @@ The viewer is the same on the admin side and through Magic Links.
 - **Threaded replies**: one level deep, indented — from the sidebar or from the in-document bubble
 - **Outline / TOC**: sidebar panel with IntersectionObserver-driven active-section tracking
 - **Backlinks**: which other files link here (backed by the `search` tool)
+
+---
+
+## Themes
+
+Every theme ships a full palette for **both** light and dark mode; the palette editor (Accent colour in the header) lets you edit each token, import a VS Code theme, and save your own.
+
+Beyond the accent tints and the editor classics (Dracula, Monokai, Solarized, Nord, Gruvbox, Tokyo Night, Catppuccin), there are four **split-tone** themes — **Studio**, **Manuscript**, **Evergreen** and **Nocturne** — where the chrome and the reading area deliberately don't share a tone: in light mode a deep, quiet sidebar frames a near-paper page; in dark mode it inverts and the page is lifted out of an almost-black frame. Body text clears 9:1 contrast on both surfaces.
+
+That split is one palette token, `chromeBg`, so you can build your own: set the **Chrome background** swatch apart from **Elevated surface**. Chrome (sidebars, header, outline + comments panels, palettes) follows the first; cards, inputs, popovers and file viewers inside the content area follow the second — which is why a text field in a dialog never ends up dark-on-dark. Leave them equal for a uniform theme.
 
 ---
 
