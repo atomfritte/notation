@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router'
 import {
   PanelLeft, List, MessageSquare, Search, Printer, Sun, Moon, Palette,
   Bookmark, FileText, Folder, HelpCircle, X, Headphones, Link2Off,
@@ -196,7 +196,11 @@ function ShareUI() {
   const { ref: headerRef, width: headerWidth } = useHeaderWidth()
 
   // Comment coordination — viewer ↔ thread
-  const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
+  // Hover merely highlights the matching anchor; a CLICK selects it and jumps
+  // the document there (see MarkdownView's activeCommentID vs focusCommentID).
+  const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null)
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null)
+  const activeCommentId = selectedCommentId ?? hoveredCommentId
   const [pendingAnchor, setPendingAnchor] = useState<api.CommentAnchor | null>(null)
   const [pendingComment, setPendingComment] = useState<string>('')
   // True only while the comment panel is open *because* the user selected text
@@ -509,10 +513,9 @@ function ShareUI() {
   // Open a page from the Comments tab, focusing the clicked comment.
   const openComment = (path: string, commentID?: string) => {
     select(path)
-    if (commentID) {
-      setActiveCommentId(commentID)
-      if (canComment) { openedBySelectionRef.current = false; setShowComments(true) }
-    }
+    // Jump to the passage; the comments column stays exactly as the reader
+    // left it rather than opening itself.
+    if (commentID) setSelectedCommentId(commentID)
   }
 
   // The header's icon actions — a single list that drives both the inline
@@ -760,8 +763,10 @@ function ShareUI() {
                     // comment-anchor highlights they can't interact with.
                     comments={canComment ? comments : []}
                     activeCommentID={activeCommentId}
-                    onHoverMark={setActiveCommentId}
-                    onSelectAnchor={setActiveCommentId}
+                    focusCommentID={selectedCommentId}
+                    onHoverMark={setHoveredCommentId}
+                    onSelectAnchor={setSelectedCommentId}
+                    onReplyToComment={canComment ? (parentID, text) => addComment(text, { parentID }) : undefined}
                     onNewAnchorComment={canComment ? onNewAnchorComment : undefined}
                     onNewReaction={canComment ? addReaction : undefined}
                     files={allFiles}
@@ -813,7 +818,8 @@ function ShareUI() {
                       canAdd={canComment}
                       initialText={pendingComment}
                       activeID={activeCommentId}
-                      onHoverComment={setActiveCommentId}
+                      onHoverComment={setHoveredCommentId}
+                      onSelectComment={setSelectedCommentId}
                       onAdd={canComment ? async (text, opts) => {
                         await addComment(text, opts)
                         setPendingComment('')

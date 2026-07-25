@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router'
 import { SpaceList } from './pages/SpaceList'
 import { SpaceView } from './pages/SpaceView'
 import { PrintSpaceView } from './pages/PrintSpaceView'

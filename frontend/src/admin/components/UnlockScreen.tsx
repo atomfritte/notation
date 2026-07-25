@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { Lock, KeyRound, AlertTriangle, ChevronLeft } from 'lucide-react'
 import { HttpEncStore } from '../../shared/vfs/httpEncStore'
 import { unlockWithPassword, unlockWithRecovery } from '../../shared/crypto/space'

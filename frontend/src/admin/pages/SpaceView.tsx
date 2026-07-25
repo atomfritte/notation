@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync } from 'lucide-react'
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
@@ -13,7 +13,7 @@ import { createEncryptedSearchIndex, type EncryptedSearchIndex } from '../lib/en
 import type { EncryptedFS } from '../../shared/vfs/encfs'
 import { utf8Decode, utf8Encode } from '../../shared/crypto/bytes'
 import { UnlockScreen } from '../components/UnlockScreen'
-import { getCachedFile, setCachedFile, prefetchFile } from '../lib/contentCache'
+import { getCachedFile, setCachedFile, prefetchFile, clearCachedFile } from '../lib/contentCache'
 import { isTextFile, isMarkdownFile, findDefaultFile, rendersFromBytes } from '../lib/fileTypes'
 import { downloadDecryptedFile } from '../lib/decryptedFile'
 import { useNewPages, type NodeIdCodec } from '../lib/newPages'
@@ -46,6 +46,7 @@ import { AllCommentsPanel } from '../components/AllCommentsPanel'
 import { ConvertDialog } from '../components/ConvertDialog'
 import { FolderSyncPanel } from '../components/FolderSyncPanel'
 import { folderSyncSupported } from '../lib/fsAccess'
+import { encryptedSyncSpace, plaintextSyncSpace, httpPlaintextTransport, type SyncSpace } from '../lib/syncSpace'
 
 // Returns true when the keydown target is an element where the user is
 // composing text — keeps single-key shortcuts like "?" from intercepting
@@ -200,7 +201,12 @@ export function SpaceView() {
   const [showComments, setShowComments] = useState(false)
   const [pendingComment, setPendingComment] = useState<string>('')
   const [pendingAnchor, setPendingAnchor] = useState<api.CommentAnchor | null>(null)
-  const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
+  // Two levels of "current comment": hovering a row / a passage merely
+  // highlights its counterpart, while CLICKING one selects it — only a
+  // selection scrolls the document to the anchor and stays put afterwards.
+  const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null)
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null)
+  const activeCommentId = selectedCommentId ?? hoveredCommentId
   const [bookmarks, setBookmarks] = useState<string[]>([])
   // Author for comments written into an encrypted space's op-log. The server
   // can't see the plaintext (so it can't stamp the author itself); mirror its
@@ -217,9 +223,26 @@ export function SpaceView() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number, y: number, items: MenuItem[] } | null>(null)
   // Non-null while the encrypt/decrypt conversion dialog is open.
   const [convertDir, setConvertDir] = useState<api.ConvertDirection | null>(null)
-  // Local-folder-sync panel (encrypted spaces only): decrypt the space to a
-  // real folder for a local agent, then re-encrypt reviewed changes back.
+  // Local-folder-sync panel (any space): mirror the space into a real folder for
+  // a local agent, then apply the reviewed changes back. The SyncSpace port
+  // below is what makes it mode-agnostic — an unlocked EncryptedFS for a
+  // zero-knowledge space, the plaintext file API otherwise.
   const [folderSyncOpen, setFolderSyncOpen] = useState(false)
+  // Bumped after a push so the open file re-reads instead of showing pre-push text.
+  const [contentNonce, setContentNonce] = useState(0)
+  const syncSpace = useMemo<SyncSpace | null>(
+    () => {
+      // `encrypted` is false until spaceMeta arrives, so withhold the port
+      // entirely until we KNOW which kind of space this is — never hand the
+      // plaintext transport to what may turn out to be a zero-knowledge space.
+      if (!spaceID || !spaceMeta) return null
+      if (!encrypted) return plaintextSyncSpace(httpPlaintextTransport(spaceID))
+      return fsReady && fsRef.current ? encryptedSyncSpace(fsRef.current) : null
+    },
+    // fsReady flips once the encrypted FS has replayed its op-log; fsRef is a ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [spaceID, spaceMeta, encrypted, fsReady],
+  )
 
   // Form folders: when the selected path is a folder with a _form.md template,
   // we render the FormView instead of treating it as a file.
@@ -632,9 +655,10 @@ export function SpaceView() {
         // Space-level conversion: encrypt a plaintext space (or decrypt an
         // unlocked encrypted one) in place. Destructive on finalize — the dialog
         // warns clearly.
-        // Zero-knowledge spaces can sync to a local plaintext folder for a local
-        // agent (Claude Code). Encrypted + supported browsers only.
-        ...(encryptedRef.current && folderSyncSupported()
+        // Any space can mirror to a local folder for a local agent (Claude
+        // Code) — encrypted ones decrypt on the way out. Supported browsers
+        // only; an encrypted space also has to be unlocked (syncSpace non-null).
+        ...(syncSpace && folderSyncSupported()
           ? [{ label: 'Local folder sync…', icon: <FolderSync size={14} />, onClick: () => setFolderSyncOpen(true) }]
           : []),
         encryptedRef.current
@@ -642,7 +666,7 @@ export function SpaceView() {
           : { label: 'Encrypt this space…', icon: <Lock size={14} />, onClick: () => setConvertDir('to-encrypted') },
       ],
     })
-  }, [spaceID, createFileIn, createFolderIn, promptUploadInto, printWholeSpace, downloadAllZip])
+  }, [spaceID, createFileIn, createFolderIn, promptUploadInto, printWholeSpace, downloadAllZip, syncSpace])
 
   const handleBookmarkContextMenu = useCallback((e: React.MouseEvent, path: string) => {
     e.preventDefault()
@@ -976,7 +1000,8 @@ export function SpaceView() {
     refreshComments()
     // A late response from the previous file must not clobber the current one.
     return () => { cancelled = true }
-  }, [spaceID, file, refreshComments, isForm, encrypted, fsReady])
+    // contentNonce is bumped by a folder-sync push so the open file re-reads.
+  }, [spaceID, file, refreshComments, isForm, encrypted, fsReady, contentNonce])
 
   // Load a form folder's schema + entries when one is selected.
   useEffect(() => {
@@ -1107,7 +1132,7 @@ export function SpaceView() {
   headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={18} />, onClick: () => setThemeOpen(true) })
   headerActions.push({ key: 'help', label: 'Keyboard shortcuts', icon: <HelpCircle size={18} />, onClick: () => setHelpOpen(true) })
   headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
-  if (encrypted && folderSyncSupported()) headerActions.push({ key: 'folder-sync', label: 'Local folder sync', icon: <FolderSync size={18} />, onClick: () => setFolderSyncOpen(true) })
+  if (syncSpace && folderSyncSupported()) headerActions.push({ key: 'folder-sync', label: 'Local folder sync', icon: <FolderSync size={18} />, onClick: () => setFolderSyncOpen(true) })
   if (encrypted) headerActions.push({ key: 'lock', label: 'Lock space', icon: <Lock size={18} />, onClick: () => { setContent(''); setTree([]); keyStore.lock(spaceID) } })
   const editVisible = isTextFile(file) && !historyMode && !isForm
   const compactHeader = headerIsCompact(headerWidth, headerActions.length, 120 + (editVisible ? 64 : 0), isMobile)
@@ -1116,12 +1141,23 @@ export function SpaceView() {
     <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
       {themeOpen && <ThemePalette onClose={() => setThemeOpen(false)} />}
-      {folderSyncOpen && encrypted && fsReady && fsRef.current && (
+      {folderSyncOpen && syncSpace && (
         <FolderSyncPanel
-          fs={fsRef.current}
+          space={syncSpace}
           spaceID={spaceID}
           onClose={() => setFolderSyncOpen(false)}
-          onSynced={() => { if (fsRef.current) setTree(fsToEntries(fsRef.current)) }}
+          onSynced={(changedPaths) => {
+            if (encryptedRef.current) {
+              if (fsRef.current) setTree(fsToEntries(fsRef.current))
+            } else {
+              // The push wrote straight to the server — evict every stale body
+              // the stale-while-revalidate cache would otherwise repaint.
+              for (const p of changedPaths) clearCachedFile(contentKey(spaceID, p))
+              refreshTree()
+            }
+            // Re-read the open file: its bytes may be exactly what just changed.
+            setContentNonce(n => n + 1)
+          }}
         />
       )}
       {convertDir && (
@@ -1229,6 +1265,11 @@ export function SpaceView() {
                 onMove={movePathToDir}
                 onExternalDrop={uploadInto}
                 collapseStorageKey={`notation_tree_collapsed_${spaceID}`}
+                // Encrypted spaces persist the collapsed map by opaque nodeId —
+                // a cleartext folder path in localStorage would hand a stolen
+                // browser profile the very structure the encryption hides.
+                pathCodec={encPathCodec}
+                pathCodecReady={fsReady}
                 newPaths={newPaths}
                 onMarkAllSeen={markAllSeen}
               />
@@ -1259,8 +1300,9 @@ export function SpaceView() {
                 currentFile={file}
                 onSelectFile={(p, commentID) => {
                   selectFile(p)
-                  setShowComments(true)
-                  if (commentID) setActiveCommentId(commentID)
+                  // Jump to the passage itself; the sidebar column stays as the
+                  // user left it (opening it uninvited hijacks the layout).
+                  if (commentID) setSelectedCommentId(commentID)
                 }}
                 refreshKey={allCommentsRefresh}
                 // Encrypted spaces have no server comments — feed the op-log's
@@ -1303,7 +1345,7 @@ export function SpaceView() {
             >
               <Archive size={16} />
             </button>
-            {encrypted && folderSyncSupported() && (
+            {syncSpace && folderSyncSupported() && (
               <button
                 onClick={() => setFolderSyncOpen(true)}
                 title="Local folder sync (work on this Space as plain files)"
@@ -1654,11 +1696,12 @@ export function SpaceView() {
                         theme={theme}
                         comments={comments}
                         activeCommentID={activeCommentId}
-                        onHoverMark={setActiveCommentId}
-                        onSelectAnchor={(id) => {
-                          setShowComments(true)
-                          setActiveCommentId(id)
-                        }}
+                        focusCommentID={selectedCommentId}
+                        onHoverMark={setHoveredCommentId}
+                        // Clicking a passage pins its bubble in the document —
+                        // deliberately WITHOUT forcing the sidebar column open.
+                        onSelectAnchor={setSelectedCommentId}
+                        onReplyToComment={(parentID, text) => handleAddComment(text, { parentID })}
                         onNewAnchorComment={onNewAnchorComment}
                         onNewReaction={handleAddReaction}
                         files={allFilesAny}
@@ -1742,7 +1785,8 @@ export function SpaceView() {
                    canAdd={true}
                    initialText={pendingComment}
                    activeID={activeCommentId}
-                   onHoverComment={setActiveCommentId}
+                   onHoverComment={setHoveredCommentId}
+                   onSelectComment={setSelectedCommentId}
                    onAdd={async (text, opts) => {
                      await handleAddComment(text, opts)
                      setPendingComment('')

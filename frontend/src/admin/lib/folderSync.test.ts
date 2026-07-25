@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { generateDEK, importContentKey } from '../../shared/crypto/keys'
 import { InMemoryEncStore } from '../../shared/vfs/encStore'
 import { EncryptedFS } from '../../shared/vfs/encfs'
+import { encryptedSyncSpace, plaintextSyncSpace, type PlaintextTransport } from './syncSpace'
+import type * as api from './api'
 import {
   applyPush,
   computePushPlan,
@@ -23,6 +25,9 @@ const enc = (s: string): Uint8Array => new TextEncoder().encode(s)
 const dec = (b: Uint8Array): string => new TextDecoder().decode(b)
 const newFs = async (): Promise<EncryptedFS> =>
   EncryptedFS.open(new InMemoryEncStore(), await importContentKey(generateDEK()), 'A')
+// The engine speaks the SyncSpace port; these tests drive its encrypted backend
+// (a separate suite covers the plaintext one against a fake transport).
+const space = encryptedSyncSpace
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false
@@ -134,7 +139,7 @@ describe('folderSync.pull', () => {
     await fs.write('.secret.txt', enc('should not be exported'))
 
     const dir = new FakeDirHandle()
-    const res = await pull(fs, dir)
+    const res = await pull(space(fs), dir)
 
     expect(res.written.sort()).toEqual(['assets/logo.bin', 'docs/guides/setup.md', 'docs/intro.md', 'readme.md'])
     expect(res.written).not.toContain('.secret.txt')
@@ -152,7 +157,7 @@ describe('folderSync.pull', () => {
     await fs.write('nested/b.md', enc('beta'))
 
     const dir = new FakeDirHandle()
-    const res = await pull(fs, dir)
+    const res = await pull(space(fs), dir)
 
     const onDisk = await readManifestFile(dir)
     expect(onDisk).not.toBeNull()
@@ -171,7 +176,7 @@ describe('folderSync.pull', () => {
 
     const dir = new FakeDirHandle()
     await writeFileTo(dir, 'scratch.txt', enc('agent scratch'))
-    await pull(fs, dir)
+    await pull(space(fs), dir)
 
     expect(dec((await folderRead(dir, 'scratch.txt'))!)).toBe('agent scratch')
     expect(dec((await folderRead(dir, 'page.md'))!)).toBe('content')
@@ -241,7 +246,7 @@ async function pulled(): Promise<{ fs: EncryptedFS; dir: FakeDirHandle }> {
   for (let i = 0; i < 256; i++) binary[i] = 255 - i
   await fs.write('img/pic.bin', binary)
   const dir = new FakeDirHandle()
-  await pull(fs, dir)
+  await pull(space(fs), dir)
   return { fs, dir }
 }
 
@@ -250,11 +255,11 @@ describe('folderSync push', () => {
     const { fs, dir } = await pulled()
     await writeFileTo(dir, 'notes/added.md', enc('# Added by agent'))
 
-    const prepared = await preparePush(fs, dir)
+    const prepared = await preparePush(space(fs), dir)
     expect(prepared.plan.counts.new).toBe(1)
     expect(prepared.plan.entries.find((e) => e.path === 'notes/added.md')?.kind).toBe('new')
 
-    const res = await applyPush(fs, dir, prepared, { applyDeletions: false })
+    const res = await applyPush(space(fs), dir, prepared, { applyDeletions: false })
     expect(res.applied.new).toBe(1)
     expect(dec(await fs.read('notes/added.md'))).toBe('# Added by agent')
   })
@@ -265,9 +270,9 @@ describe('folderSync push', () => {
     const before = store.opCount()
     await writeFileTo(dir, 'readme.md', enc('# Readme\n\nEDITED locally'))
 
-    const prepared = await preparePush(fs, dir)
+    const prepared = await preparePush(space(fs), dir)
     expect(prepared.plan.counts.modified).toBe(1)
-    const res = await applyPush(fs, dir, prepared, { applyDeletions: false })
+    const res = await applyPush(space(fs), dir, prepared, { applyDeletions: false })
 
     expect(res.applied.modified).toBe(1)
     expect(dec(await fs.read('readme.md'))).toBe('# Readme\n\nEDITED locally')
@@ -279,18 +284,18 @@ describe('folderSync push', () => {
     const { fs, dir } = await pulled()
     await dir.getDirectoryHandle('docs').then((d) => d.removeEntry('guide.md'))
 
-    const prepared = await preparePush(fs, dir)
+    const prepared = await preparePush(space(fs), dir)
     expect(prepared.plan.counts.deleted).toBe(1)
     expect(prepared.plan.entries.find((e) => e.path === 'docs/guide.md')?.kind).toBe('deleted')
 
     // Deletions OFF: the space file survives.
-    const kept = await applyPush(fs, dir, prepared, { applyDeletions: false })
+    const kept = await applyPush(space(fs), dir, prepared, { applyDeletions: false })
     expect(kept.skippedDeletions).toBe(1)
     expect(kept.applied.deleted).toBe(0)
     expect(dec(await fs.read('docs/guide.md'))).toBe('# Guide\n\nsteps')
 
     // Deletions ON (same previewed plan): now it is removed from the space.
-    const removed = await applyPush(fs, dir, prepared, { applyDeletions: true })
+    const removed = await applyPush(space(fs), dir, prepared, { applyDeletions: true })
     expect(removed.applied.deleted).toBe(1)
     expect(fs.resolve('docs/guide.md')).toBeUndefined()
   })
@@ -300,9 +305,9 @@ describe('folderSync push', () => {
     const store = (fs as unknown as { store: InMemoryEncStore }).store
     const before = store.opCount()
 
-    const prepared = await preparePush(fs, dir)
+    const prepared = await preparePush(space(fs), dir)
     expect(prepared.plan.entries).toHaveLength(0)
-    const res = await applyPush(fs, dir, prepared, { applyDeletions: false })
+    const res = await applyPush(space(fs), dir, prepared, { applyDeletions: false })
 
     expect(res.applied).toEqual({ new: 0, modified: 0, deleted: 0 })
     expect(store.opCount()).toBe(before)
@@ -314,13 +319,13 @@ describe('folderSync push', () => {
     await writeFileTo(dir, 'node_modules/pkg/index.js', enc('module.exports = {}'))
     await writeFileTo(dir, 'legit.md', enc('# Legit'))
 
-    const prepared = await preparePush(fs, dir)
+    const prepared = await preparePush(space(fs), dir)
     const paths = prepared.plan.entries.map((e) => e.path)
     expect(paths).toContain('legit.md')
     expect(paths).not.toContain('.git/config')
     expect(paths).not.toContain('node_modules/pkg/index.js')
 
-    await applyPush(fs, dir, prepared, { applyDeletions: false })
+    await applyPush(space(fs), dir, prepared, { applyDeletions: false })
     expect(fs.resolve('.git/config')).toBeUndefined()
     expect(fs.resolve('node_modules/pkg/index.js')).toBeUndefined()
   })
@@ -332,8 +337,8 @@ describe('folderSync push', () => {
     // Simulate a local agent editing one markdown file.
     await writeFileTo(dir, 'docs/guide.md', enc('# Guide\n\nrewritten by Claude Code'))
 
-    const prepared = await preparePush(fs, dir)
-    await applyPush(fs, dir, prepared, { applyDeletions: false })
+    const prepared = await preparePush(space(fs), dir)
+    await applyPush(space(fs), dir, prepared, { applyDeletions: false })
 
     expect(dec(await fs.read('docs/guide.md'))).toBe('# Guide\n\nrewritten by Claude Code')
     // Untouched files (incl. the binary) are byte-for-byte intact.
@@ -341,7 +346,7 @@ describe('folderSync push', () => {
     expect(bytesEqual(await fs.read('img/pic.bin'), originalBinary)).toBe(true)
 
     // A second push with no further edits is a clean no-op.
-    const again = await preparePush(fs, dir)
+    const again = await preparePush(space(fs), dir)
     expect(again.plan.entries).toHaveLength(0)
   })
 
@@ -352,12 +357,175 @@ describe('folderSync push', () => {
     // Populate the folder WITHOUT a manifest (as if it were copied elsewhere).
     await writeFileTo(dir, 'doc.md', enc('v2'))
 
-    const noBaseline = await preparePush(fs, dir)
+    const noBaseline = await preparePush(space(fs), dir)
     expect(noBaseline.manifestSource).toBe('none')
 
-    const withFallback = await preparePush(fs, dir, { 'doc.md': await sha256Hex(enc('v1')) })
+    const withFallback = await preparePush(space(fs), dir, { 'doc.md': await sha256Hex(enc('v1')) })
     expect(withFallback.manifestSource).toBe('fallback')
     // With the baseline, the divergence is a plain folder-wins modification.
     expect(withFallback.plan.entries.find((e) => e.path === 'doc.md')?.kind).toBe('modified')
+  })
+})
+
+// ─── the plaintext backend ───────────────────────────────────────────────────
+// A plaintext space is reached over HTTP, so the transport is faked: an
+// in-memory file map that answers the same five calls the real one does. This
+// proves the engine is genuinely backend-agnostic — the identical pull/diff/push
+// loop runs against the server API with no encryption involved.
+
+class FakePlaintextTransport implements PlaintextTransport {
+  files = new Map<string, Uint8Array>()
+  /** Directories that exist with no file in them (only the tree reports these). */
+  emptyDirs = new Set<string>()
+  /** Paths whose write must fail, simulating e.g. an over-the-limit upload. */
+  rejectWrites = new Set<string>()
+  reads = 0
+
+  set(path: string, bytes: Uint8Array): void { this.files.set(path, bytes.slice()) }
+
+  async listFiles(): Promise<string[]> { return [...this.files.keys()] }
+
+  /** Rebuild the recursive tree the server would return (dirs + files). */
+  async listTree(): Promise<api.Entry[]> {
+    const roots: api.Entry[] = []
+    const dirs = new Map<string, api.Entry>()
+    const dirFor = (path: string): api.Entry => {
+      const existing = dirs.get(path)
+      if (existing) return existing
+      const segs = path.split('/')
+      const entry: api.Entry = {
+        name: segs[segs.length - 1], path, is_dir: true, size: 0, modified: '', children: [],
+      }
+      dirs.set(path, entry)
+      if (segs.length === 1) roots.push(entry)
+      else dirFor(segs.slice(0, -1).join('/')).children!.push(entry)
+      return entry
+    }
+    for (const d of this.emptyDirs) dirFor(d)
+    for (const [path, bytes] of this.files) {
+      const segs = path.split('/')
+      const entry: api.Entry = {
+        name: segs[segs.length - 1], path, is_dir: false, size: bytes.length, modified: '',
+      }
+      if (segs.length === 1) roots.push(entry)
+      else dirFor(segs.slice(0, -1).join('/')).children!.push(entry)
+    }
+    return roots
+  }
+
+  async readBytes(path: string): Promise<Uint8Array> {
+    const b = this.files.get(path)
+    if (!b) throw new Error(`404 ${path}`)
+    this.reads++
+    return b.slice()
+  }
+
+  async writeBytes(path: string, bytes: Uint8Array): Promise<void> {
+    if (this.rejectWrites.has(path)) throw new Error('file too big')
+    this.files.set(path, bytes.slice())
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    if (!this.files.delete(path)) throw new Error(`404 ${path}`)
+  }
+}
+
+describe('folderSync over a plaintext space', () => {
+  it('pulls the whole space (nested, binary, empty dirs) into the folder', async () => {
+    const t = new FakePlaintextTransport()
+    t.set('readme.md', enc('# Readme'))
+    t.set('docs/guide.md', enc('# Guide'))
+    const binary = new Uint8Array([0, 1, 255, 254, 66, 0, 153, 127])
+    t.set('img/pic.bin', binary)
+    t.emptyDirs.add('empty')
+    const sp = plaintextSyncSpace(t)
+
+    const dir = new FakeDirHandle()
+    const res = await pull(sp, dir)
+
+    expect(res.written.sort()).toEqual(['docs/guide.md', 'img/pic.bin', 'readme.md'])
+    expect(res.dirs).toContain('empty')
+    expect(dec((await folderRead(dir, 'docs/guide.md'))!)).toBe('# Guide')
+    expect(bytesEqual((await folderRead(dir, 'img/pic.bin'))!, binary)).toBe(true)
+    // The empty directory survived the round-trip as a real folder.
+    expect((dir.children.get('empty') as FakeDirHandle).kind).toBe('directory')
+  })
+
+  it('round-trips add / modify / delete back into the space', async () => {
+    const t = new FakePlaintextTransport()
+    t.set('readme.md', enc('# Readme'))
+    t.set('docs/guide.md', enc('# Guide'))
+    t.set('stale.md', enc('remove me'))
+    const sp = plaintextSyncSpace(t)
+
+    const dir = new FakeDirHandle()
+    await pull(sp, dir)
+
+    // A local agent edits, adds and removes files in the folder.
+    await writeFileTo(dir, 'docs/guide.md', enc('# Guide v2'))
+    await writeFileTo(dir, 'notes/new.md', enc('# Fresh'))
+    await dir.removeEntry('stale.md')
+
+    const prepared = await preparePush(sp, dir)
+    expect(prepared.plan.counts).toMatchObject({ new: 1, modified: 1, deleted: 1, conflict: 0 })
+
+    const res = await applyPush(sp, dir, prepared, { applyDeletions: true })
+    expect(res.applied).toEqual({ new: 1, modified: 1, deleted: 1 })
+    expect(res.failed).toEqual([])
+    expect(res.changedPaths.sort()).toEqual(['docs/guide.md', 'notes/new.md', 'stale.md'])
+    expect(dec(t.files.get('docs/guide.md')!)).toBe('# Guide v2')
+    expect(dec(t.files.get('notes/new.md')!)).toBe('# Fresh')
+    expect(t.files.has('stale.md')).toBe(false)
+
+    // The baseline is refreshed, so an immediate second push is a no-op.
+    const again = await preparePush(sp, dir)
+    expect(again.plan.entries).toHaveLength(0)
+  })
+
+  it('keeps a rejected write out of the baseline so the next push retries it', async () => {
+    const t = new FakePlaintextTransport()
+    t.set('readme.md', enc('# Readme'))
+    const sp = plaintextSyncSpace(t)
+    const dir = new FakeDirHandle()
+    await pull(sp, dir)
+
+    await writeFileTo(dir, 'readme.md', enc('# Readme v2'))
+    await writeFileTo(dir, 'huge.bin', enc('too big for the server'))
+    t.rejectWrites.add('huge.bin')
+
+    const res = await applyPush(sp, dir, await preparePush(sp, dir), { applyDeletions: false })
+    // The healthy file still applied; only the rejected one is reported.
+    expect(res.applied.modified).toBe(1)
+    expect(res.failed).toHaveLength(1)
+    expect(res.failed[0].path).toBe('huge.bin')
+    expect(res.manifest.entries['huge.bin']).toBeUndefined()
+    expect(res.manifest.entries['readme.md']).toBe(await sha256Hex(enc('# Readme v2')))
+
+    // Next push: the failed file is STILL pending (not silently swallowed).
+    t.rejectWrites.clear()
+    const retry = await preparePush(sp, dir)
+    expect(retry.plan.entries.map((e) => e.path)).toEqual(['huge.bin'])
+    await applyPush(sp, dir, retry, { applyDeletions: false })
+    expect(dec(t.files.get('huge.bin')!)).toBe('too big for the server')
+  })
+
+  it('reports progress and never reads an ignored path', async () => {
+    const t = new FakePlaintextTransport()
+    t.set('a.md', enc('a'))
+    t.set('b/c.md', enc('c'))
+    const sp = plaintextSyncSpace(t)
+    const dir = new FakeDirHandle()
+
+    const seen: Array<[number, number]> = []
+    await pull(sp, dir, (done, total) => seen.push([done, total]))
+    expect(seen[seen.length - 1][0]).toBe(seen[seen.length - 1][1])
+
+    // The manifest we just wrote is a dotfile: pushing must not read it back
+    // into the space, and the space must not be asked for it either.
+    const before = t.reads
+    const prepared = await preparePush(sp, dir)
+    expect(prepared.plan.entries).toHaveLength(0)
+    expect(t.reads - before).toBe(2) // exactly the two real files
+    expect(t.files.has(MANIFEST_FILENAME)).toBe(false)
   })
 })

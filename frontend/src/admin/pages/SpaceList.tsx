@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { Plus, Search, Moon, Sun, FolderOpen, Sparkles, LogOut, X, Palette, CloudOff, SquareKanban, LayoutGrid, Lock } from 'lucide-react'
 import * as api from '../lib/api'
 import { logout } from '../lib/auth'

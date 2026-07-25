@@ -4,6 +4,7 @@ import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { getActorId } from '../lib/encSpace'
 import { encryptSpaceContent, decryptSpaceContent, type PlaintextSource, type PlaintextSink } from '../lib/convert'
+import { purgeLocalSpaceData } from '../lib/purgeLocalSpaceData'
 import { migrateLegacyComments } from '../lib/encComments'
 import { EncryptedFS } from '../../shared/vfs/encfs'
 import { HttpEncStore } from '../../shared/vfs/httpEncStore'
@@ -100,6 +101,13 @@ export function ConvertDialog({
   async function finishEncrypt() {
     try {
       const meta = await api.finalizeConvert(spaceID)
+      // The server side is now ciphertext-only — but this browser still holds
+      // everything plaintext mode wrote for the SAME space id: the opt-in
+      // offline copy (real file bodies!), bookmarks, scroll/read positions and
+      // the collapsed-folder map, all in the clear. Encrypted mode never reads
+      // them, so nothing would ever overwrite them. Wipe them here, or the
+      // zero-knowledge promise is only true on the server.
+      await purgeLocalSpaceData(spaceID)
       if (pendingHandle) keyStore.set(spaceID, pendingHandle)
       onDone(meta)
     } catch (e) {

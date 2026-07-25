@@ -35,6 +35,9 @@
   --notation-accent-50: #65A30D80;
   --notation-bg: #FFFFFF;
   --notation-bg-elevated: #FAFAFA;
+  /* Chrome surface (sidebar/header/panels). Same as bg-elevated for a uniform
+     theme; a split-tone theme sets it apart. See `.surface-elevated`. */
+  --notation-chrome-bg: #FAFAFA;
   --notation-bg-alt: #F4F4F5;
   --notation-fg: #18181B;
   --notation-fg-muted: #71717A;
@@ -73,6 +76,7 @@
   --notation-accent-50: #BFF35580;
   --notation-bg: #0A0A0A;
   --notation-bg-elevated: #111111;
+  --notation-chrome-bg: #111111;
   --notation-bg-alt: #1F1F23;
   --notation-fg: #E4E4E7;
   --notation-fg-muted: #A1A1AA;
@@ -214,9 +218,12 @@
   header,
   .no-print,
   .selection-toolbar,
+  .comment-bubble,
   .monaco-editor {
     display: none !important;
   }
+  /* Annotation badges are screen affordances — paper keeps the prose clean. */
+  mark.comment-anchor::after { content: none !important; }
 
   /* --- Document title block (print-only, injected by MarkdownView) ------- */
   .print-doc-header {
@@ -585,7 +592,15 @@
    Children read `var(--notation-fg)` etc. as before, so existing Tailwind
    classes inside the surface keep working — they just resolve to the
    contrast-correct token automatically. */
+/* Inside chrome (sidebars, header, comments panel, palettes) the content
+   tokens rebind to their chrome counterparts, so a component doesn't need to
+   know which surface it sits on. `--notation-bg-elevated` rebinds too: that is
+   what lets a SPLIT-TONE theme paint a deep sidebar around a bright reading
+   area — chrome surfaces follow --notation-chrome-bg, while the inputs, cards
+   and viewers OUTSIDE chrome keep the elevated tone of the content side. For a
+   uniform theme the two are the same colour and nothing changes. */
 .surface-elevated {
+  --notation-bg-elevated: var(--notation-chrome-bg);
   --notation-fg: var(--notation-fg-on-elevated);
   --notation-fg-muted: var(--notation-fg-on-elevated-muted);
   --notation-border: var(--notation-border-on-elevated);
@@ -815,9 +830,20 @@ mark.comment-anchor.comment-anchor-blink {
   50%      { background-color: rgba(245, 158, 11, 0.9);  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.6); }
 }
 
-/* Emoji reactions: an anchored passage with an emoji marker (no thread). A
-   rose tint distinguishes it from an amber comment; the emoji renders as a
-   small trailing badge via `content: attr(data-emoji)`. */
+/* Every annotated passage carries a trailing badge (emoji reactions and/or a
+   💬 count) so a reader SEES that something is attached there without hovering.
+   Set on the last slice of a marked range only, so it renders once. */
+mark.comment-anchor::after {
+  content: attr(data-badge);
+  font-size: 0.82em;
+  margin-left: 1px;
+  vertical-align: super;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+/* Emoji reactions: an anchored passage carrying only reactions (no thread). A
+   rose tint distinguishes it from an amber comment. */
 mark.comment-reaction {
   background-color: rgba(244, 114, 182, 0.18);
   border-bottom-color: rgba(236, 72, 153, 0.55);
@@ -830,13 +856,6 @@ mark.comment-reaction:hover,
 mark.comment-reaction[data-active="true"] {
   background-color: rgba(244, 114, 182, 0.55) !important;
   box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.6);
-}
-mark.comment-reaction::after {
-  content: attr(data-emoji);
-  font-size: 0.82em;
-  margin-left: 1px;
-  vertical-align: super;
-  line-height: 1;
 }
 
 /* SheetJS sheet_to_html output — give the raw <table> a readable look that

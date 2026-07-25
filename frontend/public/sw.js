@@ -13,7 +13,9 @@
  * Bump VERSION to invalidate the shell/asset caches on deploy. Audio is content-
  * addressed, so it's kept across versions.
  */
-const VERSION = 'v2'
+// v3 also evicts any space/share FILE responses that the pre-fix asset rule
+// mistakenly parked in the v2 shell cache (see the fetch handler).
+const VERSION = 'v3'
 const SHELL = 'notation-shell-' + VERSION
 
 // Admin read-aloud audio is cached PER SPACE — never in one shared bucket — so a
@@ -26,6 +28,13 @@ const SHELL = 'notation-shell-' + VERSION
 // Share (/s/api/<token>/tts) audio is intentionally NOT cached here: shares aren't
 // an offline target, and per-token caches have no revoke/expiry cleanup hook — so
 // share audio stays network-only and can't linger on a device past the share.
+// True for anything served by the HTTP API (admin or share). Those responses
+// are access-controlled per request and must never be answered from a shared,
+// long-lived cache — only the explicit per-space offline caches may hold them.
+function isApiPath(url) {
+  return url.pathname.startsWith('/api/') || /^\/[^/]+\/api\//.test(url.pathname)
+}
+
 function audioCacheName(url) {
   const m = url.pathname.match(/^\/api\/admin\/spaces\/([^/]+)\/tts$/)
   return m ? 'notation-audio-' + decodeURIComponent(m[1]) : null
@@ -69,7 +78,15 @@ self.addEventListener('fetch', (event) => {
     return
   }
   // Hashed/static assets — immutable → cache-first.
-  if (url.pathname.includes('/_assets/') || /\.(?:js|css|woff2?|png|svg|ico|webmanifest)$/.test(url.pathname)) {
+  //
+  // The extension test must NEVER see an API URL. A space file is addressed as
+  // /api/admin/spaces/<id>/file/<path> (and /s/api/<token>/file/<path>), so a
+  // plain `photos/plan.png` used to match here and land in the SHELL cache:
+  // one bucket shared by every space and every share token, served cache-first
+  // (i.e. WITHOUT re-checking authorization) and untouched by unsyncSpace, by
+  // logout, and by share revocation. API paths are owned by the branches below.
+  if (!isApiPath(url) &&
+      (url.pathname.includes('/_assets/') || /\.(?:js|css|woff2?|png|svg|ico|webmanifest)$/.test(url.pathname))) {
     event.respondWith(cacheFirst(SHELL, req))
     return
   }

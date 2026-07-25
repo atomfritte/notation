@@ -3,6 +3,7 @@ package http
 import (
 	"testing"
 
+	"github.com/yoogie27/notation/internal/share"
 	"github.com/yoogie27/notation/internal/space"
 )
 
@@ -55,5 +56,28 @@ func TestScopeTree_MissingScope_ReturnsEmpty(t *testing.T) {
 	got := scopeTree(sampleTree(), "gone.md")
 	if len(got) != 0 {
 		t.Fatalf("missing scope must yield empty tree, got %+v", got)
+	}
+}
+
+// The TTS audio cache is content-addressed, so two credentials sharing a
+// namespace can observe each other's hits. A page/folder-scoped share must
+// therefore never share the space-wide namespace: otherwise a guest could
+// confirm (and be served) audio synthesised for content outside its scope.
+func TestTTSCacheScope_ScopedShareIsIsolated(t *testing.T) {
+	whole := share.Share{ID: "s1"}
+	scoped := share.Share{ID: "s2", Scope: "notes/public.md"}
+	other := share.Share{ID: "s3", Scope: "notes/public.md"}
+
+	if got := ttsCacheScope("alpha", whole); got != "alpha" {
+		t.Fatalf("unscoped share should keep the space-wide namespace, got %q", got)
+	}
+	if got := ttsCacheScope("alpha", scoped); got == "alpha" {
+		t.Fatal("scoped share must not reuse the space-wide namespace")
+	}
+	if ttsCacheScope("alpha", scoped) == ttsCacheScope("alpha", other) {
+		t.Fatal("two scoped shares must not share a namespace")
+	}
+	if ttsCacheScope("alpha", scoped) == ttsCacheScope("beta", scoped) {
+		t.Fatal("namespace must stay per-space")
 	}
 }

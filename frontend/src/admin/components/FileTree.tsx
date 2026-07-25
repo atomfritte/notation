@@ -30,6 +30,14 @@ type Props = {
   /** localStorage key for persisting the collapsed-folders map. Optional;
    *  if omitted the state stays in-memory only. */
   collapseStorageKey?: string
+  /** Path <-> opaque nodeId codec for a zero-knowledge space. When present the
+   *  persisted map is keyed by nodeId, never by the cleartext folder path — a
+   *  stolen browser profile must not reveal an encrypted space's structure.
+   *  Persistence is suspended until it can actually resolve (see pathCodecReady),
+   *  so an unresolvable load never overwrites the stored map with an empty one. */
+  pathCodec?: { encode: (path: string) => string | undefined; decode: (id: string) => string | undefined }
+  /** False while `pathCodec` cannot resolve yet (encrypted FS still loading). */
+  pathCodecReady?: boolean
   /** Paths considered "new since last visit" (files and form folders — see
    *  lib/newPages). New files get a pill, folders containing them get a dot. */
   newPaths?: Set<string>
@@ -66,6 +74,8 @@ export function FileTree({
   onMove,
   onExternalDrop,
   collapseStorageKey,
+  pathCodec,
+  pathCodecReady = true,
   newPaths,
   onMarkAllSeen,
   depth = 0,
@@ -79,20 +89,41 @@ export function FileTree({
   // empty map and never write back), since the root already covers the whole
   // tree.
   const isRoot = depth === 0
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
-    if (!isRoot || !collapseStorageKey || typeof window === 'undefined') return {}
-    try {
-      const raw = localStorage.getItem(collapseStorageKey)
-      return raw ? JSON.parse(raw) : {}
-    } catch {
-      return {}
-    }
-  })
+  // Persist only once the (optional) codec can resolve: for an encrypted space
+  // the stored keys are nodeIds, and before the FS has replayed its op-log they
+  // decode to nothing. Reading then would look like "no collapsed folders" and
+  // the save effect would write that emptiness back over the real map.
+  const persist = isRoot && !!collapseStorageKey && (!pathCodec || pathCodecReady)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   useEffect(() => {
-    if (!isRoot || !collapseStorageKey) return
-    try { localStorage.setItem(collapseStorageKey, JSON.stringify(collapsed)) }
-    catch { /* quota error etc. — not fatal */ }
-  }, [collapsed, collapseStorageKey, isRoot])
+    if (!persist || typeof window === 'undefined') return
+    try {
+      const raw = localStorage.getItem(collapseStorageKey!)
+      const stored = raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+      const next: Record<string, boolean> = {}
+      for (const [key, value] of Object.entries(stored)) {
+        const path = pathCodec ? pathCodec.decode(key) : key
+        if (path) next[path] = value
+      }
+      setCollapsed(next)
+    } catch { /* corrupt entry — start from scratch */ }
+    // Load once per (key, readiness) change; `collapsed` is deliberately not a
+    // dependency, or every toggle would reload and fight the save effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persist, collapseStorageKey, pathCodec])
+  useEffect(() => {
+    if (!persist) return
+    try {
+      const out: Record<string, boolean> = {}
+      for (const [path, value] of Object.entries(collapsed)) {
+        const key = pathCodec ? pathCodec.encode(path) : path
+        // A folder we can't encode is simply not remembered — never stored in
+        // the clear.
+        if (key) out[key] = value
+      }
+      localStorage.setItem(collapseStorageKey!, JSON.stringify(out))
+    } catch { /* quota error etc. — not fatal */ }
+  }, [collapsed, collapseStorageKey, persist, pathCodec])
 
   // Reveal the active file: whenever `current` changes, expand any child folder
   // that contains it. Each level only handles its own direct children; once a
