@@ -54,6 +54,7 @@ Most note tools force you to pick a side: either a SaaS that owns your data, or 
 - [Authentication](#authentication)
 - [Spaces & Git versioning](#spaces--git-versioning)
 - [Magic Links](#magic-links)
+- [Local folder sync](#local-folder-sync)
 - [MCP integration](#mcp-integration)
 - [Supported file types](#supported-file-types)
 - [Markdown features](#markdown-features)
@@ -120,9 +121,9 @@ Markdown, code (syntax-highlighted), images, PDF, video, audio, XLSX, DOCX, CSV 
 <tr>
 <td>
 
-### 💬  Anchored comments
+### 💬  Anchored comments & reactions
 
-Select text in the viewer → comment is pinned to the quote. Hovering the comment flashes the highlight in the document. Threaded replies.
+Select text → pin a comment or an emoji reaction to that exact quote. Annotated passages carry a visible badge; hover one to read the thread and reply without leaving the page.
 
 </td>
 <td>
@@ -354,6 +355,24 @@ The viewer at the share URL is the same React app as the admin's, in **read-only
 
 ---
 
+## Local folder sync
+
+Work on a Space with local tools — an editor, a script, a coding agent — and bring the result back under review. Open a Space → **Local folder sync** (the header's folder icon, or the file-tree context menu), pick a directory, and you get two explicit actions. There is no live auto-sync: nothing moves without a click.
+
+| Action | What it does |
+|---|---|
+| **Pull** | Writes every file of the Space into the folder, recreating the tree (empty folders included). Files already in the folder that the Space doesn't know about (a `.git`, scratch files) are left alone. |
+| **Push** | Reads the folder back, diffs it, shows a change preview (new / modified / deleted / conflict) and applies it only when you confirm. Deletions are opt-in via a separate checkbox. |
+
+- **Works for every Space** — plaintext or zero-knowledge encrypted. For an encrypted Space the browser decrypts on pull and re-encrypts on push; the server never sees anything but ciphertext. The panel says so plainly, because pull does write *decrypted* files to your disk.
+- **A plaintext Space's push is an ordinary write**, so every pushed file lands in the Space's git history like any other edit.
+- **3-way diff, not last-writer-wins.** A `.notation-sync.json` manifest (`path → content hash`) is written into the folder at every successful sync. It's what separates "the folder added a file" from "the Space deleted one", and it flags a real conflict when both sides changed the same file since the last sync (resolution is folder-wins, and every conflict is listed before you confirm).
+- **Ignored on both sides**: dotfiles and dot-directories (`.git`, `.env`, the manifest itself) and any `node_modules/`.
+- **A failed write doesn't poison the baseline.** If the server rejects a file (too large, connection lost), the push still applies everything else, reports what failed, and keeps those paths out of the sync record so the next push retries them.
+- **Requirements**: a Chromium-based browser (Chrome, Edge, Brave) over https or localhost — it uses the File System Access API. The picked folder is remembered per Space in IndexedDB; you only re-grant permission with one click. No encryption key is ever stored there.
+
+---
+
 ## MCP integration
 
 Each Space exposes an HTTP+JSON-RPC **Model Context Protocol** endpoint at `<NOTATION_MCP_PATH>/<space-id>`. Auth is `Authorization: Bearer <token>`. Tokens are scoped to one Space.
@@ -459,8 +478,12 @@ The viewer is the same on the admin side and through Magic Links.
 - **KaTeX**: `$inline$` and `$$display$$` math
 - **Syntax highlight**: `rehype-highlight` with the github-dark theme
 - **Code-block Copy button**: hover any code block
-- **Anchored comments**: select text → floating Comment button → comment pinned to the quote; hovering the sidebar comment flashes the highlight in the document
-- **Threaded replies**: one level deep, indented
+- **Anchored comments**: select text → floating Comment button → the comment is pinned to that quote
+- **Emoji reactions**: same selection toolbar → React → an emoji pinned to the passage, no thread needed
+- **Inline annotation badges**: every annotated passage is marked in the prose and carries a trailing badge (each reaction emoji, plus `💬` and a count for comments) — you can always see where the conversation is without opening a panel
+- **Hover bubble**: hovering a marked passage shows the whole thread; clicking it pins the bubble so you can reply right there. The comments column never opens itself — you decide when it's visible
+- **Click to jump**: clicking a comment (in the sidebar or the all-comments panel) scrolls to its passage and keeps it highlighted; merely hovering only lights it up, it never yanks the page around
+- **Threaded replies**: one level deep, indented — from the sidebar or from the in-document bubble
 - **Outline / TOC**: sidebar panel with IntersectionObserver-driven active-section tracking
 - **Backlinks**: which other files link here (backed by the `search` tool)
 

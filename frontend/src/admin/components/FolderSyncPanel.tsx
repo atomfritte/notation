@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   X, FolderSync, FolderOpen, FolderDown, FolderUp, HardDrive, AlertTriangle,
-  ShieldAlert, Check, Plus, Pencil, Trash2, RefreshCw,
+  ShieldAlert, Info, Check, Plus, Pencil, Trash2, RefreshCw,
 } from 'lucide-react'
-import type { EncryptedFS } from '../../shared/vfs/encfs'
+import type { SyncSpace } from '../lib/syncSpace'
 import {
   pull, preparePush, applyPush, type PreparedPush, type PushEntry, type SyncDirHandle,
 } from '../lib/folderSync'
@@ -15,18 +15,20 @@ import {
 } from '../lib/fsAccess'
 
 /**
- * FolderSyncPanel — the encrypted-space-only UI for manual local-folder sync.
+ * FolderSyncPanel — the UI for manual local-folder sync, for ANY space
+ * (encrypted or plaintext); the {@link SyncSpace} port hides the difference.
  *
  * Two explicit, user-driven actions (never live auto-sync):
- *   - **Pull** decrypts the whole space into a folder the user picks, so a local
+ *   - **Pull** writes the whole space into a folder the user picks, so a local
  *     agent (Claude Code) can work on it as plain files.
  *   - **Push** reads the folder back, previews a 3-way diff (new / modified /
  *     deleted / conflict) against the current space + last-sync manifest, and —
- *     only on explicit confirm — re-encrypts the changes in. Deletions are opt-in.
+ *     only on explicit confirm — applies the changes. Deletions are opt-in.
  *
- * The browser stays the crypto authority: bytes are decrypted/encrypted only via
- * the in-page {@link EncryptedFS}; the server only ever sees ciphertext. The UI
- * states plainly that Pull writes DECRYPTED plaintext to local disk.
+ * For an ENCRYPTED space the browser stays the crypto authority (bytes are
+ * de/encrypted in-page, the server only ever sees ciphertext) and the panel
+ * states plainly that Pull writes DECRYPTED plaintext to local disk. For a
+ * plaintext space a push is an ordinary server write, so git history records it.
  */
 type Phase = 'home' | 'working' | 'preview' | 'result' | 'error'
 
@@ -35,26 +37,33 @@ type Phase = 'home' | 'working' | 'preview' | 'result' | 'error'
 const asSyncDir = (h: FileSystemDirectoryHandle): SyncDirHandle => h as unknown as SyncDirHandle
 
 export function FolderSyncPanel({
-  fs,
+  space,
   spaceID,
   onClose,
   onSynced,
 }: {
-  fs: EncryptedFS
+  space: SyncSpace
   spaceID: string
   onClose: () => void
-  /** Called after a push applies so the caller can refresh its file tree. */
-  onSynced: () => void
+  /**
+   * Called after a push applies so the caller can refresh its file tree — and
+   * drop any cached body for the paths that changed.
+   */
+  onSynced: (changedPaths: string[]) => void
 }) {
   const supported = folderSyncSupported()
+  const encrypted = space.encrypted
   const [phase, setPhase] = useState<Phase>('home')
   const [handle, setHandle] = useState<FileSystemDirectoryHandle | null>(null)
   const [granted, setGranted] = useState(false)
   const [busy, setBusy] = useState<string>('') // label while working
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [result, setResult] = useState<string | null>(null)
+  const [failed, setFailed] = useState<{ path: string; error: string }[]>([])
   const [prepared, setPrepared] = useState<PreparedPush | null>(null)
   const [applyDeletions, setApplyDeletions] = useState(false)
+  const onProgress = useCallback((done: number, total: number) => setProgress({ done, total }), [])
 
   // Restore a previously-picked folder handle from IndexedDB (non-secret). We
   // only QUERY permission here (no prompt) — re-granting needs a user click.
@@ -110,36 +119,39 @@ export function FolderSyncPanel({
   }, [spaceID])
 
   const doPull = useCallback(async () => {
-    setErr(null); setResult(null)
-    setPhase('working'); setBusy('Decrypting the space into your folder…')
+    setErr(null); setResult(null); setFailed([]); setProgress(null)
+    setPhase('working')
+    setBusy(encrypted ? 'Decrypting the space into your folder…' : 'Copying the space into your folder…')
     try {
       const h = await ensureHandle()
       if (!h) { setPhase('home'); return }
-      const res = await pull(fs, asSyncDir(h))
+      const res = await pull(space, asSyncDir(h), onProgress)
       await setManifest(spaceID, res.manifest.entries)
       setResult(`Wrote ${res.written.length} file${res.written.length === 1 ? '' : 's'} to “${h.name}”.`)
       setPhase('result')
     } catch (e) { setErr(errMsg(e)); setPhase('error') }
-  }, [ensureHandle, fs, spaceID])
+  }, [ensureHandle, space, spaceID, encrypted, onProgress])
 
   const doPreparePush = useCallback(async () => {
-    setErr(null); setResult(null); setApplyDeletions(false)
+    setErr(null); setResult(null); setFailed([]); setProgress(null); setApplyDeletions(false)
     setPhase('working'); setBusy('Reading folder & diffing against the space…')
     try {
       const h = await ensureHandle()
       if (!h) { setPhase('home'); return }
       const rec = await getFolderRecord(spaceID)
-      const p = await preparePush(fs, asSyncDir(h), rec?.manifest)
+      const p = await preparePush(space, asSyncDir(h), rec?.manifest, onProgress)
       setPrepared(p)
       setPhase('preview')
     } catch (e) { setErr(errMsg(e)); setPhase('error') }
-  }, [ensureHandle, fs, spaceID])
+  }, [ensureHandle, space, spaceID, onProgress])
 
   const confirmPush = useCallback(async () => {
     if (!prepared || !handle) return
-    setPhase('working'); setBusy('Re-encrypting folder changes into the space…')
+    setProgress(null)
+    setPhase('working')
+    setBusy(encrypted ? 'Re-encrypting folder changes into the space…' : 'Writing folder changes into the space…')
     try {
-      const res = await applyPush(fs, asSyncDir(handle), prepared, { applyDeletions })
+      const res = await applyPush(space, asSyncDir(handle), prepared, { applyDeletions }, onProgress)
       await setManifest(spaceID, res.manifest.entries)
       const parts: string[] = []
       if (res.applied.new) parts.push(`${res.applied.new} added`)
@@ -147,11 +159,12 @@ export function FolderSyncPanel({
       if (res.applied.deleted) parts.push(`${res.applied.deleted} deleted`)
       if (res.skippedDeletions) parts.push(`${res.skippedDeletions} deletion${res.skippedDeletions === 1 ? '' : 's'} skipped`)
       setResult(parts.length ? `Applied: ${parts.join(' · ')}.` : 'Nothing to apply — the space was already up to date.')
+      setFailed(res.failed)
       setPrepared(null)
-      onSynced()
+      onSynced(res.changedPaths)
       setPhase('result')
     } catch (e) { setErr(errMsg(e)); setPhase('error') }
-  }, [prepared, handle, fs, spaceID, applyDeletions, onSynced])
+  }, [prepared, handle, space, spaceID, applyDeletions, onSynced, encrypted, onProgress])
 
   return (
     <div
@@ -177,12 +190,25 @@ export function FolderSyncPanel({
         {!supported ? (
           <p className="text-sm text-[var(--notation-fg-muted)] py-4">
             This browser can’t open a local folder. Use a Chromium-based browser (Chrome, Edge, Brave)
-            over https or localhost to sync a decrypted folder.
+            over https or localhost to sync this space to a folder.
           </p>
         ) : phase === 'working' ? (
           <div className="py-8 text-center">
             <div className="inline-block w-8 h-8 border-2 border-[color:var(--notation-accent)] border-t-transparent rounded-full animate-spin mb-4" />
             <p className="text-sm text-[var(--notation-fg)]">{busy}</p>
+            {progress && progress.total > 0 && (
+              <div className="mt-4 mx-auto max-w-[16rem]">
+                <div className="h-1.5 rounded-full bg-[var(--notation-border)] overflow-hidden">
+                  <div
+                    className="h-full bg-[color:var(--notation-accent)] transition-[width] duration-150"
+                    style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-[var(--notation-fg-muted)] mt-1.5 tabular-nums">
+                  {progress.done} / {progress.total} files
+                </p>
+              </div>
+            )}
             <p className="text-[11px] text-[var(--notation-fg-muted)] mt-3">Do not close this tab until it finishes.</p>
           </div>
         ) : phase === 'preview' && prepared ? (
@@ -199,6 +225,24 @@ export function FolderSyncPanel({
               <Check size={16} className="text-[color:var(--notation-accent)] flex-shrink-0 mt-0.5" />
               <span>{result}</span>
             </div>
+            {failed.length > 0 && (
+              <div className="rounded-md border border-[color:var(--notation-danger)] bg-[var(--notation-danger)]/10 p-3 mb-4">
+                <p className="text-xs text-[var(--notation-fg)] flex items-start gap-1.5 mb-2">
+                  <AlertTriangle size={13} className="text-[var(--notation-danger)] flex-shrink-0 mt-0.5" />
+                  <span>
+                    {failed.length} file{failed.length === 1 ? '' : 's'} could not be written. They stay
+                    out of the sync record, so the next push retries them.
+                  </span>
+                </p>
+                <ul className="max-h-32 overflow-y-auto space-y-1">
+                  {failed.map((f) => (
+                    <li key={f.path} className="text-[11px] text-[var(--notation-fg-muted)]">
+                      <span className="font-mono text-[var(--notation-fg)]">{f.path}</span> — {f.error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <button onClick={() => setPhase('home')} className="w-full px-4 py-2 rounded-md text-sm font-medium text-[var(--notation-fg)] hover:bg-[var(--notation-border)] transition-colors">
               Back
             </button>
@@ -215,14 +259,25 @@ export function FolderSyncPanel({
         ) : (
           // ── home ──
           <div className="space-y-4 overflow-y-auto">
-            <div className="flex items-start gap-2 rounded-md border border-[color:var(--notation-warning)] bg-[color:var(--notation-warning)]/10 p-3 text-xs text-[var(--notation-fg)]">
-              <ShieldAlert size={16} className="text-[var(--notation-warning)] flex-shrink-0 mt-0.5" />
-              <span>
-                Pull writes <strong>decrypted (plaintext) files</strong> to the folder you choose so a local
-                tool can edit them. Only your device sees them — the server still stores ciphertext only.
-                Push re-encrypts your edits back in, with a change preview first.
-              </span>
-            </div>
+            {encrypted ? (
+              <div className="flex items-start gap-2 rounded-md border border-[color:var(--notation-warning)] bg-[color:var(--notation-warning)]/10 p-3 text-xs text-[var(--notation-fg)]">
+                <ShieldAlert size={16} className="text-[var(--notation-warning)] flex-shrink-0 mt-0.5" />
+                <span>
+                  Pull writes <strong>decrypted (plaintext) files</strong> to the folder you choose so a local
+                  tool can edit them. Only your device sees them — the server still stores ciphertext only.
+                  Push re-encrypts your edits back in, with a change preview first.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] p-3 text-xs text-[var(--notation-fg-muted)]">
+                <Info size={16} className="text-[color:var(--notation-accent)] flex-shrink-0 mt-0.5" />
+                <span>
+                  Pull copies this space into the folder you choose so a local tool can edit it. Push writes
+                  your edits back, with a change preview first — each pushed file lands in the space’s
+                  version history like any other edit.
+                </span>
+              </div>
+            )}
 
             {/* Folder connection status */}
             <div className="flex items-center gap-3 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] p-3">
@@ -265,7 +320,9 @@ export function FolderSyncPanel({
               <button onClick={() => void doPull()} className="flex flex-col items-start gap-1 p-3 rounded-lg border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors text-left">
                 <FolderDown size={18} className="text-[color:var(--notation-accent)]" />
                 <span className="text-sm font-semibold text-[var(--notation-fg)]">Pull</span>
-                <span className="text-[11px] text-[var(--notation-fg-muted)] leading-tight">Decrypt the space into the folder.</span>
+                <span className="text-[11px] text-[var(--notation-fg-muted)] leading-tight">
+                  {encrypted ? 'Decrypt the space into the folder.' : 'Copy the space into the folder.'}
+                </span>
               </button>
               <button onClick={() => void doPreparePush()} className="flex flex-col items-start gap-1 p-3 rounded-lg border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors text-left">
                 <FolderUp size={18} className="text-[color:var(--notation-accent)]" />

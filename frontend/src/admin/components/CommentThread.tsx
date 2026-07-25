@@ -21,9 +21,12 @@ type Props = {
   /** Comment ID currently hovered/highlighted somewhere else (e.g. matching
    *  anchor mark in the viewer). The matching sidebar entry pulses to match. */
   activeID?: string | null
-  /** Notify parent when a comment row is hovered, so the viewer can blink the
-   *  corresponding anchor mark. */
+  /** Notify parent when a comment row is hovered, so the viewer can light up
+   *  the corresponding anchor mark (highlight only — no scrolling). */
   onHoverComment?: (id: string | null) => void
+  /** Notify parent when a comment row is CLICKED. That is the deliberate act
+   *  that scrolls the viewer to the anchored passage and keeps it highlighted. */
+  onSelectComment?: (id: string) => void
 }
 
 /**
@@ -33,7 +36,7 @@ type Props = {
  * snippet so the author of the comment has context even when the original
  * paragraph scrolls out of view.
  */
-export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, activeID, onHoverComment }: Props) {
+export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, activeID, onHoverComment, onSelectComment }: Props) {
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -102,6 +105,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, 
               active={activeID === c.id}
               canReply={canAdd}
               onHoverComment={onHoverComment}
+              onSelectComment={onSelectComment}
               onReply={canAdd && onAdd ? (text) => submitReply(c.id, text) : undefined}
               onDelete={onDelete}
             />
@@ -113,6 +117,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, 
                       comment={r}
                       active={activeID === r.id}
                       onHoverComment={onHoverComment}
+                      onSelectComment={onSelectComment}
                       onDelete={onDelete}
                       compact
                     />
@@ -156,6 +161,7 @@ function CommentRow({
   onReply,
   onDelete,
   onHoverComment,
+  onSelectComment,
 }: {
   comment: CommentItem
   active: boolean
@@ -164,6 +170,7 @@ function CommentRow({
   onReply?: (text: string) => Promise<void>
   onDelete?: (id: string) => Promise<void>
   onHoverComment?: (id: string | null) => void
+  onSelectComment?: (id: string) => void
 }) {
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyText, setReplyText] = useState('')
@@ -188,13 +195,21 @@ function CommentRow({
       data-comment-id={comment.id}
       onMouseEnter={() => onHoverComment?.(comment.id)}
       onMouseLeave={() => onHoverComment?.(null)}
+      // Clicking anywhere on the row (except its buttons / the reply form)
+      // jumps the viewer to the anchored passage and keeps it lit.
+      onClick={e => {
+        if ((e.target as HTMLElement).closest('button, textarea, form')) return
+        onSelectComment?.(comment.id)
+      }}
       className={
         'rounded-md border text-sm transition-all ' +
         (active
           ? 'border-[color:var(--notation-accent)] bg-[color:var(--notation-accent)]/5 dark:bg-[color:var(--notation-accent-10)] shadow-sm'
           : 'border-[var(--notation-border)] bg-[var(--notation-bg-alt)]') +
-        (compact ? ' p-2' : ' p-3')
+        (compact ? ' p-2' : ' p-3') +
+        (onSelectComment && comment.anchor ? ' cursor-pointer' : '')
       }
+      title={onSelectComment && comment.anchor ? 'Jump to the commented passage' : undefined}
     >
       <div className="flex justify-between text-xs text-[var(--notation-fg-muted)] mb-1.5">
         <span className="font-semibold text-[var(--notation-fg)] truncate">{comment.author}</span>

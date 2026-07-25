@@ -1,4 +1,4 @@
-import { Children, isValidElement, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Children, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -58,13 +58,15 @@ type CommentLite = {
   id: string
   anchor?: AnchorPayload
   // Optional preview metadata — when present, surfaced in the on-hover
-  // tooltip over the rendered anchor mark. Existing callers can keep
+  // bubble over the rendered anchor mark. Existing callers can keep
   // passing the minimal id-only shape.
   text?: string
   author?: string
   created_at?: string
   /** Set when this is an anchored emoji reaction — rendered as an emoji marker. */
   emoji?: string
+  /** Replies carry their parent's id; they inherit the parent's anchor. */
+  parent_id?: string
 }
 
 /** Quick-pick reactions in the selection toolbar (plus free emoji entry). */
@@ -75,8 +77,12 @@ type Props = {
   theme?: 'light' | 'dark'
   /** Comments with anchors are rendered as <mark> overlays on the matching text. */
   comments?: CommentLite[]
-  /** Comment ID to flash/highlight (sidebar → viewer coordination). */
+  /** Comment ID to highlight (sidebar hover → viewer coordination). Highlight
+   *  ONLY — hovering a row must never yank the document around. */
   activeCommentID?: string | null
+  /** Comment ID to scroll to + blink. Set it from a deliberate act (clicking a
+   *  comment row / an anchor mark), never from hover. */
+  focusCommentID?: string | null
   /** Called when the cursor enters/leaves an anchor mark in the viewer. */
   onHoverMark?: (id: string | null) => void
   /** Called when the user clicks an anchor mark — opens the matching comment. */
@@ -86,6 +92,9 @@ type Props = {
   onNewAnchorComment?: (anchor: AnchorPayload) => void
   /** Called when the user picks an emoji reaction for a text selection. */
   onNewReaction?: (anchor: AnchorPayload, emoji: string) => void
+  /** Post a reply from the in-document comment bubble. When omitted the bubble
+   *  is read-only (e.g. a guest without comment rights). */
+  onReplyToComment?: (parentID: string, text: string) => Promise<void>
   /** All paths in the Space — when present, prose mentions of any of these
    *  filenames get a small `[File]` link badge appended next to them. Also
    *  powers link resolution: relative / wiki-link targets are matched against
@@ -115,10 +124,12 @@ export function MarkdownView({
   theme = 'dark',
   comments,
   activeCommentID,
+  focusCommentID,
   onHoverMark,
   onSelectAnchor,
   onNewAnchorComment,
   onNewReaction,
+  onReplyToComment,
   files,
   currentFile,
   navFiles,
@@ -172,11 +183,34 @@ export function MarkdownView({
   const [tool, setTool] = useState<{ x: number; y: number; anchor: AnchorPayload } | null>(null)
   // Whether the selection toolbar is showing its emoji-reaction picker.
   const [reacting, setReacting] = useState(false)
-  // Reset the picker whenever the selection (and thus the toolbar) changes.
-  useEffect(() => { setReacting(false) }, [tool])
-  const [hoverTip, setHoverTip] = useState<
-    { x: number; y: number; comment: CommentLite } | null
-  >(null)
+  // Reset the picker when the toolbar closes or moves to a DIFFERENT passage.
+  // Keying this on the anchor (not the tool object) matters: a re-render that
+  // rebuilds an equivalent `tool` must not tear the open picker down.
+  const toolQuote = tool ? tool.anchor.prefix + ' ' + tool.anchor.quote : null
+  useEffect(() => { setReacting(false) }, [toolQuote])
+
+  // The in-document comment bubble: which mark it hangs off, the comment ids
+  // anchored there, and whether a click pinned it open (a pinned bubble
+  // survives the pointer leaving, so a reply can actually be typed).
+  const [bubble, setBubble] = useState<{ el: HTMLElement; ids: string[]; pinned: boolean } | null>(null)
+  const [bubblePos, setBubblePos] = useState<{ x: number; y: number; above: boolean }>({ x: 0, y: 0, above: false })
+  const closeTimer = useRef<number>(0)
+  const cancelBubbleClose = useCallback(() => {
+    if (closeTimer.current) { window.clearTimeout(closeTimer.current); closeTimer.current = 0 }
+  }, [])
+  /** Park the bubble under (or over) `mark`, skipping no-op position updates. */
+  const placeBubble = useCallback((mark: HTMLElement) => {
+    const next = bubblePosFor(mark)
+    setBubblePos(p => (p.x === next.x && p.y === next.y && p.above === next.above ? p : next))
+  }, [])
+  const scheduleBubbleClose = useCallback(() => {
+    cancelBubbleClose()
+    // A grace period so the pointer can travel from the mark into the bubble.
+    closeTimer.current = window.setTimeout(() => {
+      setBubble(prev => (prev?.pinned ? prev : null))
+    }, 240)
+  }, [cancelBubbleClose])
+  useEffect(() => cancelBubbleClose, [cancelBubbleClose])
 
   // O(1) lookup from comment id → metadata so the hover handler doesn't scan
   // the array on every mouse move.
@@ -185,6 +219,19 @@ export function MarkdownView({
     const m = new Map<string, CommentLite>()
     for (const c of comments ?? []) m.set(c.id, c)
     commentsByID.current = m
+  }, [comments])
+
+  // Replies grouped under their parent, so the bubble can show a whole thread
+  // (replies carry no anchor of their own — they inherit the parent's).
+  const repliesByParent = useMemo(() => {
+    const m = new Map<string, CommentLite[]>()
+    for (const c of comments ?? []) {
+      if (!c.parent_id) continue
+      const list = m.get(c.parent_id)
+      if (list) list.push(c)
+      else m.set(c.parent_id, [c])
+    }
+    return m
   }, [comments])
 
   // Scroll to anchor on hash change or content load.
@@ -236,6 +283,12 @@ export function MarkdownView({
   useEffect(() => {
     function update() {
       if ((!onNewAnchorComment && !onNewReaction) || !articleRef.current) return
+      // Focus inside our own toolbar (the reaction picker's custom-emoji input
+      // autofocuses) moves the document selection into that input and fires
+      // `selectionchange`. Acting on it would tear the toolbar down the instant
+      // the picker opens — the "emoji flash" bug. Ignore those events entirely.
+      const focused = document.activeElement as HTMLElement | null
+      if (focused?.closest?.('.selection-toolbar')) return
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
         setTool(null)
@@ -277,54 +330,58 @@ export function MarkdownView({
     }
   }, [onNewAnchorComment, onNewReaction])
 
-  // Hover / click interactions on rendered marks.
+  // Hover / click interactions on rendered marks. Hovering opens the bubble
+  // (still just a preview); clicking PINS it, so the reader can move the mouse
+  // over to read a long thread or type a reply without it vanishing.
   useEffect(() => {
     const article = articleRef.current
     if (!article) return
+    function open(m: HTMLElement, pin: boolean) {
+      const ids = markCommentIDs(m)
+      if (ids.length === 0) return
+      cancelBubbleClose()
+      placeBubble(m)
+      // mouseover fires again for every descendant the pointer crosses inside
+      // the same mark; return the previous state unchanged then, so the bubble
+      // doesn't re-render (and re-run its effects) on every pixel of travel.
+      setBubble(prev => {
+        // Re-entering the same mark keeps it pinned; a different mark starts unpinned.
+        const pinned = pin || (prev?.el === m && prev.pinned)
+        if (prev && prev.el === m && prev.pinned === pinned && prev.ids.join(',') === ids.join(',')) return prev
+        return { el: m, ids, pinned }
+      })
+    }
     function onMouseOver(e: MouseEvent) {
-      const t = e.target as HTMLElement
-      const m = t.closest('mark.comment-anchor') as HTMLElement | null
-      if (m?.dataset.commentId) {
-        onHoverMark?.(m.dataset.commentId)
-        // Show a quick preview of the comment text + author next to the mark
-        // so the reader can skim threads without opening the sidebar.
-        const c = commentsByID.current.get(m.dataset.commentId)
-        if (c && c.text) {
-          const rect = m.getBoundingClientRect()
-          // Clamp x so the bubble never spills off the right edge.
-          const maxX = Math.max(8, window.innerWidth - 360)
-          setHoverTip({
-            x: Math.min(rect.left, maxX),
-            y: rect.bottom + 8,
-            comment: c,
-          })
-        }
-      }
+      const m = (e.target as HTMLElement).closest('mark.comment-anchor') as HTMLElement | null
+      if (!m) return
+      const ids = markCommentIDs(m)
+      if (ids.length === 0) return
+      onHoverMark?.(ids[0])
+      open(m, false)
     }
     function onMouseOut(e: MouseEvent) {
-      const t = e.target as HTMLElement
-      const m = t.closest('mark.comment-anchor')
-      if (m) {
-        onHoverMark?.(null)
-        setHoverTip(null)
-      }
+      const m = (e.target as HTMLElement).closest('mark.comment-anchor')
+      if (!m) return
+      onHoverMark?.(null)
+      scheduleBubbleClose()
     }
     function onClick(e: MouseEvent) {
-      const t = e.target as HTMLElement
-      const m = t.closest('mark.comment-anchor') as HTMLElement | null
-      if (m?.dataset.commentId) {
-        e.preventDefault()
-        onSelectAnchor?.(m.dataset.commentId)
-      }
+      const m = (e.target as HTMLElement).closest('mark.comment-anchor') as HTMLElement | null
+      const ids = m ? markCommentIDs(m) : []
+      if (!m || ids.length === 0) return
+      e.preventDefault()
+      open(m, true)
+      onSelectAnchor?.(ids[0])
     }
     // Keyboard parity: Enter/Space on a focused anchor opens its thread.
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Enter' && e.key !== ' ') return
       const m = (e.target as HTMLElement)?.closest?.('mark.comment-anchor') as HTMLElement | null
-      if (m?.dataset.commentId) {
-        e.preventDefault()
-        onSelectAnchor?.(m.dataset.commentId)
-      }
+      const ids = m ? markCommentIDs(m) : []
+      if (!m || ids.length === 0) return
+      e.preventDefault()
+      open(m, true)
+      onSelectAnchor?.(ids[0])
     }
     article.addEventListener('mouseover', onMouseOver)
     article.addEventListener('mouseout', onMouseOut)
@@ -336,7 +393,55 @@ export function MarkdownView({
       article.removeEventListener('click', onClick)
       article.removeEventListener('keydown', onKeyDown)
     }
-  }, [onHoverMark, onSelectAnchor])
+  }, [onHoverMark, onSelectAnchor, cancelBubbleClose, scheduleBubbleClose, placeBubble])
+
+  // A pinned bubble closes on Escape or on a click outside it (a hovered one
+  // closes on its own when the pointer leaves).
+  useEffect(() => {
+    if (!bubble?.pinned) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setBubble(null) }
+    function onDown(e: MouseEvent) {
+      const t = e.target as HTMLElement
+      if (t.closest('.comment-bubble') || t.closest('mark.comment-anchor')) return
+      setBubble(null)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDown)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDown)
+    }
+  }, [bubble?.pinned])
+
+  // Keep the bubble glued to its mark while the document scrolls or resizes.
+  useEffect(() => {
+    if (!bubble) return
+    const el = scrollRef.current
+    const reposition = () => {
+      if (!bubble.el.isConnected) { setBubble(null); return }
+      placeBubble(bubble.el)
+    }
+    el?.addEventListener('scroll', reposition, { passive: true })
+    window.addEventListener('resize', reposition)
+    return () => {
+      el?.removeEventListener('scroll', reposition)
+      window.removeEventListener('resize', reposition)
+    }
+  }, [bubble, placeBubble])
+
+  // The marks are re-created from scratch whenever the document or the comment
+  // list changes, which leaves the bubble pointing at a detached node. Re-bind
+  // it to the fresh mark for the same comment so a reply posted from the bubble
+  // (which refreshes `comments`) doesn't make it disappear mid-thread.
+  useEffect(() => {
+    if (!bubble || bubble.el.isConnected) return
+    const fresh = articleRef.current?.querySelector<HTMLElement>(
+      `mark.comment-anchor[data-comment-id="${CSS.escape(bubble.ids[0])}"]`,
+    )
+    if (!fresh) { setBubble(null); return }
+    setBubble({ ...bubble, el: fresh, ids: markCommentIDs(fresh) })
+    placeBubble(fresh)
+  }, [bubble, comments, content, placeBubble])
 
   // React to activeCommentID changes: toggle `data-active` on matching marks,
   // scroll the first matching mark into view, and fire the blink animation.
@@ -351,11 +456,16 @@ export function MarkdownView({
   useEffect(() => {
     const setActive = () => {
       articleRef.current?.querySelectorAll<HTMLElement>('mark.comment-anchor').forEach(m => {
-        m.dataset.active = m.dataset.commentId === activeCommentID ? 'true' : 'false'
+        const ids = markCommentIDs(m)
+        const on = (activeCommentID && ids.includes(activeCommentID)) || (focusCommentID && ids.includes(focusCommentID))
+        m.dataset.active = on ? 'true' : 'false'
       })
     }
     setActive()
-    if (!activeCommentID) return
+    // Scrolling is reserved for a DELIBERATE focus (clicking a comment row or an
+    // anchor mark). Hover only lights the passage up — a hover that scrolled the
+    // document would yank the page around as the pointer crosses the sidebar.
+    if (!focusCommentID) return
     // Retry until the target mark is in the DOM: opening a comment from the
     // panel navigates to another page whose document must load, render, and —
     // for encrypted spaces — decrypt before applyAnchorMarks runs, so the mark
@@ -368,11 +478,17 @@ export function MarkdownView({
       const article = articleRef.current
       if (!article) return
       setActive()
-      const marks = article.querySelectorAll<HTMLElement>(
-        `mark.comment-anchor[data-comment-id="${CSS.escape(activeCommentID)}"]`,
-      )
+      // The mark may represent several comments on the same passage, so match
+      // against the full id list rather than just the primary one.
+      const marks = [...article.querySelectorAll<HTMLElement>('mark.comment-anchor')]
+        .filter(m => markCommentIDs(m).includes(focusCommentID))
       if (marks.length > 0) {
-        marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // Only travel if the passage isn't already comfortably on screen —
+        // clicking a mark you can see shouldn't recenter the page under you.
+        const r = marks[0].getBoundingClientRect()
+        if (r.top < 64 || r.bottom > window.innerHeight - 64) {
+          marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
         marks.forEach(m => {
           m.classList.add('comment-anchor-blink')
           window.setTimeout(() => m.classList.remove('comment-anchor-blink'), 1400)
@@ -383,7 +499,7 @@ export function MarkdownView({
     }
     const frame = requestAnimationFrame(attempt)
     return () => { cancelled = true; cancelAnimationFrame(frame) }
-  }, [activeCommentID, comments, content])
+  }, [activeCommentID, focusCommentID, comments, content])
 
   // Horizontal swipe (touch only) flips to the prev/next page. Guards keep it
   // from firing on vertical scrolls, on sideways scrolls inside wide code
@@ -627,7 +743,10 @@ export function MarkdownView({
         <div
           className="selection-toolbar"
           style={{ left: tool.x, top: tool.y }}
-          onMouseDown={e => e.preventDefault()}
+          // Swallow mousedown so pressing a toolbar button doesn't collapse the
+          // text selection the anchor is built from — except on the custom-emoji
+          // input, which has to be focusable to be typed into.
+          onMouseDown={e => { if (!(e.target as HTMLElement).closest('input')) e.preventDefault() }}
         >
           {reacting && onNewReaction ? (
             <div className="reaction-picker">
@@ -684,32 +803,164 @@ export function MarkdownView({
         </div>
       )}
 
-      {/* Tooltip preview of the comment text when hovering an anchor mark.
-          pointer-events-none so the tooltip itself never re-triggers mouseover
-          / mouseout on the underlying mark; no-print so it never ends up on
-          paper. */}
-      {hoverTip && hoverTip.comment.text && (
-        <div
-          className="fixed z-50 pointer-events-none px-3 py-2 max-w-sm rounded-md shadow-lg bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-xs no-print"
-          style={{ left: hoverTip.x, top: hoverTip.y }}
-        >
-          <div className="flex items-baseline gap-2 mb-1">
-            <span className="font-semibold text-[var(--notation-fg)]">
-              {hoverTip.comment.author || 'unknown'}
+      {/* The in-document thread bubble: everything anchored to the hovered /
+          clicked passage, with a reply box once it is pinned. no-print so it
+          never ends up on paper. */}
+      {bubble && (
+        <CommentBubble
+          ids={bubble.ids}
+          pinned={bubble.pinned}
+          pos={bubblePos}
+          byID={commentsByID.current}
+          replies={repliesByParent}
+          onReply={onReplyToComment}
+          onMouseEnter={cancelBubbleClose}
+          onMouseLeave={scheduleBubbleClose}
+          onClose={() => setBubble(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * The floating thread attached to a passage. Read-only on hover; once pinned by
+ * a click it takes pointer events, so a reply can be typed without opening the
+ * comments sidebar at all.
+ */
+function CommentBubble({
+  ids, pinned, pos, byID, replies, onReply, onMouseEnter, onMouseLeave, onClose,
+}: {
+  ids: string[]
+  pinned: boolean
+  pos: { x: number; y: number; above: boolean }
+  byID: Map<string, CommentLite>
+  replies: Map<string, CommentLite[]>
+  onReply?: (parentID: string, text: string) => Promise<void>
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+  onClose: () => void
+}) {
+  const items = ids.map(id => byID.get(id)).filter((c): c is CommentLite => !!c)
+  const threads = items.filter(c => !c.emoji)
+  const reactions = items.filter(c => c.emoji)
+  const [replyTo, setReplyTo] = useState<string | null>(null)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  // A bubble that moved to another passage must not keep the half-typed reply.
+  const key = ids.join(',')
+  useEffect(() => { setReplyTo(null); setText(''); setErr(null) }, [key])
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!onReply || !replyTo || !text.trim()) return
+    setBusy(true)
+    setErr(null)
+    try {
+      await onReply(replyTo, text.trim())
+      setText('')
+      setReplyTo(null)
+    } catch (e2) {
+      setErr(String((e2 as Error)?.message ?? e2))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (items.length === 0) return null
+
+  return (
+    <div
+      className={`comment-bubble fixed z-50 w-[340px] max-h-[60vh] overflow-y-auto rounded-lg shadow-xl bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] text-xs no-print ${pinned ? '' : 'pointer-events-none'}`}
+      style={{ left: pos.x, top: pos.y, transform: pos.above ? 'translateY(-100%)' : undefined }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      role="dialog"
+      aria-label="Comments on this passage"
+    >
+      {reactions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
+          {reactions.map(r => (
+            <span
+              key={r.id}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)]"
+              title={r.author ? `${r.emoji} by ${r.author}` : r.emoji}
+            >
+              <span className="text-sm leading-none">{r.emoji}</span>
+              {r.author && <span className="text-[10px] text-[var(--notation-fg-muted)] truncate max-w-[8rem]">{r.author}</span>}
             </span>
-            {hoverTip.comment.created_at && (
-              <span className="text-[10px] text-[var(--notation-fg-muted)]">
-                {formatRelative(hoverTip.comment.created_at)}
-              </span>
-            )}
-          </div>
-          <div className="text-[var(--notation-fg)] whitespace-pre-wrap break-words">
-            {hoverTip.comment.text.length > 240
-              ? hoverTip.comment.text.slice(0, 240) + '…'
-              : hoverTip.comment.text}
-          </div>
+          ))}
         </div>
       )}
+
+      {threads.map(c => (
+        <div key={c.id} className="px-3 py-2.5 border-b border-[var(--notation-border)] last:border-b-0">
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="font-semibold text-[var(--notation-fg)] truncate">{c.author || 'unknown'}</span>
+            {c.created_at && (
+              <span className="text-[10px] text-[var(--notation-fg-muted)] flex-shrink-0">{formatRelative(c.created_at)}</span>
+            )}
+          </div>
+          {c.text && <div className="text-[var(--notation-fg)] whitespace-pre-wrap break-words">{c.text}</div>}
+
+          {(replies.get(c.id) ?? []).map(r => (
+            <div key={r.id} className="mt-2 pl-2.5 border-l-2 border-[var(--notation-border)]">
+              <div className="flex items-baseline gap-2">
+                <span className="font-semibold text-[var(--notation-fg)] truncate">{r.author || 'unknown'}</span>
+                {r.created_at && (
+                  <span className="text-[10px] text-[var(--notation-fg-muted)] flex-shrink-0">{formatRelative(r.created_at)}</span>
+                )}
+              </div>
+              <div className="text-[var(--notation-fg)] whitespace-pre-wrap break-words">{r.text}</div>
+            </div>
+          ))}
+
+          {onReply && (
+            replyTo === c.id ? (
+              <form onSubmit={submit} className="mt-2 flex flex-col gap-1.5">
+                <textarea
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder="Write a reply…"
+                  rows={2}
+                  autoFocus
+                  disabled={busy}
+                  className="w-full bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-[color:var(--notation-accent)] outline-none rounded-md p-2 text-xs text-[var(--notation-fg)] resize-none"
+                />
+                <div className="flex gap-1.5 justify-end">
+                  <button type="button" onClick={() => { setReplyTo(null); setText('') }} className="px-2 py-1 text-[11px] text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!text.trim() || busy}
+                    className="px-3 py-1 text-[11px] font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] rounded-md disabled:opacity-40"
+                  >
+                    {busy ? '…' : 'Reply'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                onClick={() => setReplyTo(c.id)}
+                className="mt-2 text-[11px] text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] flex items-center gap-1"
+              >
+                <MessageSquare size={11} /> Reply
+              </button>
+            )
+          )}
+        </div>
+      ))}
+
+      {err && <p className="px-3 pb-2 text-[var(--notation-danger)]">{err}</p>}
+
+      <div className="px-3 py-1.5 border-t border-[var(--notation-border)] text-[10px] text-[var(--notation-fg-muted)] flex items-center justify-between">
+        <span>{pinned ? 'Esc or click outside to close' : 'Click the passage to pin this'}</span>
+        {pinned && (
+          <button onClick={onClose} className="hover:text-[var(--notation-fg)]" aria-label="Close">✕</button>
+        )}
+      </div>
     </div>
   )
 }
@@ -1039,13 +1290,70 @@ function applySearchHits(article: HTMLElement, query: string): HTMLElement | nul
   return firstHit
 }
 
-function applyAnchorMarks(article: HTMLElement, comments: CommentLite[]) {
+/** Everything anchored to one passage, in the order it was posted. */
+type AnchorGroup = { anchor: AnchorPayload; items: CommentLite[] }
+
+/**
+ * Group anchored comments + reactions by the passage they point at. Two
+ * comments on the same selection must produce ONE mark: wrapping the same range
+ * twice nests marks inside each other (and the inner text then belongs to the
+ * wrong comment id). The group carries every id, so one mark can represent the
+ * whole conversation on that passage.
+ */
+export function groupByAnchor(comments: CommentLite[]): AnchorGroup[] {
+  const groups = new Map<string, AnchorGroup>()
   for (const c of comments) {
-    if (!c.anchor) continue
-    const range = findAnchorRange(article, c.anchor)
-    if (!range) continue
-    wrapRangeWithMark(range, c.id, c.emoji)
+    // Replies inherit their parent's position — they never get their own mark.
+    if (!c.anchor || c.parent_id) continue
+    const key = `${c.anchor.prefix} ${c.anchor.quote} ${c.anchor.suffix}`
+    const g = groups.get(key)
+    if (g) g.items.push(c)
+    else groups.set(key, { anchor: c.anchor, items: [c] })
   }
+  return [...groups.values()]
+}
+
+/**
+ * The badge rendered after a marked passage, so a reader always SEES that
+ * something is attached there: each distinct emoji (with a count when repeated)
+ * and a 💬 count for text comments.
+ */
+export function badgeFor(items: CommentLite[]): string {
+  const emojiCounts = new Map<string, number>()
+  let threads = 0
+  for (const c of items) {
+    if (c.emoji) emojiCounts.set(c.emoji, (emojiCounts.get(c.emoji) ?? 0) + 1)
+    else threads++
+  }
+  let out = ''
+  for (const [emoji, n] of emojiCounts) out += n > 1 ? `${emoji}${n}` : emoji
+  if (threads > 0) out += threads > 1 ? `💬${threads}` : '💬'
+  return out
+}
+
+export function applyAnchorMarks(article: HTMLElement, comments: CommentLite[]) {
+  for (const g of groupByAnchor(comments)) {
+    const range = findAnchorRange(article, g.anchor)
+    if (!range) continue
+    wrapRangeWithMark(range, g.items)
+  }
+}
+
+/** The comment ids a rendered mark stands for (first = the primary thread). */
+function markCommentIDs(m: HTMLElement): string[] {
+  const all = m.dataset.commentIds
+  if (all) return all.split(',').filter(Boolean)
+  return m.dataset.commentId ? [m.dataset.commentId] : []
+}
+
+/** Viewport position for the bubble hanging off `mark`, clamped on-screen. */
+function bubblePosFor(mark: HTMLElement): { x: number; y: number; above: boolean } {
+  const rect = mark.getBoundingClientRect()
+  const width = 340
+  const x = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8))
+  // Flip above the passage when there isn't room below it.
+  const above = window.innerHeight - rect.bottom < 220 && rect.top > 220
+  return { x, y: above ? rect.top - 8 : rect.bottom + 8, above }
 }
 
 function findAnchorRange(article: HTMLElement, anchor: AnchorPayload): Range | null {
@@ -1107,26 +1415,33 @@ function rangeForOffsets(root: HTMLElement, start: number, end: number): Range |
 
 // Make a comment-anchor mark focusable + semantic so keyboard / screen-reader
 // users can reach it (Enter/Space opens its thread — see the interaction effect).
-function newAnchorMark(commentID: string, emoji?: string): HTMLElement {
+// `badge` is only set on the LAST slice of a multi-node range, so the trailing
+// marker renders once per passage rather than once per text node.
+function newAnchorMark(items: CommentLite[], badge: boolean): HTMLElement {
   const m = document.createElement('mark')
-  m.className = emoji ? 'comment-anchor comment-reaction' : 'comment-anchor'
-  m.dataset.commentId = commentID
+  const threads = items.filter(c => !c.emoji).length
+  // A passage carrying only reactions gets the rose reaction tint; anything with
+  // a real comment on it stays amber.
+  m.className = threads === 0 ? 'comment-anchor comment-reaction' : 'comment-anchor'
+  m.dataset.commentId = items[0].id
+  m.dataset.commentIds = items.map(c => c.id).join(',')
   m.tabIndex = 0
   m.setAttribute('role', 'button')
-  if (emoji) {
-    // Rendered as a trailing badge via CSS `content: attr(data-emoji)`.
-    m.dataset.emoji = emoji
-    m.setAttribute('aria-label', `Reaction ${emoji} on this passage`)
-  } else {
-    m.setAttribute('aria-label', 'Open comment on this passage')
-  }
+  if (badge) m.dataset.badge = badgeFor(items)
+  const emojis = items.filter(c => c.emoji).map(c => c.emoji).join(' ')
+  m.setAttribute(
+    'aria-label',
+    threads > 0
+      ? `${threads} comment${threads === 1 ? '' : 's'} on this passage${emojis ? `, reactions ${emojis}` : ''}`
+      : `Reactions ${emojis} on this passage`,
+  )
   return m
 }
 
-function wrapRangeWithMark(range: Range, commentID: string, emoji?: string) {
+function wrapRangeWithMark(range: Range, items: CommentLite[]) {
   // Easy case: range within a single text node → surroundContents works cleanly.
   if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
-    const m = newAnchorMark(commentID, emoji)
+    const m = newAnchorMark(items, true)
     try {
       range.surroundContents(m)
     } catch {
@@ -1159,8 +1474,8 @@ function wrapRangeWithMark(range: Range, commentID: string, emoji?: string) {
       } else {
         sub.setEnd(n, (n.textContent ?? '').length)
       }
-      // Only the last slice carries the emoji badge, so it renders once.
-      sub.surroundContents(newAnchorMark(commentID, i === candidates.length - 1 ? emoji : undefined))
+      // Only the last slice carries the badge, so it renders once.
+      sub.surroundContents(newAnchorMark(items, i === candidates.length - 1))
     } catch {
       /* skip slivers we can't wrap */
     }

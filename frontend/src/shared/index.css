@@ -214,9 +214,12 @@
   header,
   .no-print,
   .selection-toolbar,
+  .comment-bubble,
   .monaco-editor {
     display: none !important;
   }
+  /* Annotation badges are screen affordances — paper keeps the prose clean. */
+  mark.comment-anchor::after { content: none !important; }
 
   /* --- Document title block (print-only, injected by MarkdownView) ------- */
   .print-doc-header {
@@ -815,9 +818,20 @@ mark.comment-anchor.comment-anchor-blink {
   50%      { background-color: rgba(245, 158, 11, 0.9);  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.6); }
 }
 
-/* Emoji reactions: an anchored passage with an emoji marker (no thread). A
-   rose tint distinguishes it from an amber comment; the emoji renders as a
-   small trailing badge via `content: attr(data-emoji)`. */
+/* Every annotated passage carries a trailing badge (emoji reactions and/or a
+   💬 count) so a reader SEES that something is attached there without hovering.
+   Set on the last slice of a marked range only, so it renders once. */
+mark.comment-anchor::after {
+  content: attr(data-badge);
+  font-size: 0.82em;
+  margin-left: 1px;
+  vertical-align: super;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+/* Emoji reactions: an anchored passage carrying only reactions (no thread). A
+   rose tint distinguishes it from an amber comment. */
 mark.comment-reaction {
   background-color: rgba(244, 114, 182, 0.18);
   border-bottom-color: rgba(236, 72, 153, 0.55);
@@ -830,13 +844,6 @@ mark.comment-reaction:hover,
 mark.comment-reaction[data-active="true"] {
   background-color: rgba(244, 114, 182, 0.55) !important;
   box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.6);
-}
-mark.comment-reaction::after {
-  content: attr(data-emoji);
-  font-size: 0.82em;
-  margin-left: 1px;
-  vertical-align: super;
-  line-height: 1;
 }
 
 /* SheetJS sheet_to_html output — give the raw <table> a readable look that

@@ -1,20 +1,25 @@
 /**
- * folderSync — the manual, safe "local folder sync" engine for zero-knowledge
- * ENCRYPTED spaces.
+ * folderSync — the manual, safe "local folder sync" engine, for ANY space
+ * (zero-knowledge encrypted or plaintext).
  *
  * A local agent (e.g. Claude Code) can only work on PLAIN files in a real
- * directory, but the space's bytes live encrypted behind an {@link EncryptedFS}
- * whose key never leaves the browser. This module bridges the two with two
- * explicit, user-driven actions — never a live auto-sync:
+ * directory. This module bridges a space and such a folder with two explicit,
+ * user-driven actions — never a live auto-sync:
  *
- *   - **Pull** ({@link pull}): decrypt every space file and write it into a
- *     user-picked local folder (the browser is the crypto authority; the server
- *     only ever holds ciphertext). Writes DECRYPTED plaintext to disk — that is
- *     the user's deliberate choice and the UI states it plainly.
+ *   - **Pull** ({@link pull}): write every space file into a user-picked local
+ *     folder. For an encrypted space that means DECRYPTING first (the browser is
+ *     the crypto authority; the server only ever holds ciphertext) — plaintext
+ *     lands on disk, which is the user's deliberate choice and the UI states it
+ *     plainly.
  *   - **Push** ({@link preparePush} + {@link applyPush}): read the folder back,
  *     3-way diff it against the CURRENT space content AND the last-sync manifest,
- *     present a change preview, and — only on explicit confirm — re-encrypt the
+ *     present a change preview, and — only on explicit confirm — write the
  *     changes into the space. Deletions are opt-in and never silent.
+ *
+ * Which space it talks to is entirely the {@link SyncSpace} port's business
+ * ({@link ./syncSpace}): the encrypted backend en/decrypts in-page, the
+ * plaintext one speaks the server's file API. The engine below is identical for
+ * both.
  *
  * The **manifest** (`path -> contentHash`) captured at the last successful
  * pull/push is what makes the diff 3-way: it distinguishes "folder added a file"
@@ -28,8 +33,10 @@
  * automated). The real `FileSystemDirectoryHandle` structurally provides this
  * subset; the UI casts it at the boundary.
  */
-import { EncryptedFS } from '../../shared/vfs/encfs'
-import { listZipNodes } from './spaceZip'
+import type { SyncSpace } from './syncSpace'
+
+/** Reports `done` of `total` units while a long pull/push walks the file set. */
+export type ProgressFn = (done: number, total: number) => void
 
 // ── File System Access API subset ───────────────────────────────────────────
 // We deliberately re-declare only what the engine touches so it stays decoupled
@@ -115,15 +122,17 @@ export async function hashFiles(files: Map<string, Uint8Array>): Promise<Manifes
 // ── space <-> folder byte collection ─────────────────────────────────────────
 
 /**
- * Every visible, non-ignored FILE in the space as `path -> decrypted bytes`.
- * Reuses {@link listZipNodes}'s deterministic collection; directories are
- * skipped here (they carry no content) but recreated on pull for fidelity.
+ * Every visible, non-ignored FILE in the space as `path -> bytes` (decrypted for
+ * an encrypted space). Directories are skipped here (they carry no content) but
+ * recreated on pull for fidelity.
  */
-export async function collectSpaceFiles(fs: EncryptedFS): Promise<Map<string, Uint8Array>> {
+export async function collectSpaceFiles(space: SyncSpace, onProgress?: ProgressFn): Promise<Map<string, Uint8Array>> {
   const out = new Map<string, Uint8Array>()
-  for (const n of listZipNodes(fs)) {
-    if (n.isDir || isIgnored(n.path)) continue
-    out.set(n.path, await fs.read(n.path))
+  const files = (await space.listNodes()).filter((n) => !n.isDir && !isIgnored(n.path))
+  let done = 0
+  for (const n of files) {
+    out.set(n.path, await space.read(n.path))
+    onProgress?.(++done, files.length)
   }
   return out
 }
@@ -210,26 +219,29 @@ export interface PullResult {
 }
 
 /**
- * Decrypt the whole space into the folder: write every file at its logical path
- * (creating subdirectories), recreate empty directories, and record the manifest
- * (`path -> hash`) both in the folder and in the returned result. Never deletes
- * anything already in the folder — a local agent's scratch files are preserved.
+ * Write the whole space into the folder: every file at its logical path
+ * (creating subdirectories, decrypting first for an encrypted space), recreate
+ * empty directories, and record the manifest (`path -> hash`) both in the folder
+ * and in the returned result. Never deletes anything already in the folder — a
+ * local agent's scratch files are preserved.
  */
-export async function pull(fs: EncryptedFS, dir: SyncDirHandle): Promise<PullResult> {
+export async function pull(space: SyncSpace, dir: SyncDirHandle, onProgress?: ProgressFn): Promise<PullResult> {
   const written: string[] = []
   const dirs: string[] = []
   const entries: ManifestEntries = {}
-  for (const n of listZipNodes(fs)) {
-    if (isIgnored(n.path)) continue
+  const nodes = (await space.listNodes()).filter((n) => !isIgnored(n.path))
+  let done = 0
+  for (const n of nodes) {
     if (n.isDir) {
       await ensureFolderDir(dir, n.path)
       dirs.push(n.path)
-      continue
+    } else {
+      const bytes = await space.read(n.path)
+      await writeFileTo(dir, n.path, bytes)
+      entries[n.path] = await sha256Hex(bytes)
+      written.push(n.path)
     }
-    const bytes = await fs.read(n.path)
-    await writeFileTo(dir, n.path, bytes)
-    entries[n.path] = await sha256Hex(bytes)
-    written.push(n.path)
+    onProgress?.(++done, nodes.length)
   }
   const manifest = await writeManifestFile(dir, entries)
   return { written, dirs, manifest }
@@ -340,12 +352,13 @@ export interface PreparedPush {
  * (the IndexedDB copy), else empty. Nothing is mutated — this only previews.
  */
 export async function preparePush(
-  fs: EncryptedFS,
+  space: SyncSpace,
   dir: SyncDirHandle,
   fallbackManifest?: ManifestEntries,
+  onProgress?: ProgressFn,
 ): Promise<PreparedPush> {
   const folderFiles = await readFolderFiles(dir)
-  const spaceFiles = await collectSpaceFiles(fs)
+  const spaceFiles = await collectSpaceFiles(space, onProgress)
   const manifestFile = await readManifestFile(dir)
 
   let manifest: ManifestEntries
@@ -369,48 +382,76 @@ export interface PushApplyResult {
   applied: { new: number; modified: number; deleted: number }
   /** Deletion candidates left in place because `applyDeletions` was off. */
   skippedDeletions: number
+  /** Paths actually written to / removed from the space (for cache eviction). */
+  changedPaths: string[]
+  /** Entries that threw (e.g. a rejected upload); the rest still applied. */
+  failed: { path: string; error: string }[]
   /** The refreshed baseline manifest (also written back to the folder). */
   manifest: SyncManifest
 }
 
 /**
- * Apply a previewed {@link PreparedPush} to the space: re-encrypt every new /
+ * Apply a previewed {@link PreparedPush} to the space: write every new /
  * modified file (folder-wins for conflicts), and — only when `applyDeletions` is
- * set — soft-delete the paths the folder dropped. Then {@link EncryptedFS.sync}
- * and refresh the manifest to the folder's file set (the agreed source of truth,
- * so deletion-not-applied and browser-only files never become false deletions on
+ * set — delete the paths the folder dropped. Then {@link SyncSpace.flush} and
+ * refresh the manifest to the folder's file set (the agreed source of truth, so
+ * deletion-not-applied and browser-only files never become false deletions on
  * the next push). Renames surface as delete+create with content preserved.
+ *
+ * One failing entry does NOT abort the push: a rejected write (over the server's
+ * upload limit, a lost connection mid-batch) is collected into `failed` and its
+ * path is dropped from the new baseline, so the very next push retries it
+ * instead of mistaking it for already-synced.
  */
 export async function applyPush(
-  fs: EncryptedFS,
+  space: SyncSpace,
   dir: SyncDirHandle,
   prepared: PreparedPush,
   opts: { applyDeletions: boolean },
+  onProgress?: ProgressFn,
 ): Promise<PushApplyResult> {
   const { plan, folderFiles } = prepared
   let nNew = 0
   let nMod = 0
   let nDel = 0
   let skippedDeletions = 0
+  const changedPaths: string[] = []
+  const failed: { path: string; error: string }[] = []
+  let done = 0
 
   for (const e of plan.entries) {
-    if (e.kind === 'new' || e.kind === 'modified') {
-      const bytes = folderFiles.get(e.path)
-      if (!bytes) continue
-      await fs.write(e.path, bytes)
-      if (e.kind === 'new') nNew++
-      else nMod++
-    } else {
-      if (opts.applyDeletions) {
-        await fs.remove(e.path)
+    try {
+      if (e.kind === 'new' || e.kind === 'modified') {
+        const bytes = folderFiles.get(e.path)
+        if (!bytes) continue
+        await space.write(e.path, bytes)
+        changedPaths.push(e.path)
+        if (e.kind === 'new') nNew++
+        else nMod++
+      } else if (opts.applyDeletions) {
+        await space.remove(e.path)
+        changedPaths.push(e.path)
         nDel++
       } else {
         skippedDeletions++
       }
+    } catch (err) {
+      failed.push({ path: e.path, error: String((err as Error)?.message ?? err) })
     }
+    onProgress?.(++done, plan.entries.length)
   }
 
-  await fs.sync()
-  const manifest = await writeManifestFile(dir, plan.folderManifest)
-  return { applied: { new: nNew, modified: nMod, deleted: nDel }, skippedDeletions, manifest }
+  await space.flush()
+  // A failed path must not enter the baseline as "synced" — drop it so the next
+  // diff still sees it as new/modified.
+  const nextManifest = { ...plan.folderManifest }
+  for (const f of failed) delete nextManifest[f.path]
+  const manifest = await writeManifestFile(dir, nextManifest)
+  return {
+    applied: { new: nNew, modified: nMod, deleted: nDel },
+    skippedDeletions,
+    changedPaths,
+    failed,
+    manifest,
+  }
 }
