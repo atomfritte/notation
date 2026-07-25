@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MessageSquare, FileText, Trash2 } from 'lucide-react'
 import * as api from '../lib/api'
+import { applyCommentFilter, type CommentFilter } from '../lib/commentView'
 
 type Props = {
   spaceID: string
@@ -16,6 +17,9 @@ type Props = {
    *  set, `onDeleteComment` handles deletion too. */
   items?: api.AllCommentItem[]
   onDeleteComment?: (id: string) => Promise<void>
+  /** Comments-vs-everything switcher; omit to hide it. */
+  filter?: CommentFilter
+  onFilterChange?: (v: CommentFilter) => void
 }
 
 /**
@@ -24,14 +28,16 @@ type Props = {
  * the anchored quote (if any), and the comment body. Clicking the row
  * navigates to the file. The delete control mirrors the inline thread.
  */
-export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKey = 0, items, onDeleteComment }: Props) {
+export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKey = 0, items, onDeleteComment, filter = 'comments', onFilterChange }: Props) {
   // Encrypted spaces pass `items` (client-side); plaintext spaces fetch here.
   const clientMode = items !== undefined
   const [fetched, setFetched] = useState<api.AllCommentItem[]>([])
   const [loading, setLoading] = useState(!clientMode)
   const [err, setErr] = useState<string | null>(null)
-  // Emoji reactions are inline markers, not thread entries — exclude them here.
-  const comments = (clientMode ? items : fetched).filter(c => !c.emoji)
+  // Reactions are annotations of a passage too; the switcher decides whether
+  // they are listed here or only the written comments are. (An encrypted space
+  // passes an already-filtered list, so this is a no-op there.)
+  const comments = applyCommentFilter(clientMode ? items : fetched, filter)
 
   function reload() {
     if (clientMode) return
@@ -95,16 +101,27 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
   }
   if (groups.length === 0) {
     return (
-      <div className="p-4 text-xs text-[var(--notation-fg-muted)] italic">
-        No comments anywhere in this Space yet.
+      <div className="p-2 space-y-2">
+        {onFilterChange && (
+          <div className="flex justify-end px-2 pt-1"><FilterSwitch value={filter} onChange={onFilterChange} /></div>
+        )}
+        <p className="px-2 text-xs text-[var(--notation-fg-muted)] italic">
+          {filter === 'comments' ? 'No comments anywhere in this Space yet.' : 'Nothing anywhere in this Space yet.'}
+        </p>
       </div>
     )
   }
 
   return (
     <div className="p-2 space-y-3">
-      <div className="px-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--notation-fg-muted)]">
-        {comments.length} comment{comments.length === 1 ? '' : 's'} across {groups.length} page{groups.length === 1 ? '' : 's'}
+      <div className="flex items-center justify-between gap-2 px-2 pt-1">
+        {/* Compact so it stays on one line next to the switcher. */}
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--notation-fg-muted)] truncate">
+          {comments.length} {filter === 'all' ? 'total' : comments.length === 1 ? 'comment' : 'comments'}
+          {' · '}
+          {groups.length} page{groups.length === 1 ? '' : 's'}
+        </div>
+        {onFilterChange && <FilterSwitch value={filter} onChange={onFilterChange} />}
       </div>
       {groups.map(g => (
         <section key={g.path}>
@@ -149,9 +166,16 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
                           {c.anchor.quote}
                         </div>
                       )}
-                      <p className="text-xs text-[var(--notation-fg)] whitespace-pre-wrap line-clamp-3">
+                      {c.emoji ? (
+                      <p className="text-xs text-[var(--notation-fg-muted)] flex items-center gap-1.5">
+                        <span className="text-base leading-none" aria-hidden="true">{c.emoji}</span>
+                        <span>reacted</span>
+                      </p>
+                    ) : (
+                    <p className="text-xs text-[var(--notation-fg)] whitespace-pre-wrap line-clamp-3">
                         {c.text}
                       </p>
+                    )}
                       {replies > 0 && (
                         <div className="mt-1 text-[10px] text-[var(--notation-fg-muted)] flex items-center gap-1">
                           <MessageSquare size={9} /> {replies} repl{replies === 1 ? 'y' : 'ies'}
@@ -185,4 +209,29 @@ function formatRelative(iso: string): string {
   if (d < 3600) return `${Math.round(d / 60)}m ago`
   if (d < 86400) return `${Math.round(d / 3600)}h ago`
   return new Date(t).toLocaleDateString()
+}
+
+/** Comments-only vs. comments + reactions. Mirrors the thread panel's switch. */
+function FilterSwitch({ value, onChange }: { value: CommentFilter; onChange: (v: CommentFilter) => void }) {
+  const btn = (v: CommentFilter, label: string, title: string) => (
+    <button
+      onClick={() => onChange(v)}
+      title={title}
+      aria-pressed={value === v}
+      className={
+        'px-2 py-0.5 rounded transition-colors ' +
+        (value === v
+          ? 'bg-[var(--notation-bg-elevated)] text-[var(--notation-fg)] shadow-sm'
+          : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]')
+      }
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div className="flex items-center gap-0.5 text-[11px] font-medium rounded-md border border-[var(--notation-border)] p-0.5 flex-shrink-0">
+      {btn('comments', 'Comments', 'Written comments only')}
+      {btn('all', 'All', 'Comments and emoji reactions')}
+    </div>
+  )
 }

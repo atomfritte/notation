@@ -43,6 +43,7 @@ import { CommandPalette } from '../admin/components/CommandPalette'
 import { SearchPanel } from '../admin/components/SearchPanel'
 import { ThemePalette } from '../admin/components/ThemePalette'
 import { HelpPanel } from '../admin/components/HelpPanel'
+import { useCommentFilter, applyCommentFilter } from '../admin/lib/commentView'
 import { initTheme } from '../admin/lib/theme'
 import { isTextFile, isMarkdownFile, findDefaultFile } from '../admin/lib/fileTypes'
 import { useNewPages } from '../admin/lib/newPages'
@@ -93,8 +94,11 @@ function ShareUI() {
   const [allComments, setAllComments] = useState<api.Comment[]>([])
   // Emoji reactions ride the comment list but are inline markers — exclude them
   // from the thread panel + badge (they still render as marks in the body).
-  const textComments = useMemo(() => comments.filter(c => !c.emoji), [comments])
-  const textAllComments = useMemo(() => allComments.filter(c => !c.emoji), [allComments])
+  // Same switcher as the admin app: reactions are annotations too, but written
+  // comments shouldn't be buried under them by default.
+  const [commentFilter, setCommentFilterPref] = useCommentFilter()
+  const visibleComments = useMemo(() => applyCommentFilter(comments, commentFilter), [comments, commentFilter])
+  const visibleAllComments = useMemo(() => applyCommentFilter(allComments, commentFilter), [allComments, commentFilter])
   const [err, setErr] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const file = searchParams.get('file') ?? ''
@@ -507,7 +511,7 @@ function ShareUI() {
   const sidebarTabs: { key: 'files' | 'comments' | 'bookmarks'; label: string; icon: React.ReactNode; badge?: number }[] = [
     { key: 'files', label: 'Pages', icon: <Folder size={13} /> },
   ]
-  if (canComment) sidebarTabs.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={13} />, badge: textAllComments.length })
+  if (canComment) sidebarTabs.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={13} />, badge: visibleAllComments.length })
   if (features?.bookmarks) sidebarTabs.push({ key: 'bookmarks', label: 'Bookmarks', icon: <Bookmark size={13} />, badge: bookmarks.length })
 
   // Open a page from the Comments tab, focusing the clicked comment.
@@ -634,7 +638,7 @@ function ShareUI() {
           )}
           {canComment && sidebarTab === 'comments' && (
             <ShareCommentsPanel
-              comments={textAllComments}
+              comments={visibleAllComments}
               currentFile={file}
               onSelect={openComment}
             />
@@ -814,7 +818,9 @@ function ShareUI() {
                       </div>
                     )}
                     <CommentThread
-                      comments={textComments}
+                      comments={visibleComments}
+                      filter={commentFilter}
+                      onFilterChange={setCommentFilterPref}
                       canAdd={canComment}
                       initialText={pendingComment}
                       activeID={activeCommentId}

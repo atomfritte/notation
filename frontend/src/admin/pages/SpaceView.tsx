@@ -40,6 +40,7 @@ import { BacklinksPanel } from '../components/BacklinksPanel'
 import { HistoryView } from '../components/HistoryView'
 import { ThemePalette } from '../components/ThemePalette'
 import { HelpPanel } from '../components/HelpPanel'
+import { useCommentFilter, applyCommentFilter } from '../lib/commentView'
 import { getHeaderStyle, HEADER_STYLE_EVENT, type HeaderStyle } from '../lib/theme'
 import { SidebarTabs, type SidebarTabKey } from '../components/SidebarTabs'
 import { AllCommentsPanel } from '../components/AllCommentsPanel'
@@ -194,8 +195,11 @@ export function SpaceView() {
   const [allComments, setAllComments] = useState<api.AllCommentItem[]>([])
   // Emoji reactions ride the comment list but are pure inline markers — exclude
   // them from the thread panel + badges (they still render as marks in the body).
-  const textComments = useMemo(() => comments.filter(c => !c.emoji), [comments])
-  const textAllComments = useMemo(() => allComments.filter(c => !c.emoji), [allComments])
+  // Reactions are annotations too, so they can be listed alongside comments —
+  // behind a switcher, since by default written comments shouldn't be buried.
+  const [commentFilter, setCommentFilterPref] = useCommentFilter()
+  const visibleComments = useMemo(() => applyCommentFilter(comments, commentFilter), [comments, commentFilter])
+  const visibleAllComments = useMemo(() => applyCommentFilter(allComments, commentFilter), [allComments, commentFilter])
   // Bumping this triggers re-fetch in AllCommentsPanel (after add/delete).
   const [allCommentsRefresh, setAllCommentsRefresh] = useState(0)
   const [showComments, setShowComments] = useState(false)
@@ -1161,7 +1165,7 @@ export function SpaceView() {
   if (isMarkdownFile(file) && !isForm) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
   if (!isForm && !encrypted) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { setHistoryMode(v => !v); setEditing(false) } })
   if (!isForm) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove favorite' : 'Add favorite', icon: <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />, active: isBookmarked, onClick: () => toggleBookmark(file) })
-  if (!isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: textComments.length, onClick: () => setShowComments(v => !v) })
+  if (!isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: visibleComments.length, onClick: () => setShowComments(v => !v) })
   if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={18} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
   if (isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={18} />, onClick: () => window.print() })
   // Whole-space PDF — sibling of the single-page print; available for any space.
@@ -1296,7 +1300,7 @@ export function SpaceView() {
               active={sidebarTab}
               onPick={setSidebarTab}
               badges={{
-                comments: textAllComments.length,
+                comments: visibleAllComments.length,
                 bookmarks: bookmarks.length,
               }}
               // Encrypted spaces expose the client-side tabs plus Comments
@@ -1370,7 +1374,9 @@ export function SpaceView() {
                 refreshKey={allCommentsRefresh}
                 // Encrypted spaces have no server comments — feed the op-log's
                 // client-side list + a client delete handler instead.
-                items={encrypted ? allComments : undefined}
+                items={encrypted ? visibleAllComments : undefined}
+                filter={commentFilter}
+                onFilterChange={setCommentFilterPref}
                 onDeleteComment={encrypted ? handleDeleteComment : undefined}
               />
             )}
@@ -1805,7 +1811,9 @@ export function SpaceView() {
               )}
               <div className="flex-1 overflow-y-auto bg-[var(--notation-bg-elevated)] bg-[var(--notation-bg-elevated)]/50">
                  <CommentThread
-                   comments={textComments}
+                   comments={visibleComments}
+                   filter={commentFilter}
+                   onFilterChange={setCommentFilterPref}
                    canAdd={true}
                    initialText={pendingComment}
                    activeID={activeCommentId}
