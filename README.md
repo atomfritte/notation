@@ -58,6 +58,7 @@ Most note tools force you to pick a side: either a SaaS that owns your data, or 
 - [MCP integration](#mcp-integration)
 - [Supported file types](#supported-file-types)
 - [Markdown features](#markdown-features)
+- [Zero-knowledge encryption](#zero-knowledge-encryption)
 - [Themes](#themes)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Security](#security)
@@ -132,6 +133,22 @@ Select text → pin a comment or an emoji reaction to that exact quote. Annotate
 ### 🛡️  Hardened by default
 
 `os.Root` sandbox, strict CSP, rehype-sanitize, CSRF tokens, per-IP rate limits, audit log with hash-chain integrity.
+
+</td>
+</tr>
+<tr>
+<td>
+
+### 🔒  Zero-knowledge encryption
+
+Encrypt a Space end-to-end in your browser: the server keeps ciphertext and opaque ids — not your contents, not even the file names. Per Space, reversible, with a one-time recovery key.
+
+</td>
+<td>
+
+### 📂  Local folder sync
+
+Pull a Space into a real folder, work on it with local tools or a coding agent, push the changes back through a reviewed 3-way diff. Works for plaintext and encrypted Spaces alike.
 
 </td>
 </tr>
@@ -487,6 +504,30 @@ The viewer is the same on the admin side and through Magic Links.
 - **Threaded replies**: one level deep, indented — from the sidebar or from the in-document bubble
 - **Outline / TOC**: sidebar panel with IntersectionObserver-driven active-section tracking
 - **Backlinks**: which other files link here (backed by the `search` tool)
+
+---
+
+## Zero-knowledge encryption
+
+Any Space can be **encrypted end-to-end in your browser**, turning the server into a zero-trust store: it holds ciphertext and nothing else. Use it for the Spaces that hold the sensitive things; leave the rest plaintext and keep the server-side features. It is a per-Space choice, switchable in both directions.
+
+Open a Space → **Encrypt this Space** (the lock icon in the sidebar footer, or the file-tree context menu) → pick a password. Every file is re-encrypted client-side, the plaintext content **and its git history are erased**, and you get a one-time recovery key. Decrypting later reverses it.
+
+**What the server can and cannot see**
+
+| Sees | Never sees |
+|---|---|
+| Opaque ciphertext blobs | File contents |
+| Opaque node ids and an ordering counter | File and folder names, the tree shape |
+| The Space's id, display name and timestamps | Comments, reactions, search queries |
+| How much data there is, and when it changed | Your password, the key, the recovery key |
+
+- **The browser is the only place a key exists.** A random 256-bit data key encrypts the content; that key is wrapped under a key derived from your password with Argon2id (64 MiB, t=3) and, independently, under the recovery key. The unlocked key lives in memory in a dedicated Web Worker for the session only — never in localStorage, never in a cookie, never sent anywhere. Closing the tab (or **Lock Space**) drops it.
+- **There is no password reset.** The recovery key is the only other way in, it is shown exactly once, and it is stored nowhere. Write it down.
+- **Names and paths stay secret too**, not just contents: the file tree is a CRDT op-log of encrypted operations, files are addressed by opaque node id (so a URL or an access log never carries a page name), and the client keeps its local state — bookmarks, scroll positions, the collapsed-folder map — keyed by those same ids.
+- **Integrity, not just secrecy**: every operation is sealed with AES-256-GCM binding its own id, ordering counter and author as additional data, so the server cannot forge, reorder or splice operations undetected. It *can* still withhold recent ones — a hash-chained head is future work, tracked in the design notes.
+- **What still works**: the editor, wiki-links, backlinks, full-text search (client-side over the decrypted corpus), comments and reactions (encrypted into the op-log), the on-device read-aloud voice, whole-Space PDF, decrypted ZIP export, and [local folder sync](#local-folder-sync).
+- **What is off**: Magic Links, the MCP server, git version history, server-side search and the server's studio TTS voice — every one of them would need the plaintext. The UI hides them rather than failing at the point of use.
 
 ---
 
