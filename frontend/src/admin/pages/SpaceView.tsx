@@ -951,6 +951,14 @@ export function SpaceView() {
       const fs = fsRef.current
       setEditing(false)
       setHistoryMode(false)
+      // Load THIS file's comments. The plaintext path below does it at the end
+      // of the effect, but this branch returns before ever reaching it — so an
+      // encrypted page used to open with the previous file's (or an empty)
+      // comment list. No anchor marks were painted, and a comment opened from
+      // the comments panel could never be scrolled to, because the mark it
+      // wanted to scroll to had never been created. It only "fixed itself" the
+      // moment you added a comment or reaction, since that path refreshes.
+      refreshComments()
       if (!fs || !isTextFile(file)) {
         setContent('')
         setEtag(null)
