@@ -33,8 +33,22 @@ export function HeaderActionBtn({ action }: { action: HeaderAction }) {
   )
 }
 
-// Hamburger menu holding every header action when they don't fit inline.
-export function HeaderOverflowMenu({ actions }: { actions: HeaderAction[] }) {
+/**
+ * Hamburger menu holding the actions that don't fit inline.
+ *
+ * `placement` exists because the same control is used at the top of the page
+ * (menu drops down) and in the sidebar's footer row (menu must open UPWARD, or
+ * it would render off the bottom of the window).
+ */
+export function HeaderOverflowMenu({
+  actions,
+  placement = 'down',
+  label = 'More tools',
+}: {
+  actions: HeaderAction[]
+  placement?: 'down' | 'up'
+  label?: string
+}) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -49,8 +63,8 @@ export function HeaderOverflowMenu({ actions }: { actions: HeaderAction[] }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        title="More tools"
-        aria-label="More tools"
+        title={label}
+        aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
         className="p-1.5 rounded-md transition-colors flex items-center text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]"
@@ -58,7 +72,16 @@ export function HeaderOverflowMenu({ actions }: { actions: HeaderAction[] }) {
         <Menu size={18} />
       </button>
       {open && (
-        <div role="menu" className="surface-elevated absolute right-0 top-full mt-1 min-w-[210px] bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-md shadow-xl py-1 z-50">
+        <div
+          role="menu"
+          className={
+            'surface-elevated absolute min-w-[210px] max-w-[min(320px,90vw)] bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-md shadow-xl py-1 z-50 ' +
+            // Upward = the sidebar footer, where the trigger sits near the LEFT
+            // edge of the window: anchoring right would push a 210px-wide menu
+            // off-screen, so it grows rightward over the content instead.
+            (placement === 'up' ? 'bottom-full mb-1 left-0' : 'top-full mt-1 right-0')
+          }
+        >
           {actions.map(a => (
             <button
               key={a.key}
