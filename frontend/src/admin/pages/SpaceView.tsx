@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { FolderPlus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync } from 'lucide-react'
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'

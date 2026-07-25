@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { Trash2, Cloud, CloudDownload, CloudOff, RefreshCw, Loader2, Headphones, Lock } from 'lucide-react'
 import * as api from '../lib/api'
 import * as offline from '../lib/offlineSync'

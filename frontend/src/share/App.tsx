@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router'
 import {
   PanelLeft, List, MessageSquare, Search, Printer, Sun, Moon, Palette,
   Bookmark, FileText, Folder, HelpCircle, X, Headphones, Link2Off,
