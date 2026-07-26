@@ -32,3 +32,18 @@ export function collectPages(entries: Entry[], markdownOnly: boolean): string[] 
   }
   return out
 }
+
+/**
+ * Every Form folder in the tree. These are the directories {@link collectPages}
+ * cannot see into — the server sends a submission count instead of children —
+ * so a caller that reasons about "does this path exist?" has to know that a path
+ * under one of them is simply not covered by the flattened list.
+ */
+export function collectFormFolders(entries: Entry[], out: string[] = []): string[] {
+  for (const e of entries) {
+    if (!e.is_dir) continue
+    if (e.form) out.push(e.path)
+    else if (e.children) collectFormFolders(e.children, out)
+  }
+  return out
+}

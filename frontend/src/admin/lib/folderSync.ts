@@ -34,6 +34,7 @@
  * subset; the UI casts it at the boundary.
  */
 import type { SyncSpace } from './syncSpace'
+import { guideFiles, isGeneratedGuide, isGuideName, type GuideContext } from './spaceGuide'
 
 /** Reports `done` of `total` units while a long pull/push walks the file set. */
 export type ProgressFn = (done: number, total: number) => void
@@ -216,6 +217,18 @@ export interface PullResult {
   dirs: string[]
   /** The manifest captured for this sync (also written to the folder). */
   manifest: SyncManifest
+  /**
+   * Agent briefings dropped into the folder root ({@link guideFiles}). They are
+   * tooling, never Space content: they stay out of the manifest and the push
+   * strips them again.
+   */
+  guides: string[]
+}
+
+/** What a pull needs to know to write the agent briefing (see {@link ./spaceGuide}). */
+export interface GuideOptions {
+  /** Display name of the space, for the guide's heading. */
+  spaceName: string
 }
 
 /**
@@ -224,8 +237,18 @@ export interface PullResult {
  * empty directories, and record the manifest (`path -> hash`) both in the folder
  * and in the returned result. Never deletes anything already in the folder — a
  * local agent's scratch files are preserved.
+ *
+ * When `guide` is given, the folder also gets `AGENTS.md` / `CLAUDE.md` telling
+ * a local CLI agent what a notation Space is and how this folder round-trips —
+ * but only for names the space doesn't itself use, so a real `AGENTS.md` page is
+ * never clobbered. Omit `guide` to pull content only.
  */
-export async function pull(space: SyncSpace, dir: SyncDirHandle, onProgress?: ProgressFn): Promise<PullResult> {
+export async function pull(
+  space: SyncSpace,
+  dir: SyncDirHandle,
+  onProgress?: ProgressFn,
+  guide?: GuideOptions,
+): Promise<PullResult> {
   const written: string[] = []
   const dirs: string[] = []
   const entries: ManifestEntries = {}
@@ -244,29 +267,85 @@ export async function pull(space: SyncSpace, dir: SyncDirHandle, onProgress?: Pr
     onProgress?.(++done, nodes.length)
   }
   const manifest = await writeManifestFile(dir, entries)
-  return { written, dirs, manifest }
+
+  const guides: string[] = []
+  if (guide) {
+    const ctx: GuideContext = {
+      spaceName: guide.spaceName,
+      encrypted: space.encrypted,
+      formFolders: formFoldersOf(written),
+      fileCount: written.length,
+    }
+    for (const g of guideFiles(ctx)) {
+      // The space's own file at that path always wins — it was just written.
+      if (entries[g.name] !== undefined) continue
+      await writeFileTo(dir, g.name, new TextEncoder().encode(g.content))
+      guides.push(g.name)
+    }
+  }
+  return { written, dirs, manifest, guides }
+}
+
+/** Folders rendered as Forms — the ones holding a `_form.md` template. */
+function formFoldersOf(paths: string[]): string[] {
+  const out = new Set<string>()
+  for (const p of paths) {
+    if (!p.endsWith('/_form.md')) continue
+    out.add(p.slice(0, -'/_form.md'.length))
+  }
+  return [...out].sort()
+}
+
+/**
+ * Drop the briefings {@link pull} generated from the folder's file set, so a
+ * push never carries them into the space. A guide only counts as ours when it
+ * sits at the root under a {@link isGuideName} name, still carries the marker,
+ * and the space doesn't have a file of its own at that path. Mutates
+ * `folderFiles` and returns what it removed (for the UI note).
+ */
+export function stripGeneratedGuides(
+  folderFiles: Map<string, Uint8Array>,
+  spaceFiles: Map<string, Uint8Array>,
+): string[] {
+  const removed: string[] = []
+  for (const [path, bytes] of folderFiles) {
+    if (!isGuideName(path) || spaceFiles.has(path)) continue
+    if (!isGeneratedGuide(bytes)) continue
+    folderFiles.delete(path)
+    removed.push(path)
+  }
+  return removed
 }
 
 // ── push: 3-way diff ─────────────────────────────────────────────────────────
 
-export type PushKind = 'new' | 'modified' | 'deleted'
+export type PushKind = 'new' | 'modified' | 'deleted' | 'moved'
 
 export interface PushEntry {
   path: string
   kind: PushKind
   /**
    * True when both sides diverged from the last-sync baseline (a real
-   * conflict). For `new`/`modified` the resolution is folder-wins (surfaced, not
-   * silent); for `deleted` it flags "folder removed a file the space had also
-   * edited since the last sync".
+   * conflict). For `new`/`modified`/`moved` the resolution is folder-wins
+   * (surfaced, not silent); for `deleted` it flags "folder removed a file the
+   * space had also edited since the last sync".
    */
   conflict: boolean
+  /** `moved` only: the path in the space this file is moving away from. */
+  from?: string
+  /**
+   * `moved` only: the folder's bytes differ from what the space currently holds
+   * at {@link from}, so the move is followed by a content write (folder-wins).
+   * False for a pure relocation.
+   */
+  edited?: boolean
 }
 
 export interface PushCounts {
   new: number
   modified: number
   deleted: number
+  moved: number
   conflict: number
   unchanged: number
 }
@@ -324,15 +403,131 @@ export async function computePushPlan(
     }
   }
 
+  const moved = detectMoves(entries, spaceHashes, folderManifest, manifest)
+
+  moved.sort((a, b) => a.path.localeCompare(b.path))
   entries.sort((a, b) => a.path.localeCompare(b.path))
+  const all = [...moved, ...entries]
   const counts: PushCounts = {
     new: entries.filter((e) => e.kind === 'new').length,
     modified: entries.filter((e) => e.kind === 'modified').length,
     deleted: entries.filter((e) => e.kind === 'deleted').length,
-    conflict: entries.filter((e) => e.conflict).length,
+    moved: moved.length,
+    conflict: all.filter((e) => e.conflict).length,
     unchanged,
   }
-  return { entries, counts, folderManifest }
+  return { entries: all, counts, folderManifest }
+}
+
+const basename = (p: string): string => p.slice(p.lastIndexOf('/') + 1)
+
+/**
+ * Recognise renames/moves inside a computed diff and REPLACE the delete+create
+ * pair they were classified as with a single `moved` entry.
+ *
+ * A folder has no notion of identity — moving a page there reaches us as "this
+ * path vanished, that one appeared". Applied literally that destroys the page's
+ * identity in the space: the old node (with its comments, reactions and, for a
+ * plaintext space, its git history) is deleted and an unrelated new file appears
+ * elsewhere. Every annotation on it then points at nothing. Recognising the pair
+ * lets {@link applyPush} perform a real move instead, which keeps all of it.
+ *
+ * Two tiers, deliberately in this order:
+ *   1. **identical content** — the strongest possible evidence; ambiguity inside
+ *      one hash group is harmless (the bytes are the same either way) and is
+ *      broken by preferring an unchanged filename, then by path order.
+ *   2. **identical filename** — catches "moved AND edited", but only when it is
+ *      unambiguous (exactly one candidate on each side), since a wrong guess
+ *      here would move a file the user meant to keep.
+ *
+ * `entries` is mutated: paired `deleted`/`new` entries are removed from it.
+ */
+function detectMoves(
+  entries: PushEntry[],
+  spaceHashes: ManifestEntries,
+  folderManifest: ManifestEntries,
+  baseline: ManifestEntries,
+): PushEntry[] {
+  const dels = entries.filter((e) => e.kind === 'deleted').map((e) => e.path)
+  const news = entries.filter((e) => e.kind === 'new').map((e) => e.path)
+  if (dels.length === 0 || news.length === 0) return []
+
+  const pairs: { from: string; to: string }[] = []
+  const takenFrom = new Set<string>()
+  const takenTo = new Set<string>()
+
+  // ── tier 1: same content ──
+  const byHash = new Map<string, { from: string[]; to: string[] }>()
+  for (const p of dels) {
+    const h = spaceHashes[p]
+    if (!h) continue
+    const g = byHash.get(h) ?? { from: [], to: [] }
+    g.from.push(p)
+    byHash.set(h, g)
+  }
+  for (const p of news) {
+    const h = folderManifest[p]
+    if (!h) continue
+    const g = byHash.get(h)
+    if (g) g.to.push(p)
+  }
+  for (const g of byHash.values()) {
+    const from = [...g.from].sort()
+    const to = [...g.to].sort()
+    // Same name first — with several identical-content files, that is the
+    // pairing a human would call the move.
+    for (const f of from) {
+      const i = to.findIndex((t) => basename(t) === basename(f))
+      if (i === -1) continue
+      pairs.push({ from: f, to: to[i] })
+      takenFrom.add(f)
+      takenTo.add(to.splice(i, 1)[0])
+    }
+    for (const f of from) {
+      if (takenFrom.has(f)) continue
+      const t = to.shift()
+      if (!t) break
+      pairs.push({ from: f, to: t })
+      takenFrom.add(f)
+      takenTo.add(t)
+    }
+  }
+
+  // ── tier 2: same filename, changed content — only when unambiguous ──
+  const restFrom = dels.filter((p) => !takenFrom.has(p))
+  const restTo = news.filter((p) => !takenTo.has(p))
+  for (const f of restFrom) {
+    const matches = restTo.filter((t) => !takenTo.has(t) && basename(t) === basename(f))
+    if (matches.length !== 1) continue
+    const rivals = restFrom.filter((o) => !takenFrom.has(o) && basename(o) === basename(f))
+    if (rivals.length !== 1) continue
+    pairs.push({ from: f, to: matches[0] })
+    takenFrom.add(f)
+    takenTo.add(matches[0])
+  }
+
+  if (pairs.length === 0) return []
+
+  // Drop the halves we just consumed; what's left is a genuine create/delete.
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]
+    if ((e.kind === 'deleted' && takenFrom.has(e.path)) || (e.kind === 'new' && takenTo.has(e.path))) {
+      entries.splice(i, 1)
+    }
+  }
+
+  return pairs.map(({ from, to }) => {
+    const base = baseline[from]
+    return {
+      path: to,
+      kind: 'moved' as const,
+      from,
+      // The space may have moved on since the baseline; folder-wins, so the move
+      // is followed by a write whenever the two sides don't already agree.
+      edited: folderManifest[to] !== spaceHashes[from],
+      conflict: base !== undefined && spaceHashes[from] !== base && folderManifest[to] !== base,
+    }
+  })
 }
 
 // ── push: prepare + apply ────────────────────────────────────────────────────
@@ -343,6 +538,8 @@ export interface PreparedPush {
   spaceFiles: Map<string, Uint8Array>
   /** Where the baseline manifest came from (drives a UI note when it's missing). */
   manifestSource: 'folder' | 'fallback' | 'none'
+  /** Generated agent briefings held back from the diff ({@link stripGeneratedGuides}). */
+  strippedGuides: string[]
 }
 
 /**
@@ -359,6 +556,9 @@ export async function preparePush(
 ): Promise<PreparedPush> {
   const folderFiles = await readFolderFiles(dir)
   const spaceFiles = await collectSpaceFiles(space, onProgress)
+  // Our own AGENTS.md / CLAUDE.md briefing is tooling for the local agent, not
+  // content — it must never travel back into the space.
+  const strippedGuides = stripGeneratedGuides(folderFiles, spaceFiles)
   const manifestFile = await readManifestFile(dir)
 
   let manifest: ManifestEntries
@@ -375,11 +575,11 @@ export async function preparePush(
   }
 
   const plan = await computePushPlan(spaceFiles, folderFiles, manifest)
-  return { plan, folderFiles, spaceFiles, manifestSource }
+  return { plan, folderFiles, spaceFiles, manifestSource, strippedGuides }
 }
 
 export interface PushApplyResult {
-  applied: { new: number; modified: number; deleted: number }
+  applied: { new: number; modified: number; deleted: number; moved: number }
   /** Folders removed afterwards because they ended up holding nothing. */
   prunedDirs: string[]
   /** Deletion candidates left in place because `applyDeletions` was off. */
@@ -393,13 +593,19 @@ export interface PushApplyResult {
 }
 
 /**
- * Apply a previewed {@link PreparedPush} to the space: write every new /
- * modified file (folder-wins for conflicts), and — only when `applyDeletions` is
- * set — delete the paths the folder dropped. Then {@link SyncSpace.flush},
- * drop any folder left holding nothing ({@link SyncSpace.pruneEmptyDirs}), and
- * refresh the manifest to the folder's file set (the agreed source of truth, so
- * deletion-not-applied and browser-only files never become false deletions on
- * the next push). Renames surface as delete+create with content preserved.
+ * Apply a previewed {@link PreparedPush} to the space: relocate every recognised
+ * move, write every new / modified file (folder-wins for conflicts), and — only
+ * when `applyDeletions` is set — delete the paths the folder dropped. Then
+ * {@link SyncSpace.flush}, drop any folder left holding nothing
+ * ({@link SyncSpace.pruneEmptyDirs}), and refresh the manifest to the folder's
+ * file set (the agreed source of truth, so deletion-not-applied and browser-only
+ * files never become false deletions on the next push).
+ *
+ * Moves run FIRST and are a real {@link SyncSpace.move}, not delete+create: that
+ * is what keeps a relocated page's identity — its comments, reactions and
+ * history — instead of orphaning every annotation on it. They are not gated
+ * behind `applyDeletions`, because a move removes nothing: the content is listed
+ * in the preview with both of its paths and travels intact to the new one.
  *
  * One failing entry does NOT abort the push: a rejected write (over the server's
  * upload limit, a lost connection mid-batch) is collected into `failed` and its
@@ -417,21 +623,38 @@ export async function applyPush(
   let nNew = 0
   let nMod = 0
   let nDel = 0
+  let nMoved = 0
   let skippedDeletions = 0
   const changedPaths: string[] = []
   const failed: { path: string; error: string }[] = []
   let done = 0
 
-  for (const e of plan.entries) {
+  // Moves before writes: the source has to still be where the space thinks it
+  // is when we relocate it.
+  const ordered = [
+    ...plan.entries.filter((e) => e.kind === 'moved'),
+    ...plan.entries.filter((e) => e.kind !== 'moved'),
+  ]
+
+  for (const e of ordered) {
     try {
-      if (e.kind === 'new' || e.kind === 'modified') {
+      if (e.kind === 'moved' && e.from) {
+        await space.move(e.from, e.path)
+        // The folder edited it on the way; folder-wins, same as `modified`.
+        if (e.edited) {
+          const bytes = folderFiles.get(e.path)
+          if (bytes) await space.write(e.path, bytes)
+        }
+        changedPaths.push(e.from, e.path)
+        nMoved++
+      } else if (e.kind === 'new' || e.kind === 'modified') {
         const bytes = folderFiles.get(e.path)
         if (!bytes) continue
         await space.write(e.path, bytes)
         changedPaths.push(e.path)
         if (e.kind === 'new') nNew++
         else nMod++
-      } else if (opts.applyDeletions) {
+      } else if (e.kind === 'deleted' && opts.applyDeletions) {
         await space.remove(e.path)
         changedPaths.push(e.path)
         nDel++
@@ -461,7 +684,7 @@ export async function applyPush(
   for (const f of failed) delete nextManifest[f.path]
   const manifest = await writeManifestFile(dir, nextManifest)
   return {
-    applied: { new: nNew, modified: nMod, deleted: nDel },
+    applied: { new: nNew, modified: nMod, deleted: nDel, moved: nMoved },
     prunedDirs,
     skippedDeletions,
     changedPaths,

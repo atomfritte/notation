@@ -169,6 +169,49 @@ func (c *CommentStore) ListAll(spaceID string) ([]Comment, error) {
 	return c.load(spaceID)
 }
 
+// Relocate re-files every comment on `from` onto `to` and reports how many
+// moved. Comments are keyed by path, so a file that moves without this leaves
+// its whole thread pointing at a path nobody can open — the annotation is still
+// stored, it just became unreachable.
+//
+// When `from` names a directory the whole subtree comes along (`from/x.md` ->
+// `to/x.md`), which is what makes renaming a folder in the tree safe.
+//
+// Called on every rename (from the UI, and from a folder-sync push that
+// recognised a move) and by the "this page moved — re-attach the comments"
+// repair action. Idempotent, and a no-op when nothing sits on `from`.
+func (c *CommentStore) Relocate(spaceID, from, to string) (int, error) {
+	if from == "" || to == "" || from == to {
+		return 0, nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	list, err := c.load(spaceID)
+	if err != nil {
+		return 0, err
+	}
+	moved := 0
+	prefix := strings.TrimSuffix(from, "/") + "/"
+	for i := range list {
+		switch {
+		case list[i].Path == from:
+			list[i].Path = to
+			moved++
+		case strings.HasPrefix(list[i].Path, prefix):
+			// A directory moved: keep each file's position inside it.
+			list[i].Path = strings.TrimSuffix(to, "/") + "/" + strings.TrimPrefix(list[i].Path, prefix)
+			moved++
+		}
+	}
+	if moved == 0 {
+		return 0, nil
+	}
+	if err := c.save(spaceID, list); err != nil {
+		return 0, err
+	}
+	return moved, nil
+}
+
 // Delete removes a comment by ID. If the deleted comment is a top-level entry,
 // all of its replies are also removed (cascade).
 func (c *CommentStore) Delete(spaceID, commentID string) error {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   X, FolderSync, FolderOpen, FolderDown, FolderUp, HardDrive, AlertTriangle,
-  ShieldAlert, Info, Check, Plus, Pencil, Trash2, RefreshCw,
+  ShieldAlert, Info, Check, Plus, Pencil, Trash2, RefreshCw, MoveRight,
 } from 'lucide-react'
 import type { SyncSpace } from '../lib/syncSpace'
 import {
@@ -39,11 +39,14 @@ const asSyncDir = (h: FileSystemDirectoryHandle): SyncDirHandle => h as unknown 
 export function FolderSyncPanel({
   space,
   spaceID,
+  spaceName,
   onClose,
   onSynced,
 }: {
   space: SyncSpace
   spaceID: string
+  /** Display name of the space — goes into the folder's agent briefing. */
+  spaceName: string
   onClose: () => void
   /**
    * Called after a push applies so the caller can refresh its file tree — and
@@ -125,12 +128,15 @@ export function FolderSyncPanel({
     try {
       const h = await ensureHandle()
       if (!h) { setPhase('home'); return }
-      const res = await pull(space, asSyncDir(h), onProgress)
+      const res = await pull(space, asSyncDir(h), onProgress, { spaceName })
       await setManifest(spaceID, res.manifest.entries)
-      setResult(`Wrote ${res.written.length} file${res.written.length === 1 ? '' : 's'} to “${h.name}”.`)
+      // The briefing is tooling, not content — say that it landed AND that it
+      // never travels back, so nobody has to wonder about the extra files.
+      const guides = res.guides.length > 0 ? ` Added ${res.guides.join(' + ')} so local AI tools know what this Space is (never pushed back).` : ''
+      setResult(`Wrote ${res.written.length} file${res.written.length === 1 ? '' : 's'} to “${h.name}”.${guides}`)
       setPhase('result')
     } catch (e) { setErr(errMsg(e)); setPhase('error') }
-  }, [ensureHandle, space, spaceID, encrypted, onProgress])
+  }, [ensureHandle, space, spaceID, spaceName, encrypted, onProgress])
 
   const doPreparePush = useCallback(async () => {
     setErr(null); setResult(null); setFailed([]); setProgress(null); setApplyDeletions(false)
@@ -156,6 +162,7 @@ export function FolderSyncPanel({
       const parts: string[] = []
       if (res.applied.new) parts.push(`${res.applied.new} added`)
       if (res.applied.modified) parts.push(`${res.applied.modified} updated`)
+      if (res.applied.moved) parts.push(`${res.applied.moved} moved (comments kept)`)
       if (res.applied.deleted) parts.push(`${res.applied.deleted} deleted`)
       if (res.skippedDeletions) parts.push(`${res.skippedDeletions} deletion${res.skippedDeletions === 1 ? '' : 's'} skipped`)
       if (res.prunedDirs.length) parts.push(`${res.prunedDirs.length} empty folder${res.prunedDirs.length === 1 ? '' : 's'} removed`)
@@ -266,7 +273,8 @@ export function FolderSyncPanel({
                 <span>
                   Pull writes <strong>decrypted (plaintext) files</strong> to the folder you choose so a local
                   tool can edit them. Only your device sees them — the server still stores ciphertext only.
-                  Push re-encrypts your edits back in, with a change preview first.
+                  Push re-encrypts your edits back in, with a change preview first. Pull also drops an
+                  <code className="mx-1 font-mono">AGENTS.md</code> briefing for local AI tools; it never travels back.
                 </span>
               </div>
             ) : (
@@ -275,7 +283,8 @@ export function FolderSyncPanel({
                 <span>
                   Pull copies this space into the folder you choose so a local tool can edit it. Push writes
                   your edits back, with a change preview first — each pushed file lands in the space’s
-                  version history like any other edit.
+                  version history like any other edit. Pull also drops an
+                  <code className="mx-1 font-mono">AGENTS.md</code> briefing for local AI tools; it never travels back.
                 </span>
               </div>
             )}
@@ -359,10 +368,21 @@ export function PushPreview({
       <div className="flex flex-wrap gap-2 mb-3 text-xs flex-shrink-0">
         <Stat label="new" n={counts.new} tone="accent" />
         <Stat label="modified" n={counts.modified} tone="warning" />
+        {counts.moved > 0 && <Stat label="moved" n={counts.moved} tone="accent" />}
         <Stat label="deleted" n={counts.deleted} tone="danger" />
         {counts.conflict > 0 && <Stat label="conflict" n={counts.conflict} tone="danger" />}
         <Stat label="unchanged" n={counts.unchanged} tone="muted" />
       </div>
+
+      {counts.moved > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] p-2.5 text-[11px] text-[var(--notation-fg-muted)] mb-3">
+          <Info size={13} className="text-[color:var(--notation-accent)] flex-shrink-0 mt-0.5" />
+          <span>
+            {counts.moved} file{counts.moved === 1 ? ' was' : 's were'} recognised as <strong>moved</strong>, not
+            re-created — so each page keeps its comments, reactions and history at the new path.
+          </span>
+        </div>
+      )}
 
       {prepared.manifestSource === 'none' && !nothing && (
         <div className="flex items-start gap-2 rounded-md border border-[color:var(--notation-warning)] bg-[color:var(--notation-warning)]/10 p-2.5 text-[11px] text-[var(--notation-fg)] mb-3">
@@ -412,11 +432,22 @@ function Row({ entry, dimmed }: { entry: PushEntry; dimmed?: boolean }) {
   const icon =
     entry.kind === 'new' ? <Plus size={13} className="text-[color:var(--notation-accent)]" />
     : entry.kind === 'modified' ? <Pencil size={13} className="text-[var(--notation-warning)]" />
+    : entry.kind === 'moved' ? <MoveRight size={13} className="text-[color:var(--notation-accent)]" />
     : <Trash2 size={13} className="text-[var(--notation-danger)]" />
   return (
     <div className={`flex items-center gap-2 px-3 py-1.5 text-xs ${dimmed ? 'opacity-40' : ''}`}>
       <span className="flex-shrink-0">{icon}</span>
-      <span className="truncate text-[var(--notation-fg)] font-mono">{entry.path}</span>
+      {entry.kind === 'moved' ? (
+        // Both ends matter here — the whole point is that the page survived.
+        <span className="truncate text-[var(--notation-fg)] font-mono" title={`${entry.from} → ${entry.path}`}>
+          <span className="text-[var(--notation-fg-muted)] line-through decoration-1">{entry.from}</span>
+          {' → '}
+          {entry.path}
+          {entry.edited && <span className="ml-1 text-[9px] uppercase tracking-wide text-[var(--notation-warning)]">+ edits</span>}
+        </span>
+      ) : (
+        <span className="truncate text-[var(--notation-fg)] font-mono">{entry.path}</span>
+      )}
       {entry.conflict && (
         <span className="ml-auto flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-[var(--notation-danger)] bg-[var(--notation-danger)]/15 px-1.5 py-0.5 rounded">conflict</span>
       )}
