@@ -306,9 +306,11 @@ function MissingTarget({
     try {
       await onRelocate(group, path)
     } catch (e) {
-      setErr(String(e))
+      if (liveRef.current) setErr(String(e))
     } finally {
-      setBusy(null)
+      // A successful move makes this whole strip disappear — don't touch state
+      // that no longer exists.
+      if (liveRef.current) setBusy(null)
     }
   }
 
