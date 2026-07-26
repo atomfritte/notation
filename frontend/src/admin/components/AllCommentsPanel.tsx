@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MessageSquare, FileText, Trash2, FileQuestion, CornerDownRight, Search } from 'lucide-react'
 import * as api from '../lib/api'
 import { applyCommentFilter, type CommentFilter } from '../lib/commentView'
@@ -123,6 +123,15 @@ export function AllCommentsPanel({
     return out
   }, [comments, existingPaths])
 
+  // Position of each stranded group among the stranded ones, so only the first
+  // few search on their own (see AUTO_SEARCH_LIMIT).
+  const orphanRank = useMemo(() => {
+    const rank = new Map<string, number>()
+    let i = 0
+    for (const g of groups) if (g.missing) rank.set(g.key, i++)
+    return rank
+  }, [groups])
+
   if (loading && comments.length === 0) {
     return <div className="p-4 text-xs text-[var(--notation-fg-muted)] italic">Loading…</div>
   }
@@ -183,6 +192,10 @@ export function AllCommentsPanel({
               resolveTargets={resolveTargets}
               onRelocate={onRelocate}
               onOpen={onSelectFile}
+              // Each hunt costs a search. The first few run by themselves —
+              // beyond that (a big reshuffle) the user asks, rather than the
+              // panel firing a burst of requests the moment it opens.
+              autoSearch={(orphanRank.get(g.key) ?? 0) < AUTO_SEARCH_LIMIT}
             />
           )}
           <ul className="pl-2 mt-1 space-y-1.5">
@@ -245,39 +258,46 @@ export function AllCommentsPanel({
   )
 }
 
+/** How many stranded threads hunt for their page without being asked. */
+const AUTO_SEARCH_LIMIT = 5
+
 /**
  * The repair strip under a group whose file is gone: says so plainly, then goes
  * looking for where the page went and offers what it found.
  *
- * The search runs by itself, once per group — being told "this page is gone" and
- * having to press a button to learn anything more is exactly the dead end this
- * replaces. Re-attaching is one click and reversible (the thread can be moved
- * again), so nothing here needs a confirmation dialog.
+ * The search runs by itself for the first few groups — being told "this page is
+ * gone" and having to press a button to learn anything more is exactly the dead
+ * end this replaces. Re-attaching is one click and reversible (the thread can be
+ * moved again), so nothing here needs a confirmation dialog.
  */
 function MissingTarget({
-  group, resolveTargets, onRelocate, onOpen,
+  group, resolveTargets, onRelocate, onOpen, autoSearch,
 }: {
   group: OrphanGroup
   resolveTargets?: (g: OrphanGroup) => Promise<Candidate[]>
   onRelocate?: (g: OrphanGroup, target: string) => Promise<void>
   onOpen: (path: string) => void
+  /** Hunt on mount; otherwise wait for the user to ask. */
+  autoSearch: boolean
 }) {
   const [state, setState] = useState<'idle' | 'searching' | 'done'>('idle')
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const ran = useRef(false)
+  const liveRef = useRef(true)
+  useEffect(() => () => { liveRef.current = false }, [])
 
-  useEffect(() => {
+  const hunt = useCallback(() => {
     if (ran.current || !resolveTargets) return
     ran.current = true
-    let live = true
     setState('searching')
     resolveTargets(group)
-      .then(list => { if (live) { setCandidates(list); setState('done') } })
-      .catch(e => { if (live) { setErr(String(e)); setState('done') } })
-    return () => { live = false }
+      .then(list => { if (liveRef.current) { setCandidates(list); setState('done') } })
+      .catch(e => { if (liveRef.current) { setErr(String(e)); setState('done') } })
   }, [group, resolveTargets])
+
+  useEffect(() => { if (autoSearch) hunt() }, [autoSearch, hunt])
 
   async function relocate(path: string) {
     if (!onRelocate) return
@@ -297,6 +317,14 @@ function MissingTarget({
       <p className="text-[11px] text-[var(--notation-fg)] leading-snug">
         This page was <strong>moved or deleted</strong> — the comments below have nothing to open.
       </p>
+      {state === 'idle' && resolveTargets && (
+        <button
+          onClick={hunt}
+          className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-[color:var(--notation-accent)] hover:underline"
+        >
+          <Search size={11} /> Find where it went
+        </button>
+      )}
       {state === 'searching' && (
         <p className="mt-1 text-[11px] text-[var(--notation-fg-muted)] flex items-center gap-1.5">
           <Search size={11} className="animate-pulse" /> Looking for where it went…
