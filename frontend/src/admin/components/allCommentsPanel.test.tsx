@@ -52,3 +52,21 @@ describe('AllCommentsPanel and a vanished page', () => {
     expect(html).toContain('moved or deleted')
   })
 })
+
+describe('AllCommentsPanel and folders the tree cannot see into', () => {
+  it('does not call a comment inside a Form folder stranded', () => {
+    // The tree sends a submission count instead of a Form folder's files, so
+    // those paths are absent from the file set while very much existing.
+    const html = renderToStaticMarkup(
+      <AllCommentsPanel
+        spaceID="alpha"
+        currentFile=""
+        onSelectFile={() => {}}
+        items={[item({ path: 'survey/entry-7.md' })]}
+        existingPaths={new Set(['index.md'])}
+        opaqueDirs={['survey']}
+      />,
+    )
+    expect(html).not.toContain('moved or deleted')
+  })
+})

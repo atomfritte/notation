@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Entry } from './api'
-import { collectPages } from './pageOrder'
+import { collectFormFolders, collectPages } from './pageOrder'
 
 const file = (path: string): Entry => {
   const name = path.slice(path.lastIndexOf('/') + 1)
@@ -53,5 +53,27 @@ describe('collectPages', () => {
 
   it('returns an empty list for an empty tree', () => {
     expect(collectPages([], true)).toEqual([])
+  })
+})
+
+describe('collectFormFolders', () => {
+  const dir = (path: string, over: Partial<Entry> = {}): Entry => ({
+    name: path.split('/').pop()!, path, is_dir: true, size: 0, modified: '', ...over,
+  })
+  const file = (path: string): Entry => ({
+    name: path.split('/').pop()!, path, is_dir: false, size: 1, modified: '',
+  })
+
+  it('finds form folders at any depth and stops descending into them', () => {
+    const tree: Entry[] = [
+      file('index.md'),
+      dir('surveys', { children: [dir('surveys/mood', { form: true, entries: 3 })] }),
+      dir('notes', { children: [file('notes/a.md')] }),
+    ]
+    expect(collectFormFolders(tree)).toEqual(['surveys/mood'])
+  })
+
+  it('is empty for a tree without forms', () => {
+    expect(collectFormFolders([file('a.md'), dir('d', { children: [file('d/b.md')] })])).toEqual([])
   })
 })

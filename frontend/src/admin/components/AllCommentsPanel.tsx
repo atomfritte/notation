@@ -28,6 +28,12 @@ type Props = {
    * e.g. while the tree is still loading.
    */
   existingPaths?: Set<string>
+  /**
+   * Folders whose contents `existingPaths` deliberately doesn't list — a Form
+   * folder shows a submission count instead of its files. A comment inside one
+   * is present, not stranded, so the check has to skip it.
+   */
+  opaqueDirs?: string[]
   /** Find likely new homes for a stranded thread (see {@link ../lib/commentTargets}). */
   resolveTargets?: (group: OrphanGroup) => Promise<Candidate[]>
   /** Re-file a stranded thread onto the picked file. */
@@ -42,7 +48,7 @@ type Props = {
  */
 export function AllCommentsPanel({
   spaceID, currentFile, onSelectFile, refreshKey = 0, items, onDeleteComment,
-  filter = 'comments', onFilterChange, existingPaths, resolveTargets, onRelocate,
+  filter = 'comments', onFilterChange, existingPaths, opaqueDirs, resolveTargets, onRelocate,
 }: Props) {
   // Encrypted spaces pass `items` (client-side); plaintext spaces fetch here.
   const clientMode = items !== undefined
@@ -107,7 +113,15 @@ export function AllCommentsPanel({
       const path = list[0].path
       // "Gone" is only knowable once we've been handed the space's file set;
       // until then every group is treated as fine (no false alarms on load).
-      const missing = Boolean(list[0].orphan || (existingPaths && existingPaths.size > 0 && !existingPaths.has(path)))
+      // A path the file set never claimed to cover (inside a Form folder) is
+      // not evidence of anything either.
+      const missing = Boolean(
+        list[0].orphan ||
+          (existingPaths &&
+            existingPaths.size > 0 &&
+            !existingPaths.has(path) &&
+            !opaqueDirs?.some(d => path.startsWith(d + '/'))),
+      )
       return {
         key,
         path,
@@ -121,7 +135,7 @@ export function AllCommentsPanel({
     })
     out.sort((a, b) => b.newest.localeCompare(a.newest))
     return out
-  }, [comments, existingPaths])
+  }, [comments, existingPaths, opaqueDirs])
 
   // Position of each stranded group among the stranded ones, so only the first
   // few search on their own (see AUTO_SEARCH_LIMIT).

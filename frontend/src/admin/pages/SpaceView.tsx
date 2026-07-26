@@ -9,7 +9,7 @@ import { findCommentTargets, type Candidate, type OrphanGroup } from '../lib/com
 import { fetchState } from '../lib/auth'
 import { fileParams, fileSearchString, resolveFileParam } from '../lib/fileParam'
 import { downloadDecryptedSpaceZip } from '../lib/spaceZip'
-import { collectPages } from '../lib/pageOrder'
+import { collectPages, collectFormFolders } from '../lib/pageOrder'
 import { createEncryptedSearchIndex, type EncryptedSearchIndex } from '../lib/encSearch'
 import type { EncryptedFS } from '../../shared/vfs/encfs'
 import { utf8Decode, utf8Encode } from '../../shared/crypto/bytes'
@@ -1149,6 +1149,10 @@ export function SpaceView() {
   // hiding it, the comments panel says so and asks these two for help.
 
   const existingPaths = useMemo(() => new Set(allFilesAny), [allFilesAny])
+  // The tree hides a Form folder's files behind a submission count, so those
+  // paths are absent from `allFilesAny` while very much existing. Hand them over
+  // so a comment inside one is never mistaken for a stranded thread.
+  const formFolders = useMemo(() => collectFormFolders(tree), [tree])
 
   /** Likely new homes for a stranded thread: quote hit first, then the names. */
   const resolveCommentTargets = useCallback(
@@ -1423,6 +1427,7 @@ export function SpaceView() {
                 onFilterChange={setCommentFilterPref}
                 onDeleteComment={encrypted ? handleDeleteComment : undefined}
                 existingPaths={existingPaths}
+                opaqueDirs={formFolders}
                 resolveTargets={resolveCommentTargets}
                 onRelocate={relocateCommentThread}
               />
