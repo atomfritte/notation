@@ -380,10 +380,12 @@ Work on a Space with local tools — an editor, a script, a coding agent — and
 | Action | What it does |
 |---|---|
 | **Pull** | Writes every file of the Space into the folder, recreating the tree (empty folders included). Files already in the folder that the Space doesn't know about (a `.git`, scratch files) are left alone. |
-| **Push** | Reads the folder back, diffs it, shows a change preview (new / modified / deleted / conflict) and applies it only when you confirm. Deletions are opt-in via a separate checkbox. |
+| **Push** | Reads the folder back, diffs it, shows a change preview (new / modified / **moved** / deleted / conflict) and applies it only when you confirm. Deletions are opt-in via a separate checkbox. |
 
 - **Works for every Space** — plaintext or zero-knowledge encrypted. For an encrypted Space the browser decrypts on pull and re-encrypts on push; the server never sees anything but ciphertext. The panel says so plainly, because pull does write *decrypted* files to your disk.
 - **A plaintext Space's push is an ordinary write**, so every pushed file lands in the Space's git history like any other edit.
+- **The folder briefs your agent.** Every pull drops an `AGENTS.md` (plus a `CLAUDE.md` pointing at it) into the folder root — what a notation Space is, which Markdown features render, how to author a Form, how the push treats what it finds. CLI agents load those two names by themselves, so Claude Code / Cursor / Codex start out knowing the conventions instead of inventing their own. They are tooling, not content: the push strips them straight back out, they never enter the Space, and a real `AGENTS.md` page of your own always keeps the name (delete the marker line at the top and the file becomes ordinary content).
+- **A rename is a move, not a delete + create.** A folder can only report "this path is gone, that one appeared". The push pairs the two back up — by identical content, or by an unchanged filename when the file was edited on the way — and asks the Space for a real move. That is what keeps a relocated page's comments, reactions and git history attached instead of stranding every annotation on it. Moves are listed with both paths in the preview and don't need the deletions checkbox: nothing is being removed.
 - **3-way diff, not last-writer-wins.** A `.notation-sync.json` manifest (`path → content hash`) is written into the folder at every successful sync. It's what separates "the folder added a file" from "the Space deleted one", and it flags a real conflict when both sides changed the same file since the last sync (resolution is folder-wins, and every conflict is listed before you confirm).
 - **Ignored on both sides**: dotfiles and dot-directories (`.git`, `.env`, the manifest itself) and any `node_modules/`.
 - **A failed write doesn't poison the baseline.** If the server rejects a file (too large, connection lost), the push still applies everything else, reports what failed, and keeps those paths out of the sync record so the next push retries them.
@@ -502,6 +504,7 @@ The viewer is the same on the admin side and through Magic Links.
 - **Hover bubble**: hovering a marked passage shows the whole thread; clicking it pins the bubble so you can reply right there. The comments column never opens itself — you decide when it's visible
 - **Click to jump**: clicking a comment (in the sidebar or the all-comments panel) scrolls to its passage and keeps it highlighted; merely hovering only lights it up, it never yanks the page around
 - **Threaded replies**: one level deep, indented — from the sidebar or from the in-document bubble
+- **Comments survive a move**: renaming or moving a page (in the tree, or through a folder-sync push) carries its comments and reactions along — for a whole folder too. When a page vanishes some other way, the all-comments panel says so instead of linking into nothing, goes looking for where it went (a file that still contains the quoted passage, then the same filename elsewhere, then a close name) and re-attaches the thread in one click
 - **Outline / TOC**: sidebar panel with IntersectionObserver-driven active-section tracking
 - **Backlinks**: which other files link here (backed by the `search` tool)
 

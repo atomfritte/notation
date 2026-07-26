@@ -467,10 +467,36 @@ export const getComments = (id: string, path: string) =>
 // AllCommentItem extends CommentItem with the path field that the
 // space-wide listing carries — needed so the "All comments" tab can group
 // and link back to the file each comment lives on.
-export type AllCommentItem = CommentItem & { path: string }
+export type AllCommentItem = CommentItem & {
+  path: string
+  /**
+   * Encrypted spaces only: the CRDT node the comment hangs off. Kept alongside
+   * the path so an orphaned thread can still be re-attached — its file may be
+   * gone, but the comment itself is addressed by node, not by name.
+   */
+  node_id?: string
+  /**
+   * The file this comment belongs to no longer exists. `path` is then the last
+   * name we knew it by (a full path for a plaintext space, the bare filename
+   * for an encrypted one, where a trashed node has no path any more).
+   */
+  orphan?: boolean
+}
 
 export const getAllComments = (id: string) =>
   fetchJSON<AllCommentItem[]>(allCommentsURL(id))
+
+/**
+ * Re-file every comment sitting on `from` onto `to`. Used when a page moved (or
+ * was re-created elsewhere) outside a rename, so its thread was left pointing at
+ * a path that no longer opens. `to` must exist; `from` need not.
+ */
+export const relocateComments = (id: string, from: string, to: string) =>
+  fetchJSON<{ moved: number }>(`/api/admin/spaces/${encodeURIComponent(id)}/relocate-comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  })
 
 export const deleteComment = (id: string, commentID: string) =>
   fetchJSON<void>(`/api/admin/spaces/${encodeURIComponent(id)}/comments/by-id/${encodeURIComponent(commentID)}`, {

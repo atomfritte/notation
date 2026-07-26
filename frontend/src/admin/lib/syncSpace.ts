@@ -35,9 +35,9 @@ export interface SyncNode {
 
 /**
  * The whole surface {@link ./folderSync} needs from a space. Deliberately
- * minimal: no rename/move (the engine models a rename as delete + create with
- * the content preserved) and no mkdir (both backends create parent directories
- * implicitly on write).
+ * minimal: no mkdir (both backends create parent directories implicitly on
+ * write). {@link move} is the one identity-preserving operation — see there for
+ * why delete + create is not good enough.
  */
 export interface SyncSpace {
   /** True for a zero-knowledge space — drives the plaintext-on-disk warning. */
@@ -48,6 +48,14 @@ export interface SyncSpace {
   read(path: string): Promise<Uint8Array>
   /** Create or overwrite a file, creating any missing parent directories. */
   write(path: string, bytes: Uint8Array): Promise<void>
+  /**
+   * Relocate a file, keeping its identity — the encrypted CRDT node id, the
+   * plaintext path its comments hang off. A folder sync that applied a rename as
+   * delete + create would preserve the bytes and lose everything attached to the
+   * page, so the engine asks for a real move whenever it can recognise one.
+   * Missing parent directories are created.
+   */
+  move(from: string, to: string): Promise<void>
   /** Delete the file at `path` (soft-delete for an encrypted space). */
   remove(path: string): Promise<void>
   /** Settle a batch of mutations (encrypted: push the op-log). */
@@ -88,6 +96,9 @@ export function encryptedSyncSpace(fs: EncryptedFS): SyncSpace {
     listNodes: async () => listZipNodes(fs),
     read: (path) => fs.read(path),
     write: (path, bytes) => fs.write(path, bytes),
+    // A CRDT rename keeps the node id, so the comments and reactions anchored to
+    // that id follow the file without any remapping at all.
+    move: (from, to) => fs.rename(from, to),
     remove: (path) => fs.remove(path),
     flush: () => fs.sync(),
     // The op-log knows every node, including ones the ignore set hides from
@@ -134,6 +145,8 @@ export interface PlaintextTransport {
   listTree(): Promise<api.Entry[]>
   readBytes(path: string): Promise<Uint8Array>
   writeBytes(path: string, bytes: Uint8Array): Promise<void>
+  /** Server-side rename; it also carries the file's comments to the new path. */
+  renamePath(from: string, to: string): Promise<void>
   deleteFile(path: string): Promise<void>
 }
 
@@ -145,6 +158,7 @@ export function httpPlaintextTransport(spaceID: string): PlaintextTransport {
     listTree: () => api.getTree(spaceID),
     readBytes: (path) => api.readFileBytes(spaceID, path),
     writeBytes: (path, bytes) => api.writeFileBinary(spaceID, path, new Blob([bytes as BlobPart])),
+    renamePath: (from, to) => api.renameFile(spaceID, from, to),
     deleteFile: (path) => api.deleteFile(spaceID, path),
   }
 }
@@ -179,6 +193,9 @@ export function plaintextSyncSpace(transport: PlaintextTransport): SyncSpace {
     },
     read: (path) => transport.readBytes(path),
     write: (path, bytes) => transport.writeBytes(path, bytes),
+    // The server renames the file AND relocates the comments that were filed
+    // against the old path, so a moved page keeps its thread.
+    move: (from, to) => transport.renamePath(from, to),
     remove: (path) => transport.deleteFile(path),
     // Server-side writes are already durable when their request resolves; the
     // debounced git commit needs no client-side settle.

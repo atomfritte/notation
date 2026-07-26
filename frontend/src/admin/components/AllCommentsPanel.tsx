@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { MessageSquare, FileText, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { MessageSquare, FileText, Trash2, FileQuestion, CornerDownRight, Search } from 'lucide-react'
 import * as api from '../lib/api'
 import { applyCommentFilter, type CommentFilter } from '../lib/commentView'
+import type { Candidate, OrphanGroup } from '../lib/commentTargets'
 
 type Props = {
   spaceID: string
@@ -20,6 +21,17 @@ type Props = {
   /** Comments-vs-everything switcher; omit to hide it. */
   filter?: CommentFilter
   onFilterChange?: (v: CommentFilter) => void
+  /**
+   * Every file path the space currently holds. A comment group whose file isn't
+   * in here lost its target — it gets the "moved or deleted" treatment instead
+   * of a link into nothing. Omit (or pass an empty set) to switch that off,
+   * e.g. while the tree is still loading.
+   */
+  existingPaths?: Set<string>
+  /** Find likely new homes for a stranded thread (see {@link ../lib/commentTargets}). */
+  resolveTargets?: (group: OrphanGroup) => Promise<Candidate[]>
+  /** Re-file a stranded thread onto the picked file. */
+  onRelocate?: (group: OrphanGroup, target: string) => Promise<void>
 }
 
 /**
@@ -28,7 +40,10 @@ type Props = {
  * the anchored quote (if any), and the comment body. Clicking the row
  * navigates to the file. The delete control mirrors the inline thread.
  */
-export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKey = 0, items, onDeleteComment, filter = 'comments', onFilterChange }: Props) {
+export function AllCommentsPanel({
+  spaceID, currentFile, onSelectFile, refreshKey = 0, items, onDeleteComment,
+  filter = 'comments', onFilterChange, existingPaths, resolveTargets, onRelocate,
+}: Props) {
   // Encrypted spaces pass `items` (client-side); plaintext spaces fetch here.
   const clientMode = items !== undefined
   const [fetched, setFetched] = useState<api.AllCommentItem[]>([])
@@ -70,28 +85,43 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
     }
   }
 
-  // Group: file path → list of top-level comments (replies hidden under
-  // their parent count). Sort groups by most-recent-comment first; within
-  // a group, newest first too.
+  // Group: file → list of top-level comments (replies hidden under their parent
+  // count). Keyed by node id where we have one (an encrypted space), so two
+  // deleted pages that happened to share a filename don't merge into one group.
+  // Sort groups by most-recent-comment first; within a group, newest first too.
   const groups = useMemo(() => {
-    const byPath = new Map<string, api.AllCommentItem[]>()
+    const byFile = new Map<string, api.AllCommentItem[]>()
     for (const c of comments) {
-      const list = byPath.get(c.path) ?? []
+      const key = c.node_id ?? c.path
+      const list = byFile.get(key) ?? []
       list.push(c)
-      byPath.set(c.path, list)
+      byFile.set(key, list)
     }
-    const out = Array.from(byPath.entries()).map(([path, list]) => {
+    const out = Array.from(byFile.entries()).map(([key, list]) => {
       const sorted = [...list].sort((a, b) => b.created_at.localeCompare(a.created_at))
       const tops = sorted.filter(c => !c.parent_id)
       const repliesByParent: Record<string, number> = {}
       for (const c of sorted) {
         if (c.parent_id) repliesByParent[c.parent_id] = (repliesByParent[c.parent_id] ?? 0) + 1
       }
-      return { path, tops, repliesByParent, total: list.length, newest: sorted[0]?.created_at ?? '' }
+      const path = list[0].path
+      // "Gone" is only knowable once we've been handed the space's file set;
+      // until then every group is treated as fine (no false alarms on load).
+      const missing = Boolean(list[0].orphan || (existingPaths && existingPaths.size > 0 && !existingPaths.has(path)))
+      return {
+        key,
+        path,
+        nodeId: list[0].node_id,
+        missing,
+        tops,
+        repliesByParent,
+        total: list.length,
+        newest: sorted[0]?.created_at ?? '',
+      }
     })
     out.sort((a, b) => b.newest.localeCompare(a.newest))
     return out
-  }, [comments])
+  }, [comments, existingPaths])
 
   if (loading && comments.length === 0) {
     return <div className="p-4 text-xs text-[var(--notation-fg-muted)] italic">Loading…</div>
@@ -124,23 +154,37 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
         {onFilterChange && <FilterSwitch value={filter} onChange={onFilterChange} />}
       </div>
       {groups.map(g => (
-        <section key={g.path}>
+        <section key={g.key}>
           <button
-            onClick={() => onSelectFile(g.path)}
+            onClick={() => { if (!g.missing) onSelectFile(g.path) }}
             className={
               'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-semibold transition-colors ' +
-              (g.path === currentFile
-                ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]'
-                : 'text-[var(--notation-fg)] hover:bg-[var(--notation-border)]')
+              (g.missing
+                ? 'text-[var(--notation-fg-muted)] cursor-default'
+                : g.path === currentFile
+                  ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]'
+                  : 'text-[var(--notation-fg)] hover:bg-[var(--notation-border)]')
             }
-            title={g.path}
+            title={g.missing ? `${g.path} — no longer in this Space` : g.path}
           >
-            <FileText size={14} className="flex-shrink-0 opacity-70" />
-            <span className="truncate flex-1 text-left">{g.path.replace(/\.md$/i, '')}</span>
+            {g.missing
+              ? <FileQuestion size={14} className="flex-shrink-0 text-[var(--notation-warning)]" />
+              : <FileText size={14} className="flex-shrink-0 opacity-70" />}
+            <span className={'truncate flex-1 text-left' + (g.missing ? ' line-through decoration-1' : '')}>
+              {g.path.replace(/\.md$/i, '')}
+            </span>
             <span className="text-[10px] font-bold text-[color:var(--notation-accent)] bg-[color:var(--notation-accent-15)] px-1.5 py-0.5 rounded-full">
               {g.total}
             </span>
           </button>
+          {g.missing && (
+            <MissingTarget
+              group={{ path: g.path, nodeId: g.nodeId, comments: comments.filter(c => (c.node_id ?? c.path) === g.key) }}
+              resolveTargets={resolveTargets}
+              onRelocate={onRelocate}
+              onOpen={onSelectFile}
+            />
+          )}
           <ul className="pl-2 mt-1 space-y-1.5">
             {g.tops.map(c => {
               const replies = g.repliesByParent[c.id] ?? 0
@@ -150,8 +194,8 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
                     className="group rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] hover:border-[color:var(--notation-accent-40)] transition-colors"
                   >
                     <button
-                      onClick={() => onSelectFile(c.path, c.id)}
-                      className="w-full text-left p-2"
+                      onClick={() => { if (!g.missing) onSelectFile(c.path, c.id) }}
+                      className={'w-full text-left p-2' + (g.missing ? ' cursor-default' : '')}
                     >
                       <div className="flex items-baseline gap-2 mb-0.5">
                         <span className="font-semibold text-xs text-[var(--notation-fg)] truncate">
@@ -199,6 +243,128 @@ export function AllCommentsPanel({ spaceID, currentFile, onSelectFile, refreshKe
       ))}
     </div>
   )
+}
+
+/**
+ * The repair strip under a group whose file is gone: says so plainly, then goes
+ * looking for where the page went and offers what it found.
+ *
+ * The search runs by itself, once per group — being told "this page is gone" and
+ * having to press a button to learn anything more is exactly the dead end this
+ * replaces. Re-attaching is one click and reversible (the thread can be moved
+ * again), so nothing here needs a confirmation dialog.
+ */
+function MissingTarget({
+  group, resolveTargets, onRelocate, onOpen,
+}: {
+  group: OrphanGroup
+  resolveTargets?: (g: OrphanGroup) => Promise<Candidate[]>
+  onRelocate?: (g: OrphanGroup, target: string) => Promise<void>
+  onOpen: (path: string) => void
+}) {
+  const [state, setState] = useState<'idle' | 'searching' | 'done'>('idle')
+  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [busy, setBusy] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const ran = useRef(false)
+
+  useEffect(() => {
+    if (ran.current || !resolveTargets) return
+    ran.current = true
+    let live = true
+    setState('searching')
+    resolveTargets(group)
+      .then(list => { if (live) { setCandidates(list); setState('done') } })
+      .catch(e => { if (live) { setErr(String(e)); setState('done') } })
+    return () => { live = false }
+  }, [group, resolveTargets])
+
+  async function relocate(path: string) {
+    if (!onRelocate) return
+    setBusy(path)
+    setErr(null)
+    try {
+      await onRelocate(group, path)
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="mt-1 ml-2 rounded-md border border-[color:var(--notation-warning)] bg-[color:var(--notation-warning)]/10 p-2">
+      <p className="text-[11px] text-[var(--notation-fg)] leading-snug">
+        This page was <strong>moved or deleted</strong> — the comments below have nothing to open.
+      </p>
+      {state === 'searching' && (
+        <p className="mt-1 text-[11px] text-[var(--notation-fg-muted)] flex items-center gap-1.5">
+          <Search size={11} className="animate-pulse" /> Looking for where it went…
+        </p>
+      )}
+      {state === 'done' && candidates.length === 0 && (
+        <p className="mt-1 text-[11px] text-[var(--notation-fg-muted)]">
+          No likely match in this Space. Delete the comments below if the page is gone for good.
+        </p>
+      )}
+      {candidates.length > 0 && (
+        <>
+          <p className="mt-1.5 mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--notation-fg-muted)]">
+            Might be
+          </p>
+          <ul className="space-y-1.5">
+            {candidates.map(c => (
+              <li key={c.path}>
+                {/* The sidebar is narrow, so the folder truncates and the
+                    filename — the part that identifies the page — always
+                    survives in full. */}
+                <button
+                  onClick={() => onOpen(c.path)}
+                  className="w-full flex items-baseline min-w-0 text-[11px] font-mono hover:underline"
+                  title={`Open ${c.path}`}
+                >
+                  {c.path.includes('/') && (
+                    <span className="truncate min-w-0 text-[var(--notation-fg-muted)]">
+                      {c.path.slice(0, c.path.lastIndexOf('/') + 1)}
+                    </span>
+                  )}
+                  <span className="flex-shrink-0 text-[var(--notation-fg)]">
+                    {c.path.slice(c.path.lastIndexOf('/') + 1)}
+                  </span>
+                </button>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="min-w-0 flex-1 truncate text-[10px] text-[var(--notation-fg-muted)]">
+                    {reasonLabel(c)}
+                  </span>
+                  {onRelocate && (
+                    <button
+                      onClick={() => void relocate(c.path)}
+                      disabled={busy !== null}
+                      title="Move these comments onto that page"
+                      className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] text-[var(--notation-fg)] hover:border-[color:var(--notation-accent-40)] disabled:opacity-40 transition-colors"
+                    >
+                      <CornerDownRight size={10} />
+                      {busy === c.path ? 'Moving…' : 'Move here'}
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {err && <p className="mt-1 text-[11px] text-[var(--notation-danger)]">{err}</p>}
+    </div>
+  )
+}
+
+/** Why a candidate was offered — the confidence, in words, kept short enough
+ *  to survive the sidebar's width next to the button. */
+function reasonLabel(c: Candidate): string {
+  if (c.reason === 'quote') return 'contains the quote'
+  if (c.reason === 'name') return 'same name, elsewhere'
+  // score is half the name similarity for this tier — report the similarity.
+  return `similar name · ${Math.round(c.score * 200)}%`
 }
 
 function formatRelative(iso: string): string {

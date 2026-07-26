@@ -309,7 +309,7 @@ describe('folderSync push', () => {
     expect(prepared.plan.entries).toHaveLength(0)
     const res = await applyPush(space(fs), dir, prepared, { applyDeletions: false })
 
-    expect(res.applied).toEqual({ new: 0, modified: 0, deleted: 0 })
+    expect(res.applied).toEqual({ new: 0, modified: 0, deleted: 0, moved: 0 })
     expect(store.opCount()).toBe(before)
   })
 
@@ -437,6 +437,17 @@ class FakePlaintextTransport implements PlaintextTransport {
     this.files.set(path, bytes.slice())
   }
 
+  /** Mirrors the server's rename: same bytes, new path, nothing else touched. */
+  async renamePath(from: string, to: string): Promise<void> {
+    const b = this.files.get(from)
+    if (!b) throw new Error(`404 ${from}`)
+    this.files.delete(from)
+    this.files.set(to, b)
+    this.renames.push(`${from} -> ${to}`)
+  }
+
+  renames: string[] = []
+
   async deleteFile(path: string): Promise<void> {
     if (!this.files.delete(path)) throw new Error(`404 ${path}`)
   }
@@ -482,7 +493,7 @@ describe('folderSync over a plaintext space', () => {
     expect(prepared.plan.counts).toMatchObject({ new: 1, modified: 1, deleted: 1, conflict: 0 })
 
     const res = await applyPush(sp, dir, prepared, { applyDeletions: true })
-    expect(res.applied).toEqual({ new: 1, modified: 1, deleted: 1 })
+    expect(res.applied).toEqual({ new: 1, modified: 1, deleted: 1, moved: 0 })
     expect(res.failed).toEqual([])
     expect(res.changedPaths.sort()).toEqual(['docs/guide.md', 'notes/new.md', 'stale.md'])
     expect(dec(t.files.get('docs/guide.md')!)).toBe('# Guide v2')
@@ -582,5 +593,198 @@ describe('empty folders after a push', () => {
     // …and the cleanup failure is surfaced rather than swallowed.
     expect(res.prunedDirs).toEqual([])
     expect(res.failed.map(f => f.path)).toContain('(empty folders)')
+  })
+})
+
+// ─── moves: keeping a page's identity across a relocation ────────────────────
+// A folder can't express "this file moved" — it only shows one path gone and
+// another appeared. Applied literally that deletes the page and creates an
+// unrelated one, taking every comment and reaction on it down with it. These
+// cover the recognition rules and the payoff.
+
+describe('folderSync move detection', () => {
+  const m = (obj: Record<string, string>): Map<string, Uint8Array> => {
+    const map = new Map<string, Uint8Array>()
+    for (const [k, v] of Object.entries(obj)) map.set(k, enc(v))
+    return map
+  }
+  const hashes = async (obj: Record<string, string>): Promise<Record<string, string>> => {
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(obj)) out[k] = await sha256Hex(enc(v))
+    return out
+  }
+
+  it('pairs a vanished path with an identical new one as a move', async () => {
+    const plan = await computePushPlan(
+      m({ 'notes/old.md': 'same bytes' }),
+      m({ 'archive/old.md': 'same bytes' }),
+      await hashes({ 'notes/old.md': 'same bytes' }),
+    )
+    expect(plan.counts).toMatchObject({ moved: 1, new: 0, deleted: 0 })
+    const e = plan.entries[0]
+    expect(e.kind).toBe('moved')
+    expect(e.from).toBe('notes/old.md')
+    expect(e.path).toBe('archive/old.md')
+    expect(e.edited).toBe(false)
+  })
+
+  it('still recognises a move when the file was edited on the way, by its name', async () => {
+    const plan = await computePushPlan(
+      m({ 'notes/report.md': 'v1' }),
+      m({ 'archive/report.md': 'v2 — rewritten' }),
+      await hashes({ 'notes/report.md': 'v1' }),
+    )
+    const e = plan.entries.find((x) => x.kind === 'moved')!
+    expect(e.from).toBe('notes/report.md')
+    expect(e.edited).toBe(true) // folder-wins: the move is followed by a write
+  })
+
+  it('refuses an ambiguous name pairing rather than guessing', async () => {
+    // Two files called report.md left, two appeared — no way to tell which
+    // became which, so they stay a plain delete + create.
+    const plan = await computePushPlan(
+      m({ 'a/report.md': 'one', 'b/report.md': 'two' }),
+      m({ 'x/report.md': 'three', 'y/report.md': 'four' }),
+      await hashes({ 'a/report.md': 'one', 'b/report.md': 'two' }),
+    )
+    expect(plan.counts.moved).toBe(0)
+    expect(plan.counts.deleted).toBe(2)
+    expect(plan.counts.new).toBe(2)
+  })
+
+  it('prefers the same filename when several files share the same content', async () => {
+    const plan = await computePushPlan(
+      m({ 'a/one.md': 'dup', 'a/two.md': 'dup' }),
+      m({ 'b/two.md': 'dup', 'b/one.md': 'dup' }),
+      await hashes({ 'a/one.md': 'dup', 'a/two.md': 'dup' }),
+    )
+    const byFrom = Object.fromEntries(plan.entries.map((e) => [e.from, e.path]))
+    expect(byFrom['a/one.md']).toBe('b/one.md')
+    expect(byFrom['a/two.md']).toBe('b/two.md')
+  })
+
+  it('does not read a copy as a move (nothing left)', async () => {
+    const plan = await computePushPlan(
+      m({ 'page.md': 'body' }),
+      m({ 'page.md': 'body', 'copy.md': 'body' }),
+      await hashes({ 'page.md': 'body' }),
+    )
+    expect(plan.counts.moved).toBe(0)
+    expect(plan.entries.map((e) => e.kind)).toEqual(['new'])
+  })
+
+  it('carries an encrypted page’s comments to the new path instead of orphaning them', async () => {
+    const fs = await newFs()
+    await fs.write('inbox/idea.md', enc('# Idea\n\nthe passage'))
+    const nodeId = fs.idAt('inbox/idea.md')!
+    await fs.addComment(nodeId, { text: 'good one', author: 'me', anchor: { quote: 'the passage', prefix: '', suffix: '' } })
+
+    const dir = new FakeDirHandle()
+    await pull(space(fs), dir)
+
+    // The agent files it away: same bytes, new path.
+    await writeFileTo(dir, 'projects/idea.md', enc('# Idea\n\nthe passage'))
+    await (dir.children.get('inbox') as FakeDirHandle).removeEntry('idea.md')
+
+    const prepared = await preparePush(space(fs), dir)
+    expect(prepared.plan.counts.moved).toBe(1)
+    // Deletions stay OFF — a move is not a deletion and must not need the box.
+    const res = await applyPush(space(fs), dir, prepared, { applyDeletions: false })
+
+    expect(res.applied).toMatchObject({ moved: 1, new: 0, deleted: 0 })
+    expect(fs.pathOf(nodeId)).toBe('projects/idea.md') // same node, new home
+    expect(fs.commentsForNode(nodeId)).toHaveLength(1)
+    expect(fs.resolve('inbox/idea.md')).toBeUndefined()
+  })
+
+  it('renames server-side (not delete + create) for a plaintext space', async () => {
+    const t = new FakePlaintextTransport()
+    t.set('notes/todo.md', enc('- [ ] one'))
+    const sp = plaintextSyncSpace(t)
+    const dir = new FakeDirHandle()
+    await pull(sp, dir)
+
+    await writeFileTo(dir, 'done/todo.md', enc('- [ ] one'))
+    await (dir.children.get('notes') as FakeDirHandle).removeEntry('todo.md')
+
+    const res = await applyPush(sp, dir, await preparePush(sp, dir), { applyDeletions: false })
+
+    expect(res.applied.moved).toBe(1)
+    // The rename endpoint carries the comments along; a write+delete would not.
+    expect(t.renames).toEqual(['notes/todo.md -> done/todo.md'])
+    expect(dec(t.files.get('done/todo.md')!)).toBe('- [ ] one')
+    expect(t.files.has('notes/todo.md')).toBe(false)
+  })
+})
+
+// ─── the agent briefing ──────────────────────────────────────────────────────
+
+describe('folderSync agent briefing', () => {
+  it('writes AGENTS.md + CLAUDE.md on pull, outside the manifest', async () => {
+    const fs = await newFs()
+    await fs.write('page.md', enc('# Page'))
+    await fs.write('feedback/_form.md', enc('# Feedback\n\nName: ______ [string]'))
+
+    const dir = new FakeDirHandle()
+    const res = await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+
+    expect(res.guides).toEqual(['AGENTS.md', 'CLAUDE.md'])
+    const guide = dec((await folderRead(dir, 'AGENTS.md'))!)
+    expect(guide).toContain('notation Space — Notes')
+    expect(guide).toContain('_form.md') // the Forms manual is in there
+    expect(guide).toContain('`feedback/`') // …including this space's own forms
+    expect(dec((await folderRead(dir, 'CLAUDE.md'))!)).toContain('@AGENTS.md')
+    // Briefings are tooling: they are not space content, so not in the baseline.
+    expect(res.manifest.entries['AGENTS.md']).toBeUndefined()
+  })
+
+  it('never pushes the briefing back into the space', async () => {
+    const fs = await newFs()
+    await fs.write('page.md', enc('# Page'))
+    const dir = new FakeDirHandle()
+    await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+
+    // The agent even edits it — still ours, still held back.
+    const edited = dec((await folderRead(dir, 'AGENTS.md'))!) + '\n\nagent scribbles\n'
+    await writeFileTo(dir, 'AGENTS.md', enc(edited))
+
+    const prepared = await preparePush(space(fs), dir)
+    expect(prepared.strippedGuides).toEqual(['AGENTS.md', 'CLAUDE.md'])
+    expect(prepared.plan.entries).toHaveLength(0)
+
+    await applyPush(space(fs), dir, prepared, { applyDeletions: false })
+    expect(fs.resolve('AGENTS.md')).toBeUndefined()
+    expect(fs.resolve('CLAUDE.md')).toBeUndefined()
+  })
+
+  it('leaves a real AGENTS.md page in the space alone, both ways', async () => {
+    const fs = await newFs()
+    await fs.write('AGENTS.md', enc('# My own agent notes'))
+    const dir = new FakeDirHandle()
+    const res = await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+
+    // The space's own file wins the name; only CLAUDE.md is generated.
+    expect(res.guides).toEqual(['CLAUDE.md'])
+    expect(dec((await folderRead(dir, 'AGENTS.md'))!)).toBe('# My own agent notes')
+
+    await writeFileTo(dir, 'AGENTS.md', enc('# My own agent notes, edited'))
+    const prepared = await preparePush(space(fs), dir)
+    expect(prepared.plan.entries.map((e) => e.path)).toEqual(['AGENTS.md'])
+    await applyPush(space(fs), dir, prepared, { applyDeletions: false })
+    expect(dec(await fs.read('AGENTS.md'))).toBe('# My own agent notes, edited')
+  })
+
+  it('pushes a briefing whose marker the user removed — it stopped being ours', async () => {
+    const fs = await newFs()
+    await fs.write('page.md', enc('# Page'))
+    const dir = new FakeDirHandle()
+    await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+    await writeFileTo(dir, 'AGENTS.md', enc('# House rules\n\nmine now'))
+
+    const prepared = await preparePush(space(fs), dir)
+    expect(prepared.strippedGuides).toEqual(['CLAUDE.md'])
+    expect(prepared.plan.entries.map((e) => e.path)).toEqual(['AGENTS.md'])
+    await applyPush(space(fs), dir, prepared, { applyDeletions: false })
+    expect(dec(await fs.read('AGENTS.md'))).toBe('# House rules\n\nmine now')
   })
 })

@@ -241,6 +241,10 @@ func NewRouter(d Deps) (http.Handler, error) {
 				// Placed before the path-suffix routes so it matches the bare
 				// /comments without the wildcard catching it.
 				pr.Get("/all-comments", ahdmin.listAllComments)
+				// Re-file a vanished path's comments onto an existing file. Its
+				// own route (not under /comments/) so the path wildcard below
+				// can't shadow it.
+				pr.Post("/relocate-comments", ahdmin.relocateComments)
 				pr.Delete("/comments/by-id/{commentID}", ahdmin.deleteComment)
 				pr.Get("/comments/*", ahdmin.listComments)
 				pr.Get("/form/*", ahdmin.getForm)

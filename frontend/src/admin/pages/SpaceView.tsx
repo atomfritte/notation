@@ -4,7 +4,8 @@ import { FolderPlus, FolderMinus, Bookmark, Plus, MessageSquare, Edit3, Eye, Fil
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
-import { fileComments, allComments as encAllComments, migrateLegacyComments } from '../lib/encComments'
+import { fileComments, allComments as encAllComments, migrateLegacyComments, reattachComments } from '../lib/encComments'
+import { findCommentTargets, type Candidate, type OrphanGroup } from '../lib/commentTargets'
 import { fetchState } from '../lib/auth'
 import { fileParams, fileSearchString, resolveFileParam } from '../lib/fileParam'
 import { downloadDecryptedSpaceZip } from '../lib/spaceZip'
@@ -1141,6 +1142,48 @@ export function SpaceView() {
     [allFilesAny],
   )
 
+  // ── stranded comments ──────────────────────────────────────────────────────
+  // A page can leave without taking its comments along: deleted and re-created
+  // elsewhere, or pushed back from a folder in a shape no move detection could
+  // recognise. The thread then points at a path that opens nothing. Rather than
+  // hiding it, the comments panel says so and asks these two for help.
+
+  const existingPaths = useMemo(() => new Set(allFilesAny), [allFilesAny])
+
+  /** Likely new homes for a stranded thread: quote hit first, then the names. */
+  const resolveCommentTargets = useCallback(
+    (group: OrphanGroup): Promise<Candidate[]> =>
+      findCommentTargets({
+        group,
+        paths: allFilesAny,
+        // Same substring semantics on both sides — the server's /search for a
+        // plaintext space, the in-browser index for an encrypted one.
+        search: (needle) =>
+          encryptedRef.current
+            ? (searchIndexRef.current?.search(needle) ?? Promise.resolve([]))
+            : api.searchSpace(spaceID, needle),
+      }),
+    [spaceID, allFilesAny],
+  )
+
+  /** Re-file a stranded thread onto the file the user picked. */
+  const relocateCommentThread = useCallback(
+    async (group: OrphanGroup, target: string) => {
+      if (encryptedRef.current) {
+        const fs = fsRef.current
+        const toNode = fs?.idAt(target)
+        if (!fs || !group.nodeId) throw new Error('This Space is locked.')
+        if (!toNode) throw new Error(`No file at ${target}.`)
+        await reattachComments(fs, group.nodeId, toNode)
+      } else {
+        await api.relocateComments(spaceID, group.path, target)
+      }
+      refreshComments()
+      setAllCommentsRefresh(v => v + 1)
+    },
+    [spaceID, refreshComments],
+  )
+
   if (!spaceID) return <p className="p-8 text-[var(--notation-fg-muted)]">missing workspace</p>
 
   // Encrypted + locked → gate the whole browser behind the unlock screen.
@@ -1212,6 +1255,7 @@ export function SpaceView() {
         <FolderSyncPanel
           space={syncSpace}
           spaceID={spaceID}
+          spaceName={spaceMeta?.name || spaceID}
           onClose={() => setFolderSyncOpen(false)}
           onSynced={(changedPaths) => {
             if (encryptedRef.current) {
@@ -1378,6 +1422,9 @@ export function SpaceView() {
                 filter={commentFilter}
                 onFilterChange={setCommentFilterPref}
                 onDeleteComment={encrypted ? handleDeleteComment : undefined}
+                existingPaths={existingPaths}
+                resolveTargets={resolveCommentTargets}
+                onRelocate={relocateCommentThread}
               />
             )}
             {!encrypted && sidebarTab === 'shares' && <SharePanel spaceID={spaceID} />}

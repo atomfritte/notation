@@ -291,8 +291,56 @@ func (h *adminHandlers) renameFile(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
+	// Comments are filed under a path, so a rename would strand every thread on
+	// the file unless they come along. Best-effort: the rename itself already
+	// succeeded, and failing the request would tell the client the opposite.
+	if _, err := h.comments.Relocate(id, from, req.To); err != nil {
+		slog.Default().Error("comment relocate failed", "err", err, "space", id)
+	}
 	h.git.Schedule(id, adminAuthor(r))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type relocateCommentsReq struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// relocateComments re-files a vanished path's comments onto an existing file.
+//
+// The repair path for the case a rename couldn't catch: a page was deleted and
+// re-created elsewhere, or moved by something that doesn't go through
+// RenameFile, and its comments were left pointing at a path that no longer
+// resolves. The UI finds likely targets (matching quote, same filename, close
+// name) and the user picks one; this applies the pick.
+//
+// `from` deliberately does NOT have to exist — that's the whole point — but
+// `to` must, so comments can never be parked on a path with no file.
+func (h *adminHandlers) relocateComments(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "spaceID")
+	if _, err := h.store.Get(id); err != nil {
+		writeSpaceError(w, err)
+		return
+	}
+	var req relocateCommentsReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.From == "" || req.To == "" {
+		writeError(w, http.StatusBadRequest, "from and to are required")
+		return
+	}
+	if _, err := h.store.Stat(id, req.To); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	moved, err := h.comments.Relocate(id, req.From, req.To)
+	if err != nil {
+		writeInternal(w, r, "comments.relocate", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"moved": moved})
 }
 
 type mkdirReq struct {
