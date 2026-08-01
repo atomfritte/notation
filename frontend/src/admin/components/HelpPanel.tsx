@@ -116,7 +116,7 @@ function adminGroups(): Group[] {
       title: 'Navigation',
       items: [
         { keys: `${MOD}+K`, label: 'Quick open — jump to any page' },
-        { keys: `${MOD}+Shift+F`, label: 'Full-text search across the Space' },
+        { keys: `${MOD}+Shift+F`, label: 'Search page titles + full text across the Space' },
         { keys: `${MOD}+\\`, label: 'Toggle sidebar' },
         { keys: 'Alt+N', label: 'Create new page' },
         { keys: '?', label: 'Show this help' },
@@ -157,7 +157,7 @@ function shareGroups(): Group[] {
       title: 'Navigation',
       items: [
         { keys: `${MOD}+K`, label: 'Quick open — jump to any page' },
-        { keys: `${MOD}+Shift+F`, label: 'Full-text search' },
+        { keys: `${MOD}+Shift+F`, label: 'Search page titles + full text' },
         { keys: `${MOD}+\\`, label: 'Toggle sidebar' },
         { keys: '?', label: 'Show this help' },
       ],

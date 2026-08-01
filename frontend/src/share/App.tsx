@@ -881,6 +881,9 @@ function ShareUI() {
       {features?.search && (
         <SearchPanel
           open={searchOpen}
+          // Already the scoped tree, so title matching can't name a page the
+          // share doesn't reach.
+          files={allFiles}
           onClose={() => setSearchOpen(false)}
           onSelect={(p, opts) => {
             const next: Record<string, string> = { file: p }

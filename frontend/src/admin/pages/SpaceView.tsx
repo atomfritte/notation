@@ -1891,9 +1891,12 @@ export function SpaceView() {
       />
       {/* Full-text search. Plaintext spaces hit the server /search endpoint;
           encrypted spaces search the already-decrypted corpus entirely in the
-          browser via the client index (the server can't read the ciphertext). */}
+          browser via the client index (the server can't read the ciphertext).
+          Page titles are matched against the file list in the browser either
+          way — the tree is plaintext here even when the Space is encrypted. */}
       <SearchPanel
         open={searchOpen}
+        files={allFilesAny}
         onClose={() => setSearchOpen(false)}
         onSelect={(p, opts) => {
           // Carry the query into the URL so the viewer can highlight and
