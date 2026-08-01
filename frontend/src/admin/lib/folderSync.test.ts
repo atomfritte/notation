@@ -738,6 +738,37 @@ describe('folderSync agent briefing', () => {
     expect(res.manifest.entries['AGENTS.md']).toBeUndefined()
   })
 
+  it('tells the agent to keep an append-only changelog, in both guides', async () => {
+    const fs = await newFs()
+    await fs.write('page.md', enc('# Page'))
+    const dir = new FakeDirHandle()
+    await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+
+    const guide = dec((await folderRead(dir, 'AGENTS.md'))!)
+    expect(guide).toContain('CHANGELOG.md')
+    expect(guide).toContain('Append only')
+    expect(guide).toContain('**Request:**') // the entry template
+    // The pointer repeats the rule, so a tool that doesn't follow @-imports
+    // still learns about it.
+    expect(dec((await folderRead(dir, 'CLAUDE.md'))!)).toContain('CHANGELOG.md')
+  })
+
+  it('carries the changelog the agent wrote into the space — it is not a guide', async () => {
+    const fs = await newFs()
+    await fs.write('page.md', enc('# Page'))
+    const dir = new FakeDirHandle()
+    await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+
+    const log = '# Changelog\n\n## 2026-03-14 — Edited a page\n\n**Request:** …\n'
+    await writeFileTo(dir, 'CHANGELOG.md', enc(log))
+
+    const prepared = await preparePush(space(fs), dir)
+    expect(prepared.strippedGuides).toEqual(['AGENTS.md', 'CLAUDE.md'])
+    expect(prepared.plan.entries.map((e) => e.path)).toEqual(['CHANGELOG.md'])
+    await applyPush(space(fs), dir, prepared, { applyDeletions: false })
+    expect(dec(await fs.read('CHANGELOG.md'))).toBe(log)
+  })
+
   it('never pushes the briefing back into the space', async () => {
     const fs = await newFs()
     await fs.write('page.md', enc('# Page'))

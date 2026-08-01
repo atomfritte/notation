@@ -274,7 +274,9 @@ export function FolderSyncPanel({
                   Pull writes <strong>decrypted (plaintext) files</strong> to the folder you choose so a local
                   tool can edit them. Only your device sees them — the server still stores ciphertext only.
                   Push re-encrypts your edits back in, with a change preview first. Pull also drops an
-                  <code className="mx-1 font-mono">AGENTS.md</code> briefing for local AI tools; it never travels back.
+                  <code className="mx-1 font-mono">AGENTS.md</code> briefing for local AI tools; it never travels
+                  back, but it does ask them to log what they change in a
+                  <code className="mx-1 font-mono">CHANGELOG.md</code> page, and that one is yours to keep.
                 </span>
               </div>
             ) : (
@@ -284,7 +286,9 @@ export function FolderSyncPanel({
                   Pull copies this space into the folder you choose so a local tool can edit it. Push writes
                   your edits back, with a change preview first — each pushed file lands in the space’s
                   version history like any other edit. Pull also drops an
-                  <code className="mx-1 font-mono">AGENTS.md</code> briefing for local AI tools; it never travels back.
+                  <code className="mx-1 font-mono">AGENTS.md</code> briefing for local AI tools; it never travels
+                  back, but it does ask them to log what they change in a
+                  <code className="mx-1 font-mono">CHANGELOG.md</code> page, and that one is yours to keep.
                 </span>
               </div>
             )}
