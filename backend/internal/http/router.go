@@ -49,6 +49,9 @@ func NewRouter(d Deps) (http.Handler, error) {
 	r.Use(requestLogger(d.Log, d.Cfg))
 	r.Use(chimw.Recoverer)
 	r.Use(securityHeaders)
+	// Route on the decoded path, so a filename's own characters can never
+	// change how it is matched or looked up (see canonicalPath).
+	r.Use(canonicalPath)
 
 	// Authelia-bypass: static frontend assets. URL prefix matches Vite's `base`.
 	assetsPrefix := d.Cfg.AssetsPath() + "/"
