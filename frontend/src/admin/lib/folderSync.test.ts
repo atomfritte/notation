@@ -5,19 +5,29 @@ import { EncryptedFS } from '../../shared/vfs/encfs'
 import { encryptedSyncSpace, plaintextSyncSpace, type PlaintextTransport } from './syncSpace'
 import type * as api from './api'
 import {
+  allActionableSelection,
+  applyPull,
   applyPush,
+  computePullPlan,
   computePushPlan,
+  defaultPullSelection,
   MANIFEST_FILENAME,
+  preparePull,
   preparePush,
-  pull,
   readFolderFiles,
   readManifestFile,
   sha256Hex,
   writeFileTo,
+  type GuideOptions,
+  type ProgressFn,
+  type PullApplyResult,
+  type PullKind,
+  type PullPlan,
   type SyncDirHandle,
   type SyncFileHandle,
   type SyncWritable,
 } from './folderSync'
+import type { SyncSpace } from './syncSpace'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -124,6 +134,29 @@ async function folderRead(root: FakeDirHandle, path: string): Promise<Uint8Array
   return files.get(path)
 }
 
+/**
+ * Pull the WHOLE space into the folder — the starting state most of these tests
+ * need, and the shape a first pull into an empty folder takes.
+ *
+ * The engine deliberately offers no such one-liner: every pull in the app goes
+ * through a preview, so "write all of it" has to be an explicit selection. Here
+ * that selection is everything except a deletion, which keeps the historic
+ * "pull never removes anything from the folder" guarantee these tests assert.
+ */
+async function pullAll(
+  space: SyncSpace,
+  dir: SyncDirHandle,
+  onProgress?: ProgressFn,
+  guide?: GuideOptions,
+): Promise<PullApplyResult & { plan: PullPlan }> {
+  const prepared = await preparePull(space, dir, undefined, onProgress)
+  const selected = new Set(
+    prepared.plan.entries.filter((e) => e.kind !== 'localOnly' && e.kind !== 'staleLocal').map((e) => e.path),
+  )
+  const res = await applyPull(space, dir, prepared, selected, undefined, guide)
+  return { ...res, plan: prepared.plan }
+}
+
 // ─── pull ────────────────────────────────────────────────────────────────────
 
 describe('folderSync.pull', () => {
@@ -139,7 +172,7 @@ describe('folderSync.pull', () => {
     await fs.write('.secret.txt', enc('should not be exported'))
 
     const dir = new FakeDirHandle()
-    const res = await pull(space(fs), dir)
+    const res = await pullAll(space(fs), dir)
 
     expect(res.written.sort()).toEqual(['assets/logo.bin', 'docs/guides/setup.md', 'docs/intro.md', 'readme.md'])
     expect(res.written).not.toContain('.secret.txt')
@@ -157,7 +190,7 @@ describe('folderSync.pull', () => {
     await fs.write('nested/b.md', enc('beta'))
 
     const dir = new FakeDirHandle()
-    const res = await pull(space(fs), dir)
+    const res = await pullAll(space(fs), dir)
 
     const onDisk = await readManifestFile(dir)
     expect(onDisk).not.toBeNull()
@@ -176,10 +209,241 @@ describe('folderSync.pull', () => {
 
     const dir = new FakeDirHandle()
     await writeFileTo(dir, 'scratch.txt', enc('agent scratch'))
-    await pull(space(fs), dir)
+    await pullAll(space(fs), dir)
 
     expect(dec((await folderRead(dir, 'scratch.txt'))!)).toBe('agent scratch')
     expect(dec((await folderRead(dir, 'page.md'))!)).toBe('content')
+  })
+})
+
+// ─── pull: classification (pure, over maps) ──────────────────────────────────
+
+describe('folderSync.computePullPlan', () => {
+  const m = (obj: Record<string, string>): Map<string, Uint8Array> => {
+    const map = new Map<string, Uint8Array>()
+    for (const [k, v] of Object.entries(obj)) map.set(k, enc(v))
+    return map
+  }
+  const kinds = async (
+    spaceObj: Record<string, string>,
+    folderObj: Record<string, string>,
+    baseObj: Record<string, string>,
+  ): Promise<Record<string, PullKind>> => {
+    const base: Record<string, string> = {}
+    for (const [k, v] of Object.entries(baseObj)) base[k] = await sha256Hex(enc(v))
+    const plan = await computePullPlan(m(spaceObj), m(folderObj), base)
+    return Object.fromEntries(plan.entries.map((e) => [e.path, e.kind]))
+  }
+
+  it('separates a safe update from a local-only edit and a two-sided conflict', async () => {
+    const got = await kinds(
+      { 'ff.md': 'space-new', 'mine.md': 'baseline', 'both.md': 'space-edit', 'same.md': 'equal' },
+      { 'ff.md': 'baseline', 'mine.md': 'local-edit', 'both.md': 'local-edit', 'same.md': 'equal' },
+      { 'ff.md': 'baseline', 'mine.md': 'baseline', 'both.md': 'baseline', 'same.md': 'equal' },
+    )
+    // Folder still at the baseline, space moved on → losslessly applicable.
+    expect(got['ff.md']).toBe('update')
+    // Space still at the baseline, folder moved on → the LOCAL copy is newer.
+    expect(got['mine.md']).toBe('localNewer')
+    expect(got['both.md']).toBe('conflict')
+    expect(got['same.md']).toBeUndefined() // unchanged, not an entry
+  })
+
+  it('counts an identical file as unchanged rather than an update', async () => {
+    const plan = await computePullPlan(m({ 'a.md': 'x' }), m({ 'a.md': 'x' }), {})
+    expect(plan.entries).toEqual([])
+    expect(plan.counts.unchanged).toBe(1)
+  })
+
+  it('treats a differing pair with no baseline at all as a conflict, never an update', async () => {
+    const got = await kinds({ 'a.md': 'from-space' }, { 'a.md': 'from-folder' }, {})
+    expect(got['a.md']).toBe('conflict')
+  })
+
+  it('marks a locally-created file as localOnly and a space-deleted leftover as staleLocal', async () => {
+    const got = await kinds(
+      {},
+      { 'scratch.md': 'made here', 'removed.md': 'baseline' },
+      { 'removed.md': 'baseline' },
+    )
+    expect(got['scratch.md']).toBe('localOnly')
+    expect(got['removed.md']).toBe('staleLocal')
+  })
+
+  it('keeps a locally-EDITED file the space deleted out of the removable set', async () => {
+    // The space dropped it, but the folder's copy is no longer the baseline —
+    // there is local work in there, so it is localOnly (never removable), not stale.
+    const got = await kinds({}, { 'removed.md': 'edited after the pull' }, { 'removed.md': 'baseline' })
+    expect(got['removed.md']).toBe('localOnly')
+  })
+
+  it('flags a space file the folder deleted as a re-add, not a plain copy', async () => {
+    const plan = await computePullPlan(m({ 'a.md': 'x' }), m({}), { 'a.md': await sha256Hex(enc('x')) })
+    expect(plan.entries[0]).toMatchObject({ path: 'a.md', kind: 'new', readded: true })
+  })
+})
+
+describe('folderSync.defaultPullSelection', () => {
+  it('ticks only what cannot lose local work', async () => {
+    const spaceFiles = new Map<string, Uint8Array>([
+      ['fresh.md', enc('brand new')],
+      ['ff.md', enc('space-new')],
+      ['mine.md', enc('baseline')],
+      ['both.md', enc('space-edit')],
+      ['back.md', enc('baseline')],
+    ])
+    const folderFiles = new Map<string, Uint8Array>([
+      ['ff.md', enc('baseline')],
+      ['mine.md', enc('local-edit')],
+      ['both.md', enc('local-edit')],
+      ['scratch.md', enc('local only')],
+    ])
+    const base = {
+      'ff.md': await sha256Hex(enc('baseline')),
+      'mine.md': await sha256Hex(enc('baseline')),
+      'both.md': await sha256Hex(enc('baseline')),
+      'back.md': await sha256Hex(enc('baseline')), // folder deleted it
+    }
+    const plan = await computePullPlan(spaceFiles, folderFiles, base)
+
+    expect([...defaultPullSelection(plan)].sort()).toEqual(['ff.md', 'fresh.md'])
+    // Everything a user could act on is offered — only the untouchable
+    // local-only file is left out of the actionable set.
+    expect([...allActionableSelection(plan)].sort()).toEqual(['back.md', 'both.md', 'ff.md', 'fresh.md', 'mine.md'])
+  })
+})
+
+// ─── pull: apply ─────────────────────────────────────────────────────────────
+
+describe('folderSync partial pull', () => {
+  it('writes only the ticked paths and leaves an unticked local edit untouched', async () => {
+    const fs = await newFs()
+    await fs.write('ff.md', enc('v1'))
+    await fs.write('mine.md', enc('v1'))
+    const dir = new FakeDirHandle()
+    await pullAll(space(fs), dir) // establish a baseline on both sides
+
+    // The space moves one file on; the folder edits the other.
+    await fs.write('ff.md', enc('v2 from the space'))
+    await writeFileTo(dir, 'mine.md', enc('v2 edited locally'))
+
+    const prepared = await preparePull(space(fs), dir)
+    const byPath = Object.fromEntries(prepared.plan.entries.map((e) => [e.path, e.kind]))
+    expect(byPath).toEqual({ 'ff.md': 'update', 'mine.md': 'localNewer' })
+
+    const res = await applyPull(space(fs), dir, prepared, defaultPullSelection(prepared.plan))
+    expect(res.written).toEqual(['ff.md'])
+    expect(res.skipped).toBe(1)
+    expect(dec((await folderRead(dir, 'ff.md'))!)).toBe('v2 from the space')
+    expect(dec((await folderRead(dir, 'mine.md'))!)).toBe('v2 edited locally')
+  })
+
+  it('overwrites a local edit when the user does tick it', async () => {
+    const fs = await newFs()
+    await fs.write('mine.md', enc('v1'))
+    const dir = new FakeDirHandle()
+    await pullAll(space(fs), dir)
+    await writeFileTo(dir, 'mine.md', enc('local work'))
+
+    const prepared = await preparePull(space(fs), dir)
+    const res = await applyPull(space(fs), dir, prepared, new Set(['mine.md']))
+
+    expect(res.written).toEqual(['mine.md'])
+    expect(dec((await folderRead(dir, 'mine.md'))!)).toBe('v1')
+  })
+
+  it('keeps a skipped divergence visible as a conflict on the NEXT pull', async () => {
+    const fs = await newFs()
+    await fs.write('both.md', enc('v1'))
+    const dir = new FakeDirHandle()
+    await pullAll(space(fs), dir)
+
+    await fs.write('both.md', enc('space v2'))
+    await writeFileTo(dir, 'both.md', enc('local v2'))
+
+    const first = await preparePull(space(fs), dir)
+    expect(first.plan.entries[0].kind).toBe('conflict')
+    // Skip it — the baseline must NOT record the space's version as synced,
+    // or the disagreement would silently disappear.
+    await applyPull(space(fs), dir, first, new Set())
+
+    const second = await preparePull(space(fs), dir)
+    expect(second.plan.entries[0]).toMatchObject({ path: 'both.md', kind: 'conflict' })
+    expect(dec((await folderRead(dir, 'both.md'))!)).toBe('local v2')
+  })
+
+  it('reports local-only files and never writes or deletes them', async () => {
+    const fs = await newFs()
+    await fs.write('page.md', enc('content'))
+    const dir = new FakeDirHandle()
+    await writeFileTo(dir, 'notes/scratch.txt', enc('agent scratch'))
+    await writeFileTo(dir, 'plan.md', enc('my own plan'))
+
+    const prepared = await preparePull(space(fs), dir)
+    const res = await applyPull(space(fs), dir, prepared, defaultPullSelection(prepared.plan))
+
+    expect(res.keptLocalOnly.sort()).toEqual(['notes/scratch.txt', 'plan.md'])
+    expect(prepared.plan.counts.localOnly).toBe(2)
+    expect(dec((await folderRead(dir, 'notes/scratch.txt'))!)).toBe('agent scratch')
+    expect(dec((await folderRead(dir, 'plan.md'))!)).toBe('my own plan')
+    // …and they stay out of the baseline, so a later push still sees them as new.
+    expect(res.manifest.entries['plan.md']).toBeUndefined()
+  })
+
+  it('removes a space-deleted leftover only when it is ticked', async () => {
+    const fs = await newFs()
+    await fs.write('keep.md', enc('keep'))
+    await fs.write('gone.md', enc('doomed'))
+    const dir = new FakeDirHandle()
+    await pullAll(space(fs), dir)
+    await fs.remove('gone.md')
+
+    // Unticked: the leftover stays.
+    let prepared = await preparePull(space(fs), dir)
+    expect(prepared.plan.entries).toEqual([{ path: 'gone.md', kind: 'staleLocal', localModified: undefined }])
+    let res = await applyPull(space(fs), dir, prepared, defaultPullSelection(prepared.plan))
+    expect(res.removedLocal).toEqual([])
+    expect(await folderRead(dir, 'gone.md')).toBeDefined()
+
+    // Ticked: it goes, and leaves the baseline with it.
+    prepared = await preparePull(space(fs), dir)
+    res = await applyPull(space(fs), dir, prepared, new Set(['gone.md']))
+    expect(res.removedLocal).toEqual(['gone.md'])
+    expect(await folderRead(dir, 'gone.md')).toBeUndefined()
+    expect(res.manifest.entries['gone.md']).toBeUndefined()
+    expect(dec((await folderRead(dir, 'keep.md'))!)).toBe('keep')
+  })
+
+  it('records agreement for a folder that already held identical content', async () => {
+    const fs = await newFs()
+    await fs.write('a.md', enc('same bytes'))
+    const dir = new FakeDirHandle()
+    await writeFileTo(dir, 'a.md', enc('same bytes'))
+
+    const prepared = await preparePull(space(fs), dir)
+    expect(prepared.plan.entries).toEqual([])
+    expect(prepared.manifestSource).toBe('none')
+    const res = await applyPull(space(fs), dir, prepared, defaultPullSelection(prepared.plan))
+    expect(res.manifest.entries['a.md']).toBe(await sha256Hex(enc('same bytes')))
+  })
+
+  it('keeps a hand-edited AGENTS.md that no longer carries our marker', async () => {
+    const fs = await newFs()
+    await fs.write('page.md', enc('content'))
+    const dir = new FakeDirHandle()
+    await pullAll(space(fs), dir, undefined, { spaceName: 'Test' })
+    // The user takes the briefing over.
+    await writeFileTo(dir, 'AGENTS.md', enc('# My own house rules\n'))
+
+    const prepared = await preparePull(space(fs), dir)
+    const res = await applyPull(space(fs), dir, prepared, defaultPullSelection(prepared.plan), undefined, {
+      spaceName: 'Test',
+    })
+
+    expect(res.guides).not.toContain('AGENTS.md')
+    expect(dec((await folderRead(dir, 'AGENTS.md'))!)).toBe('# My own house rules\n')
+    // It is the user's file now, so the diff must not hide it either.
+    expect(prepared.plan.entries.map((e) => e.path)).toContain('AGENTS.md')
   })
 })
 
@@ -246,7 +510,7 @@ async function pulled(): Promise<{ fs: EncryptedFS; dir: FakeDirHandle }> {
   for (let i = 0; i < 256; i++) binary[i] = 255 - i
   await fs.write('img/pic.bin', binary)
   const dir = new FakeDirHandle()
-  await pull(space(fs), dir)
+  await pullAll(space(fs), dir)
   return { fs, dir }
 }
 
@@ -464,7 +728,7 @@ describe('folderSync over a plaintext space', () => {
     const sp = plaintextSyncSpace(t)
 
     const dir = new FakeDirHandle()
-    const res = await pull(sp, dir)
+    const res = await pullAll(sp, dir)
 
     expect(res.written.sort()).toEqual(['docs/guide.md', 'img/pic.bin', 'readme.md'])
     expect(res.dirs).toContain('empty')
@@ -482,7 +746,7 @@ describe('folderSync over a plaintext space', () => {
     const sp = plaintextSyncSpace(t)
 
     const dir = new FakeDirHandle()
-    await pull(sp, dir)
+    await pullAll(sp, dir)
 
     // A local agent edits, adds and removes files in the folder.
     await writeFileTo(dir, 'docs/guide.md', enc('# Guide v2'))
@@ -510,7 +774,7 @@ describe('folderSync over a plaintext space', () => {
     t.set('readme.md', enc('# Readme'))
     const sp = plaintextSyncSpace(t)
     const dir = new FakeDirHandle()
-    await pull(sp, dir)
+    await pullAll(sp, dir)
 
     await writeFileTo(dir, 'readme.md', enc('# Readme v2'))
     await writeFileTo(dir, 'huge.bin', enc('too big for the server'))
@@ -540,7 +804,7 @@ describe('folderSync over a plaintext space', () => {
     const dir = new FakeDirHandle()
 
     const seen: Array<[number, number]> = []
-    await pull(sp, dir, (done, total) => seen.push([done, total]))
+    await pullAll(sp, dir, (done, total) => seen.push([done, total]))
     expect(seen[seen.length - 1][0]).toBe(seen[seen.length - 1][1])
 
     // The manifest we just wrote is a dotfile: pushing must not read it back
@@ -564,7 +828,7 @@ describe('empty folders after a push', () => {
     const sp = plaintextSyncSpace(t)
 
     const dir = new FakeDirHandle()
-    await pull(sp, dir)
+    await pullAll(sp, dir)
     // The local side loses the file, and with deletions on the space follows —
     // which is exactly how a folder ends up empty in the tree.
     await (dir.children.get('gone') as FakeDirHandle).removeEntry('only.md')
@@ -583,7 +847,7 @@ describe('empty folders after a push', () => {
     t.pruneEmptyDirs = async () => { throw new Error('server said no') }
     const sp = plaintextSyncSpace(t)
     const dir = new FakeDirHandle()
-    await pull(sp, dir)
+    await pullAll(sp, dir)
     await writeFileTo(dir, 'b.md', enc('two'))
 
     const res = await applyPush(sp, dir, await preparePush(sp, dir), { applyDeletions: false })
@@ -680,7 +944,7 @@ describe('folderSync move detection', () => {
     await fs.addComment(nodeId, { text: 'good one', author: 'me', anchor: { quote: 'the passage', prefix: '', suffix: '' } })
 
     const dir = new FakeDirHandle()
-    await pull(space(fs), dir)
+    await pullAll(space(fs), dir)
 
     // The agent files it away: same bytes, new path.
     await writeFileTo(dir, 'projects/idea.md', enc('# Idea\n\nthe passage'))
@@ -702,7 +966,7 @@ describe('folderSync move detection', () => {
     t.set('notes/todo.md', enc('- [ ] one'))
     const sp = plaintextSyncSpace(t)
     const dir = new FakeDirHandle()
-    await pull(sp, dir)
+    await pullAll(sp, dir)
 
     await writeFileTo(dir, 'done/todo.md', enc('- [ ] one'))
     await (dir.children.get('notes') as FakeDirHandle).removeEntry('todo.md')
@@ -726,7 +990,7 @@ describe('folderSync agent briefing', () => {
     await fs.write('feedback/_form.md', enc('# Feedback\n\nName: ______ [string]'))
 
     const dir = new FakeDirHandle()
-    const res = await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+    const res = await pullAll(space(fs), dir, undefined, { spaceName: 'Notes' })
 
     expect(res.guides).toEqual(['AGENTS.md', 'CLAUDE.md'])
     const guide = dec((await folderRead(dir, 'AGENTS.md'))!)
@@ -742,7 +1006,7 @@ describe('folderSync agent briefing', () => {
     const fs = await newFs()
     await fs.write('page.md', enc('# Page'))
     const dir = new FakeDirHandle()
-    await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+    await pullAll(space(fs), dir, undefined, { spaceName: 'Notes' })
 
     const guide = dec((await folderRead(dir, 'AGENTS.md'))!)
     expect(guide).toContain('CHANGELOG.md')
@@ -757,7 +1021,7 @@ describe('folderSync agent briefing', () => {
     const fs = await newFs()
     await fs.write('page.md', enc('# Page'))
     const dir = new FakeDirHandle()
-    await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+    await pullAll(space(fs), dir, undefined, { spaceName: 'Notes' })
 
     const log = '# Changelog\n\n## 2026-03-14 — Edited a page\n\n**Request:** …\n'
     await writeFileTo(dir, 'CHANGELOG.md', enc(log))
@@ -773,7 +1037,7 @@ describe('folderSync agent briefing', () => {
     const fs = await newFs()
     await fs.write('page.md', enc('# Page'))
     const dir = new FakeDirHandle()
-    await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+    await pullAll(space(fs), dir, undefined, { spaceName: 'Notes' })
 
     // The agent even edits it — still ours, still held back.
     const edited = dec((await folderRead(dir, 'AGENTS.md'))!) + '\n\nagent scribbles\n'
@@ -792,7 +1056,7 @@ describe('folderSync agent briefing', () => {
     const fs = await newFs()
     await fs.write('AGENTS.md', enc('# My own agent notes'))
     const dir = new FakeDirHandle()
-    const res = await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+    const res = await pullAll(space(fs), dir, undefined, { spaceName: 'Notes' })
 
     // The space's own file wins the name; only CLAUDE.md is generated.
     expect(res.guides).toEqual(['CLAUDE.md'])
@@ -809,7 +1073,7 @@ describe('folderSync agent briefing', () => {
     const fs = await newFs()
     await fs.write('page.md', enc('# Page'))
     const dir = new FakeDirHandle()
-    await pull(space(fs), dir, undefined, { spaceName: 'Notes' })
+    await pullAll(space(fs), dir, undefined, { spaceName: 'Notes' })
     await writeFileTo(dir, 'AGENTS.md', enc('# House rules\n\nmine now'))
 
     const prepared = await preparePush(space(fs), dir)

@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   X, FolderSync, FolderOpen, FolderDown, FolderUp, HardDrive, AlertTriangle,
   ShieldAlert, Info, Check, Plus, Pencil, Trash2, RefreshCw, MoveRight,
+  ArrowDownToLine, FileClock, HardDriveDownload,
 } from 'lucide-react'
 import type { SyncSpace } from '../lib/syncSpace'
 import {
-  pull, preparePush, applyPush, type PreparedPush, type PushEntry, type SyncDirHandle,
+  preparePull, applyPull, defaultPullSelection, allActionableSelection, preparePush, applyPush,
+  type PreparedPull, type PullEntry, type PullKind,
+  type PreparedPush, type PushEntry, type SyncDirHandle,
 } from '../lib/folderSync'
 import {
   getFolderRecord, setFolderHandle, setManifest, clearFolder,
@@ -18,9 +21,12 @@ import {
  * FolderSyncPanel — the UI for manual local-folder sync, for ANY space
  * (encrypted or plaintext); the {@link SyncSpace} port hides the difference.
  *
- * Two explicit, user-driven actions (never live auto-sync):
- *   - **Pull** writes the whole space into a folder the user picks, so a local
- *     agent (Claude Code) can work on it as plain files.
+ * Two explicit, user-driven actions (never live auto-sync), and BOTH preview
+ * before they touch anything:
+ *   - **Pull** diffs the space against the folder the user picks and offers a
+ *     checkbox per file. Files the folder changed on its own start unticked, so
+ *     confirming the preview as-is can never overwrite local work; files that
+ *     exist only locally are listed and never touched.
  *   - **Push** reads the folder back, previews a 3-way diff (new / modified /
  *     deleted / conflict) against the current space + last-sync manifest, and —
  *     only on explicit confirm — applies the changes. Deletions are opt-in.
@@ -30,7 +36,7 @@ import {
  * states plainly that Pull writes DECRYPTED plaintext to local disk. For a
  * plaintext space a push is an ordinary server write, so git history records it.
  */
-type Phase = 'home' | 'working' | 'preview' | 'result' | 'error'
+type Phase = 'home' | 'working' | 'pullPreview' | 'preview' | 'result' | 'error'
 
 // The engine speaks a minimal subset of FileSystemDirectoryHandle; cast at the
 // boundary (the real handle structurally provides it).
@@ -65,6 +71,8 @@ export function FolderSyncPanel({
   const [result, setResult] = useState<string | null>(null)
   const [failed, setFailed] = useState<{ path: string; error: string }[]>([])
   const [prepared, setPrepared] = useState<PreparedPush | null>(null)
+  const [preparedPull, setPreparedPull] = useState<PreparedPull | null>(null)
+  const [pullSel, setPullSel] = useState<Set<string>>(() => new Set())
   const [applyDeletions, setApplyDeletions] = useState(false)
   const onProgress = useCallback((done: number, total: number) => setProgress({ done, total }), [])
 
@@ -121,22 +129,45 @@ export function FolderSyncPanel({
     setPrepared(null)
   }, [spaceID])
 
-  const doPull = useCallback(async () => {
+  const doPreparePull = useCallback(async () => {
     setErr(null); setResult(null); setFailed([]); setProgress(null)
     setPhase('working')
-    setBusy(encrypted ? 'Decrypting the space into your folder…' : 'Copying the space into your folder…')
+    setBusy(encrypted ? 'Decrypting the space & diffing your folder…' : 'Reading the space & diffing your folder…')
     try {
       const h = await ensureHandle()
       if (!h) { setPhase('home'); return }
-      const res = await pull(space, asSyncDir(h), onProgress, { spaceName })
+      const rec = await getFolderRecord(spaceID)
+      const p = await preparePull(space, asSyncDir(h), rec?.manifest, onProgress)
+      setPreparedPull(p)
+      setPullSel(defaultPullSelection(p.plan))
+      setPhase('pullPreview')
+    } catch (e) { setErr(errMsg(e)); setPhase('error') }
+  }, [ensureHandle, space, spaceID, encrypted, onProgress])
+
+  const confirmPull = useCallback(async () => {
+    if (!preparedPull || !handle) return
+    setProgress(null)
+    setPhase('working')
+    setBusy(encrypted ? 'Decrypting the selected files into your folder…' : 'Copying the selected files into your folder…')
+    try {
+      const res = await applyPull(space, asSyncDir(handle), preparedPull, pullSel, onProgress, { spaceName })
       await setManifest(spaceID, res.manifest.entries)
+      const parts: string[] = []
+      if (res.written.length) parts.push(`${res.written.length} written`)
+      if (res.removedLocal.length) parts.push(`${res.removedLocal.length} removed locally`)
+      if (res.skipped) parts.push(`${res.skipped} left untouched`)
+      if (res.keptLocalOnly.length) parts.push(`${res.keptLocalOnly.length} local-only file${res.keptLocalOnly.length === 1 ? '' : 's'} kept`)
       // The briefing is tooling, not content — say that it landed AND that it
       // never travels back, so nobody has to wonder about the extra files.
       const guides = res.guides.length > 0 ? ` Added ${res.guides.join(' + ')} so local AI tools know what this Space is (never pushed back).` : ''
-      setResult(`Wrote ${res.written.length} file${res.written.length === 1 ? '' : 's'} to “${h.name}”.${guides}`)
+      setResult(
+        (parts.length ? `“${handle.name}”: ${parts.join(' · ')}.` : `“${handle.name}” already matched the space — nothing to write.`) + guides,
+      )
+      setFailed(res.failed)
+      setPreparedPull(null)
       setPhase('result')
     } catch (e) { setErr(errMsg(e)); setPhase('error') }
-  }, [ensureHandle, space, spaceID, spaceName, encrypted, onProgress])
+  }, [preparedPull, pullSel, handle, space, spaceID, spaceName, encrypted, onProgress])
 
   const doPreparePush = useCallback(async () => {
     setErr(null); setResult(null); setFailed([]); setProgress(null); setApplyDeletions(false)
@@ -147,6 +178,7 @@ export function FolderSyncPanel({
       const rec = await getFolderRecord(spaceID)
       const p = await preparePush(space, asSyncDir(h), rec?.manifest, onProgress)
       setPrepared(p)
+      setPreparedPull(null)
       setPhase('preview')
     } catch (e) { setErr(errMsg(e)); setPhase('error') }
   }, [ensureHandle, space, spaceID, onProgress])
@@ -219,6 +251,15 @@ export function FolderSyncPanel({
             )}
             <p className="text-[11px] text-[var(--notation-fg-muted)] mt-3">Do not close this tab until it finishes.</p>
           </div>
+        ) : phase === 'pullPreview' && preparedPull ? (
+          <PullPreview
+            prepared={preparedPull}
+            selected={pullSel}
+            onSelect={setPullSel}
+            encrypted={encrypted}
+            onBack={() => setPhase('home')}
+            onConfirm={() => void confirmPull()}
+          />
         ) : phase === 'preview' && prepared ? (
           <PushPreview
             prepared={prepared}
@@ -273,7 +314,9 @@ export function FolderSyncPanel({
                 <span>
                   Pull writes <strong>decrypted (plaintext) files</strong> to the folder you choose so a local
                   tool can edit them. Only your device sees them — the server still stores ciphertext only.
-                  Push re-encrypts your edits back in, with a change preview first. Pull also drops an
+                  Both directions show a change preview first, and pull only writes the files you tick:
+                  anything you changed locally, and anything that exists only in the folder, stays as it is.
+                  Pull also drops an
                   <code className="mx-1 font-mono">AGENTS.md</code> briefing for local AI tools; it never travels
                   back, but it does ask them to log what they change in a
                   <code className="mx-1 font-mono">CHANGELOG.md</code> page, and that one is yours to keep.
@@ -284,8 +327,10 @@ export function FolderSyncPanel({
                 <Info size={16} className="text-[color:var(--notation-accent)] flex-shrink-0 mt-0.5" />
                 <span>
                   Pull copies this space into the folder you choose so a local tool can edit it. Push writes
-                  your edits back, with a change preview first — each pushed file lands in the space’s
-                  version history like any other edit. Pull also drops an
+                  your edits back — each pushed file lands in the space’s version history like any other
+                  edit. Both directions show a change preview first, and pull only writes the files you tick:
+                  anything you changed locally, and anything that exists only in the folder, stays as it is.
+                  Pull also drops an
                   <code className="mx-1 font-mono">AGENTS.md</code> briefing for local AI tools; it never travels
                   back, but it does ask them to log what they change in a
                   <code className="mx-1 font-mono">CHANGELOG.md</code> page, and that one is yours to keep.
@@ -331,11 +376,11 @@ export function FolderSyncPanel({
 
             {/* Actions */}
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => void doPull()} className="flex flex-col items-start gap-1 p-3 rounded-lg border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors text-left">
+              <button onClick={() => void doPreparePull()} className="flex flex-col items-start gap-1 p-3 rounded-lg border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors text-left">
                 <FolderDown size={18} className="text-[color:var(--notation-accent)]" />
                 <span className="text-sm font-semibold text-[var(--notation-fg)]">Pull</span>
                 <span className="text-[11px] text-[var(--notation-fg-muted)] leading-tight">
-                  {encrypted ? 'Decrypt the space into the folder.' : 'Copy the space into the folder.'}
+                  Review what would land in the folder & pick it.
                 </span>
               </button>
               <button onClick={() => void doPreparePush()} className="flex flex-col items-start gap-1 p-3 rounded-lg border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors text-left">
@@ -349,6 +394,229 @@ export function FolderSyncPanel({
       </div>
     </div>
   )
+}
+
+// ── pull change preview ──────────────────────────────────────────────────────
+
+/**
+ * The groups the pull preview renders, in the order a reader should meet them:
+ * what is safe to take, then what would cost local work, then what would remove
+ * something, then what we are only reporting.
+ */
+const PULL_GROUPS: {
+  kinds: PullKind[]
+  title: string
+  note: string
+  tone: 'accent' | 'warning' | 'danger' | 'muted'
+}[] = [
+  {
+    kinds: ['new', 'update'],
+    title: 'Take from the space',
+    note: 'Not in your folder yet, or your copy is still exactly what the last sync left there.',
+    tone: 'accent',
+  },
+  {
+    kinds: ['localNewer', 'conflict'],
+    title: 'Your local copy is newer',
+    note: 'You changed these in the folder. Ticking one replaces your version with the space’s.',
+    tone: 'warning',
+  },
+  {
+    kinds: ['staleLocal'],
+    title: 'Deleted in the space',
+    note: 'Your copy is untouched since the last sync. Tick to delete it from the folder too.',
+    tone: 'danger',
+  },
+]
+
+export function PullPreview({
+  prepared, selected, onSelect, encrypted, onBack, onConfirm,
+}: {
+  prepared: PreparedPull
+  selected: Set<string>
+  onSelect: (next: Set<string>) => void
+  encrypted: boolean
+  onBack: () => void
+  onConfirm: () => void
+}) {
+  const { counts, entries } = prepared.plan
+  const localOnly = useMemo(() => entries.filter((e) => e.kind === 'localOnly'), [entries])
+  const groups = useMemo(
+    () => PULL_GROUPS.map((g) => ({ ...g, rows: entries.filter((e) => g.kinds.includes(e.kind)) })).filter((g) => g.rows.length > 0),
+    [entries],
+  )
+  const actionable = entries.length - localOnly.length
+  const nothing = actionable === 0
+
+  const toggle = useCallback((path: string) => {
+    const next = new Set(selected)
+    if (next.has(path)) next.delete(path)
+    else next.add(path)
+    onSelect(next)
+  }, [selected, onSelect])
+
+  const setGroup = useCallback((rows: PullEntry[], on: boolean) => {
+    const next = new Set(selected)
+    for (const r of rows) {
+      if (on) next.add(r.path)
+      else next.delete(r.path)
+    }
+    onSelect(next)
+  }, [selected, onSelect])
+
+  return (
+    <div className="flex flex-col min-h-0">
+      <div className="flex flex-wrap gap-2 mb-3 text-xs flex-shrink-0">
+        <Stat label="to write" n={counts.new + counts.update} tone="accent" />
+        {counts.localNewer > 0 && <Stat label="local newer" n={counts.localNewer} tone="warning" />}
+        {counts.conflict > 0 && <Stat label="conflict" n={counts.conflict} tone="danger" />}
+        {counts.staleLocal > 0 && <Stat label="deleted in space" n={counts.staleLocal} tone="danger" />}
+        {counts.localOnly > 0 && <Stat label="local only" n={counts.localOnly} tone="muted" />}
+        <Stat label="unchanged" n={counts.unchanged} tone="muted" />
+      </div>
+
+      {prepared.manifestSource === 'none' && !nothing && (
+        <div className="flex items-start gap-2 rounded-md border border-[color:var(--notation-warning)] bg-[color:var(--notation-warning)]/10 p-2.5 text-[11px] text-[var(--notation-fg)] mb-3">
+          <AlertTriangle size={13} className="text-[var(--notation-warning)] flex-shrink-0 mt-0.5" />
+          <span>
+            No prior sync record for this folder, so nothing can be told apart as “already synced”. Every file
+            that differs is listed as a conflict and starts unticked — tick what you want overwritten.
+          </span>
+        </div>
+      )}
+
+      {encrypted && !nothing && (
+        <div className="flex items-start gap-2 rounded-md border border-[color:var(--notation-warning)] bg-[color:var(--notation-warning)]/10 p-2.5 text-[11px] text-[var(--notation-fg)] mb-3">
+          <ShieldAlert size={13} className="text-[var(--notation-warning)] flex-shrink-0 mt-0.5" />
+          <span>The ticked files land on disk <strong>decrypted</strong>. The server keeps storing ciphertext only.</span>
+        </div>
+      )}
+
+      {nothing && localOnly.length === 0 ? (
+        <p className="text-sm text-[var(--notation-fg-muted)] py-4 text-center">Your folder already matches the space — nothing to pull.</p>
+      ) : (
+        <div className="overflow-y-auto min-h-0 flex-1 mb-3 max-h-[45vh] space-y-3">
+          {actionable > 0 && (
+            <div className="flex items-center justify-end gap-2 text-[11px] -mb-1">
+              <button onClick={() => onSelect(defaultPullSelection(prepared.plan))} className="text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:underline">
+                safe default
+              </button>
+              <span className="text-[var(--notation-border)]">|</span>
+              <button onClick={() => onSelect(allActionableSelection(prepared.plan))} className="text-[color:var(--notation-accent)] hover:underline">
+                all
+              </button>
+              <span className="text-[var(--notation-border)]">|</span>
+              <button onClick={() => onSelect(new Set())} className="text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:underline">
+                none
+              </button>
+            </div>
+          )}
+          {groups.map((g) => {
+            const all = g.rows.every((r) => selected.has(r.path))
+            return (
+              <div key={g.title}>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--notation-fg-muted)]">
+                    {g.title} <span className="tabular-nums">({g.rows.length})</span>
+                  </span>
+                  <button
+                    onClick={() => setGroup(g.rows, !all)}
+                    className="text-[11px] text-[color:var(--notation-accent)] hover:underline flex-shrink-0"
+                  >
+                    {all ? 'none' : 'all'}
+                  </button>
+                </div>
+                <p className="text-[11px] text-[var(--notation-fg-muted)] mb-1.5 leading-tight">{g.note}</p>
+                <div className="border border-[var(--notation-border)] rounded-md divide-y divide-[var(--notation-border)]">
+                  {g.rows.map((e) => (
+                    <PullRow key={e.path} entry={e} checked={selected.has(e.path)} onToggle={() => toggle(e.path)} />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+
+          {localOnly.length > 0 && (
+            <div>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--notation-fg-muted)]">
+                Only in your folder <span className="tabular-nums">({localOnly.length})</span>
+              </span>
+              <p className="text-[11px] text-[var(--notation-fg-muted)] mb-1.5 leading-tight">
+                Files the space doesn’t have. A pull never writes or removes them — push them up if you want
+                them in the space.
+              </p>
+              <div className="border border-[var(--notation-border)] rounded-md divide-y divide-[var(--notation-border)] opacity-70">
+                {localOnly.map((e) => <PullRow key={e.path} entry={e} />)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-2 flex-shrink-0">
+        <button onClick={onBack} className="flex-1 px-4 py-2 rounded-md text-sm font-medium text-[var(--notation-fg)] hover:bg-[var(--notation-border)] transition-colors">Cancel</button>
+        {/* Never disabled: with nothing ticked this still records the sync state
+            (and recreates empty folders), which is exactly what a folder that
+            already matches the space — but has no sync record yet — needs. */}
+        <button
+          onClick={onConfirm}
+          className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 transition-colors"
+        >
+          {selected.size === 0 ? 'Record sync state only' : `Pull ${selected.size} file${selected.size === 1 ? '' : 's'}`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PullRow({ entry, checked, onToggle }: { entry: PullEntry; checked?: boolean; onToggle?: () => void }) {
+  const icon =
+    entry.kind === 'new' ? <Plus size={13} className="text-[color:var(--notation-accent)]" />
+    : entry.kind === 'update' ? <ArrowDownToLine size={13} className="text-[color:var(--notation-accent)]" />
+    : entry.kind === 'staleLocal' ? <Trash2 size={13} className="text-[var(--notation-danger)]" />
+    : entry.kind === 'localOnly' ? <HardDriveDownload size={13} className="text-[var(--notation-fg-muted)]" />
+    : <FileClock size={13} className="text-[var(--notation-warning)]" />
+
+  const body = (
+    <>
+      {onToggle ? (
+        <input
+          type="checkbox"
+          checked={!!checked}
+          onChange={onToggle}
+          className={`flex-shrink-0 ${entry.kind === 'staleLocal' ? 'accent-[color:var(--notation-danger)]' : 'accent-[color:var(--notation-accent)]'}`}
+        />
+      ) : (
+        <span className="w-[13px] flex-shrink-0" />
+      )}
+      <span className="flex-shrink-0">{icon}</span>
+      <span className="truncate text-[var(--notation-fg)] font-mono" title={entry.path}>{entry.path}</span>
+      {entry.kind === 'conflict' && (
+        <span className="ml-auto flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-[var(--notation-danger)] bg-[var(--notation-danger)]/15 px-1.5 py-0.5 rounded">both changed</span>
+      )}
+      {entry.kind === 'new' && entry.readded && (
+        <span className="ml-auto flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-[var(--notation-warning)]">you deleted this</span>
+      )}
+      {entry.localModified !== undefined && entry.kind !== 'conflict' && !(entry.kind === 'new' && entry.readded) && (
+        <span className="ml-auto flex-shrink-0 text-[10px] text-[var(--notation-fg-muted)] tabular-nums">{shortDate(entry.localModified)}</span>
+      )}
+    </>
+  )
+
+  return onToggle ? (
+    <label className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-[var(--notation-bg-elevated)]">{body}</label>
+  ) : (
+    <div className="flex items-center gap-2 px-3 py-1.5 text-xs">{body}</div>
+  )
+}
+
+/** A local file's mtime, short enough to sit at the end of a row. */
+function shortDate(ms: number): string {
+  try {
+    return new Date(ms).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: '2-digit' })
+  } catch {
+    return ''
+  }
 }
 
 // ── push change preview ──────────────────────────────────────────────────────

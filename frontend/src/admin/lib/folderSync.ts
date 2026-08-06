@@ -6,11 +6,14 @@
  * directory. This module bridges a space and such a folder with two explicit,
  * user-driven actions — never a live auto-sync:
  *
- *   - **Pull** ({@link pull}): write every space file into a user-picked local
- *     folder. For an encrypted space that means DECRYPTING first (the browser is
- *     the crypto authority; the server only ever holds ciphertext) — plaintext
- *     lands on disk, which is the user's deliberate choice and the UI states it
- *     plainly.
+ *   - **Pull** ({@link preparePull} + {@link applyPull}): 3-way diff the space
+ *     against a user-picked local folder, present a change preview with a
+ *     checkbox per file, and write only what was ticked. For an encrypted space
+ *     that means DECRYPTING first (the browser is the crypto authority; the
+ *     server only ever holds ciphertext) — plaintext lands on disk, which is the
+ *     user's deliberate choice and the UI states it plainly. Files the folder
+ *     changed on its own are listed but NOT ticked, and files that exist only
+ *     locally are listed and never touched.
  *   - **Push** ({@link preparePush} + {@link applyPush}): read the folder back,
  *     3-way diff it against the CURRENT space content AND the last-sync manifest,
  *     present a change preview, and — only on explicit confirm — write the
@@ -52,7 +55,9 @@ export interface SyncWritable {
 /** A handle to one file. */
 export interface SyncFileHandle {
   readonly kind: 'file'
-  getFile(): Promise<{ arrayBuffer(): Promise<ArrayBuffer> }>
+  /** `lastModified` is the real File's; only used to date a local change in the
+   *  pull preview, so it stays optional and the in-memory fake can omit it. */
+  getFile(): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; lastModified?: number }>
   createWritable(): Promise<SyncWritable>
 }
 
@@ -138,8 +143,17 @@ export async function collectSpaceFiles(space: SyncSpace, onProgress?: ProgressF
   return out
 }
 
-/** Walk the folder recursively into `path -> bytes`, skipping the ignore set. */
-export async function readFolderFiles(dir: SyncDirHandle): Promise<Map<string, Uint8Array>> {
+/**
+ * Walk the folder recursively into `path -> bytes`, skipping the ignore set.
+ *
+ * Pass `times` to also collect each file's `lastModified`; the pull preview uses
+ * it to date a local change, and nothing depends on it being present (the diff
+ * itself is decided by content hashes, never by a clock).
+ */
+export async function readFolderFiles(
+  dir: SyncDirHandle,
+  times?: Map<string, number>,
+): Promise<Map<string, Uint8Array>> {
   const out = new Map<string, Uint8Array>()
   async function walk(handle: SyncDirHandle, prefix: string): Promise<void> {
     for await (const [name, child] of handle.entries()) {
@@ -150,6 +164,7 @@ export async function readFolderFiles(dir: SyncDirHandle): Promise<Map<string, U
       } else {
         const file = await child.getFile()
         out.set(path, new Uint8Array(await file.arrayBuffer()))
+        if (times && typeof file.lastModified === 'number') times.set(path, file.lastModified)
       }
     }
   }
@@ -183,6 +198,30 @@ export async function writeFileTo(root: SyncDirHandle, path: string, bytes: Uint
   await w.close()
 }
 
+/**
+ * Delete `path` from the folder. Used only for a pull's explicitly opted-in
+ * "the space deleted this, drop my untouched copy too" — never implicitly.
+ * A path that is already gone is not an error.
+ */
+export async function removeFileFrom(root: SyncDirHandle, path: string): Promise<void> {
+  const segs = path.split('/').filter(Boolean)
+  const name = segs.pop()
+  if (!name) throw new Error(`folderSync: cannot remove ${JSON.stringify(path)}`)
+  let cur = root
+  for (const s of segs) {
+    try {
+      cur = await cur.getDirectoryHandle(s)
+    } catch {
+      return // parent folder is gone → nothing to remove
+    }
+  }
+  try {
+    await cur.removeEntry(name)
+  } catch {
+    /* already gone */
+  }
+}
+
 // ── manifest IO ──────────────────────────────────────────────────────────────
 
 /** Read `.notation-sync.json` from the folder, or `null` if absent/corrupt. */
@@ -208,22 +247,154 @@ export async function writeManifestFile(dir: SyncDirHandle, entries: ManifestEnt
   return manifest
 }
 
-// ── pull ─────────────────────────────────────────────────────────────────────
+// ── pull: 3-way diff ─────────────────────────────────────────────────────────
 
-export interface PullResult {
-  /** Logical paths written (files only), in write order. */
-  written: string[]
-  /** Directories (incl. empty ones) recreated for structural fidelity. */
-  dirs: string[]
-  /** The manifest captured for this sync (also written to the folder). */
-  manifest: SyncManifest
-  /**
-   * Agent briefings dropped into the folder root ({@link guideFiles}). They are
-   * tooling, never Space content: they stay out of the manifest and the push
-   * strips them again.
-   */
-  guides: string[]
+/**
+ * What a pull would do to one path, in the folder's terms.
+ *
+ *   - `new`        — the space has it, the folder doesn't: a plain copy down.
+ *   - `update`     — both have it, the folder's copy is still exactly the
+ *                    baseline, so the space's newer bytes land losslessly.
+ *   - `localNewer` — the folder changed it and the space did NOT: the local
+ *                    copy is the newer one, and writing would destroy work.
+ *   - `conflict`   — BOTH sides changed it since the last sync (or there is no
+ *                    baseline at all and they differ).
+ *   - `localOnly`  — only the folder has it: a locally-created file. Never
+ *                    written, never deleted; listed so it is visible.
+ *   - `staleLocal` — only the folder has it, and its bytes are still exactly
+ *                    the baseline: the space deleted it and this copy is a
+ *                    leftover. Removable, but only if explicitly ticked.
+ */
+export type PullKind = 'new' | 'update' | 'localNewer' | 'conflict' | 'localOnly' | 'staleLocal'
+
+export interface PullEntry {
+  path: string
+  kind: PullKind
+  /** `new` only: the folder deleted this path since the last sync (re-adding it). */
+  readded?: boolean
+  /** Folder file's mtime, when the platform reported one — display only. */
+  localModified?: number
 }
+
+export interface PullCounts {
+  new: number
+  update: number
+  localNewer: number
+  conflict: number
+  localOnly: number
+  staleLocal: number
+  unchanged: number
+}
+
+export interface PullPlan {
+  entries: PullEntry[]
+  counts: PullCounts
+  /** Space file set hashed (`path -> hash`) — what a full pull would leave behind. */
+  spaceManifest: ManifestEntries
+  /** Folder file set hashed, for the manifest bookkeeping in {@link applyPull}. */
+  folderManifest: ManifestEntries
+}
+
+/**
+ * Classify every path across the space and folder against the last-sync
+ * manifest. Pure over three maps (plus optional mtimes) so it is exhaustively
+ * unit-testable without any handle at all.
+ *
+ * The whole point is that a pull is no longer a blind overwrite: the baseline is
+ * what separates "the space moved on, take it" ({@link PullKind} `update`) from
+ * "I edited this locally and the space didn't" (`localNewer`) and from "both
+ * moved" (`conflict`). Only the first is safe to apply unattended, which is
+ * exactly what {@link defaultPullSelection} ticks.
+ */
+export async function computePullPlan(
+  spaceFiles: Map<string, Uint8Array>,
+  folderFiles: Map<string, Uint8Array>,
+  manifest: ManifestEntries,
+  localTimes?: Map<string, number>,
+): Promise<PullPlan> {
+  const spaceManifest = await hashFiles(spaceFiles)
+  const folderManifest = await hashFiles(folderFiles)
+
+  const entries: PullEntry[] = []
+  let unchanged = 0
+
+  const allPaths = new Set<string>([...Object.keys(spaceManifest), ...Object.keys(folderManifest)])
+  for (const path of allPaths) {
+    const s = spaceManifest[path]
+    const f = folderManifest[path]
+    const base = manifest[path]
+    const localModified = localTimes?.get(path)
+
+    if (s !== undefined && f === undefined) {
+      // In the space, not in the folder.
+      entries.push({ path, kind: 'new', readded: base !== undefined })
+    } else if (s !== undefined && f !== undefined) {
+      // In both.
+      if (s === f) { unchanged++; continue }
+      if (base !== undefined && f === base) {
+        entries.push({ path, kind: 'update', localModified })
+      } else if (base !== undefined && s === base) {
+        entries.push({ path, kind: 'localNewer', localModified })
+      } else {
+        entries.push({ path, kind: 'conflict', localModified })
+      }
+    } else {
+      // In the folder, not in the space.
+      entries.push({ path, kind: base !== undefined && base === f ? 'staleLocal' : 'localOnly', localModified })
+    }
+  }
+
+  entries.sort((a, b) => a.path.localeCompare(b.path))
+  const count = (k: PullKind): number => entries.filter((e) => e.kind === k).length
+  return {
+    entries,
+    counts: {
+      new: count('new'),
+      update: count('update'),
+      localNewer: count('localNewer'),
+      conflict: count('conflict'),
+      localOnly: count('localOnly'),
+      staleLocal: count('staleLocal'),
+      unchanged,
+    },
+    spaceManifest,
+    folderManifest,
+  }
+}
+
+/** True for a kind the user can act on — `localOnly` is purely informational. */
+export function isPullActionable(kind: PullKind): boolean {
+  return kind !== 'localOnly'
+}
+
+/**
+ * The safe pre-tick: everything that cannot lose local work.
+ *
+ * A plain copy-down and a clean fast-forward are ticked. Anything where the
+ * folder holds bytes nobody else has — a local-only edit, a two-sided conflict,
+ * a path the folder deliberately deleted — starts UNTICKED, so applying the
+ * preview unchanged can never overwrite or remove something local.
+ */
+export function defaultPullSelection(plan: PullPlan): Set<string> {
+  const sel = new Set<string>()
+  for (const e of plan.entries) {
+    if (e.kind === 'update' || (e.kind === 'new' && !e.readded)) sel.add(e.path)
+  }
+  return sel
+}
+
+/**
+ * Every entry the user could act on — what a "select all" means.
+ *
+ * Includes the destructive ones (a local edit being overwritten, a leftover
+ * being deleted), because that is exactly what selecting everything asks for;
+ * it is deliberately NOT the default ({@link defaultPullSelection} is).
+ */
+export function allActionableSelection(plan: PullPlan): Set<string> {
+  return new Set(plan.entries.filter((e) => isPullActionable(e.kind)).map((e) => e.path))
+}
+
+// ── pull: prepare + apply ────────────────────────────────────────────────────
 
 /** What a pull needs to know to write the agent briefing (see {@link ./spaceGuide}). */
 export interface GuideOptions {
@@ -231,59 +402,239 @@ export interface GuideOptions {
   spaceName: string
 }
 
+export interface PreparedPull {
+  plan: PullPlan
+  spaceFiles: Map<string, Uint8Array>
+  /** Directories in the space (incl. empty ones), recreated on apply. */
+  spaceDirs: string[]
+  /** The last-sync baseline the plan was computed against. */
+  baseline: ManifestEntries
+  /** Where the baseline manifest came from (drives a UI note when it's missing). */
+  manifestSource: 'folder' | 'fallback' | 'none'
+}
+
 /**
- * Write the whole space into the folder: every file at its logical path
- * (creating subdirectories, decrypting first for an encrypted space), recreate
- * empty directories, and record the manifest (`path -> hash`) both in the folder
- * and in the returned result. Never deletes anything already in the folder — a
- * local agent's scratch files are preserved.
+ * Read the folder + its manifest, collect the space content, and compute the
+ * {@link PullPlan}. Nothing is written — this only previews.
+ *
+ * Our own generated `AGENTS.md` / `CLAUDE.md` are stripped from the folder side
+ * first: they are tooling this very feature dropped there, and listing them as
+ * "files that exist only locally" would be noise about our own doing.
+ */
+export async function preparePull(
+  space: SyncSpace,
+  dir: SyncDirHandle,
+  fallbackManifest?: ManifestEntries,
+  onProgress?: ProgressFn,
+): Promise<PreparedPull> {
+  const localTimes = new Map<string, number>()
+  const folderFiles = await readFolderFiles(dir, localTimes)
+  const nodes = (await space.listNodes()).filter((n) => !isIgnored(n.path))
+  const spaceDirs = nodes.filter((n) => n.isDir).map((n) => n.path)
+
+  const files = nodes.filter((n) => !n.isDir)
+  const spaceFiles = new Map<string, Uint8Array>()
+  let done = 0
+  for (const n of files) {
+    spaceFiles.set(n.path, await space.read(n.path))
+    onProgress?.(++done, files.length)
+  }
+
+  stripGeneratedGuides(folderFiles, spaceFiles)
+
+  const manifestFile = await readManifestFile(dir)
+  let manifest: ManifestEntries
+  let manifestSource: PreparedPull['manifestSource']
+  if (manifestFile) {
+    manifest = manifestFile.entries
+    manifestSource = 'folder'
+  } else if (fallbackManifest) {
+    manifest = fallbackManifest
+    manifestSource = 'fallback'
+  } else {
+    manifest = {}
+    manifestSource = 'none'
+  }
+
+  const plan = await computePullPlan(spaceFiles, folderFiles, manifest, localTimes)
+  return { plan, spaceFiles, spaceDirs, baseline: manifest, manifestSource }
+}
+
+export interface PullApplyResult {
+  /** Logical paths written into the folder. */
+  written: string[]
+  /** Stale paths removed from the folder (only ever explicitly selected ones). */
+  removedLocal: string[]
+  /** Actionable entries the user left unticked — their local copy stands. */
+  skipped: number
+  /** Files that live only in the folder; untouched, reported so they're visible. */
+  keptLocalOnly: string[]
+  /** Directories (incl. empty ones) recreated for structural fidelity. */
+  dirs: string[]
+  /**
+   * Agent briefings dropped into the folder root ({@link guideFiles}). They are
+   * tooling, never Space content: they stay out of the manifest and the push
+   * strips them again.
+   */
+  guides: string[]
+  /** Entries that threw; the rest still applied. */
+  failed: { path: string; error: string }[]
+  /** The refreshed baseline manifest (also written back to the folder). */
+  manifest: SyncManifest
+}
+
+/**
+ * Apply a previewed {@link PreparedPull} to the folder: write exactly the paths
+ * in `selected` (and, for a `staleLocal` entry, delete exactly those), recreate
+ * the space's directories, and refresh the baseline manifest.
+ *
+ * What is NOT selected is left completely alone — that is the guarantee the
+ * preview makes. The manifest reflects that honestly: a path is recorded as
+ * synced only when both sides now really hold the same bytes. For a skipped
+ * path the OLD baseline entry is carried over untouched, so the divergence the
+ * user chose to keep is still visible as a conflict on the next pull or push
+ * instead of being quietly blessed.
  *
  * When `guide` is given, the folder also gets `AGENTS.md` / `CLAUDE.md` telling
  * a local CLI agent what a notation Space is and how this folder round-trips —
- * but only for names the space doesn't itself use, so a real `AGENTS.md` page is
- * never clobbered. Omit `guide` to pull content only.
+ * but never over a file the space itself has at that path, nor over a
+ * hand-edited one that has lost our marker. Omit `guide` to pull content only.
  */
-export async function pull(
+export async function applyPull(
   space: SyncSpace,
   dir: SyncDirHandle,
+  prepared: PreparedPull,
+  selected: Set<string>,
   onProgress?: ProgressFn,
   guide?: GuideOptions,
-): Promise<PullResult> {
+): Promise<PullApplyResult> {
+  const { plan, spaceFiles, spaceDirs, baseline } = prepared
   const written: string[] = []
-  const dirs: string[] = []
-  const entries: ManifestEntries = {}
-  const nodes = (await space.listNodes()).filter((n) => !isIgnored(n.path))
+  const removedLocal: string[] = []
+  const keptLocalOnly: string[] = []
+  const failed: { path: string; error: string }[] = []
+  let skipped = 0
   let done = 0
-  for (const n of nodes) {
-    if (n.isDir) {
-      await ensureFolderDir(dir, n.path)
-      dirs.push(n.path)
-    } else {
-      const bytes = await space.read(n.path)
-      await writeFileTo(dir, n.path, bytes)
-      entries[n.path] = await sha256Hex(bytes)
-      written.push(n.path)
+
+  for (const p of spaceDirs) {
+    try {
+      await ensureFolderDir(dir, p)
+    } catch (err) {
+      failed.push({ path: p, error: String((err as Error)?.message ?? err) })
     }
-    onProgress?.(++done, nodes.length)
   }
-  const manifest = await writeManifestFile(dir, entries)
+
+  // Local-only files are reported, never worked on, so they must not sit in the
+  // progress denominator — the bar would stop short of the end every time.
+  const total = plan.entries.filter((e) => isPullActionable(e.kind)).length
+  for (const e of plan.entries) {
+    if (e.kind === 'localOnly') {
+      keptLocalOnly.push(e.path)
+      continue
+    }
+    if (!selected.has(e.path)) {
+      skipped++
+      onProgress?.(++done, total)
+      continue
+    }
+    try {
+      if (e.kind === 'staleLocal') {
+        await removeFileFrom(dir, e.path)
+        removedLocal.push(e.path)
+      } else {
+        const bytes = spaceFiles.get(e.path)
+        if (bytes) {
+          await writeFileTo(dir, e.path, bytes)
+          written.push(e.path)
+        }
+      }
+    } catch (err) {
+      failed.push({ path: e.path, error: String((err as Error)?.message ?? err) })
+    }
+    onProgress?.(++done, total)
+  }
+
+  const manifest = await writeManifestFile(
+    dir,
+    nextPullManifest(plan, selected, new Set(failed.map((f) => f.path)), baseline),
+  )
 
   const guides: string[] = []
   if (guide) {
     const ctx: GuideContext = {
       spaceName: guide.spaceName,
       encrypted: space.encrypted,
-      formFolders: formFoldersOf(written),
-      fileCount: written.length,
+      formFolders: formFoldersOf([...spaceFiles.keys()]),
+      fileCount: spaceFiles.size,
     }
     for (const g of guideFiles(ctx)) {
-      // The space's own file at that path always wins — it was just written.
-      if (entries[g.name] !== undefined) continue
-      await writeFileTo(dir, g.name, new TextEncoder().encode(g.content))
-      guides.push(g.name)
+      // The space's own page at that path always wins, and so does a briefing
+      // the user has taken over (no marker left) — neither is ours to clobber.
+      if (spaceFiles.has(g.name)) continue
+      const existing = await readFolderFile(dir, g.name)
+      if (existing && !isGeneratedGuide(existing)) continue
+      try {
+        await writeFileTo(dir, g.name, new TextEncoder().encode(g.content))
+        guides.push(g.name)
+      } catch (err) {
+        failed.push({ path: g.name, error: String((err as Error)?.message ?? err) })
+      }
     }
   }
-  return { written, dirs, manifest, guides }
+
+  return { written, removedLocal, skipped, keptLocalOnly, dirs: spaceDirs, guides, failed, manifest }
+}
+
+/**
+ * The baseline after a partial pull: a path counts as synced only where both
+ * sides demonstrably agree now.
+ *
+ * Built from scratch rather than patched, so an entry for a path that has since
+ * vanished from BOTH sides doesn't linger and resurface as a phantom deletion.
+ */
+function nextPullManifest(
+  plan: PullPlan,
+  selected: Set<string>,
+  failed: Set<string>,
+  prior: ManifestEntries,
+): ManifestEntries {
+  const out: ManifestEntries = {}
+  const paths = new Set<string>([...Object.keys(plan.spaceManifest), ...Object.keys(plan.folderManifest)])
+  const byPath = new Map(plan.entries.map((e) => [e.path, e]))
+  for (const path of paths) {
+    const e = byPath.get(path)
+    if (!e) {
+      // Unchanged on both sides — record the agreement even if the baseline
+      // never knew about it (e.g. a first pull into a folder that already
+      // held identical content).
+      out[path] = plan.spaceManifest[path]
+      continue
+    }
+    if (failed.has(path) || !selected.has(path)) {
+      // Untouched: carry the OLD baseline so the divergence stays visible.
+      const base = prior[path]
+      if (base !== undefined) out[path] = base
+      continue
+    }
+    if (e.kind === 'staleLocal') continue // deleted locally, gone from both sides
+    out[path] = plan.spaceManifest[path]
+  }
+  return out
+}
+
+/** One file's bytes from the folder, or `null` when it isn't there. */
+async function readFolderFile(dir: SyncDirHandle, path: string): Promise<Uint8Array | null> {
+  const segs = path.split('/').filter(Boolean)
+  const name = segs.pop()
+  if (!name) return null
+  let cur = dir
+  try {
+    for (const s of segs) cur = await cur.getDirectoryHandle(s)
+    const fh = await cur.getFileHandle(name)
+    return new Uint8Array(await (await fh.getFile()).arrayBuffer())
+  } catch {
+    return null
+  }
 }
 
 /** Folders rendered as Forms — the ones holding a `_form.md` template. */
@@ -297,7 +648,7 @@ function formFoldersOf(paths: string[]): string[] {
 }
 
 /**
- * Drop the briefings {@link pull} generated from the folder's file set, so a
+ * Drop the briefings {@link applyPull} generated from the folder's file set, so a
  * push never carries them into the space. A guide only counts as ours when it
  * sits at the root under a {@link isGuideName} name, still carries the marker,
  * and the space doesn't have a file of its own at that path. Mutates
