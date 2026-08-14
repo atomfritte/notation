@@ -122,7 +122,28 @@ export function SpaceView() {
   const [content, setContent] = useState<string>('')
   const [etag, setEtag] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+  // Mirrors Editor's internal dirty flag (it's an uncontrolled Monaco buffer,
+  // see editor-must-stay-uncontrolled note there) so navigation that would
+  // otherwise silently blow away unsaved text — leaving edit mode, switching
+  // files, closing the tab — can confirm first instead.
+  const [editorDirty, setEditorDirty] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  // Ask before discarding unsaved editor text. Returns true when it's safe to
+  // proceed (nothing unsaved, or the user confirmed discarding it).
+  const confirmDiscardEdits = useCallback(() => {
+    if (!editing || !editorDirty) return true
+    return window.confirm('Discard unsaved changes?')
+  }, [editing, editorDirty])
+
+  // Warn on tab close/refresh while there's unsaved editor text — mirrors the
+  // in-app guards below (leaving edit mode, switching files).
+  useEffect(() => {
+    if (!editing || !editorDirty) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [editing, editorDirty])
 
   // "New since last visit" badges in the tree — pages that appeared while
   // this client wasn't looking (MCP agents, share guests, form entries).
@@ -625,7 +646,7 @@ export function SpaceView() {
           { label: 'Delete folder',      icon: <Trash size={14} />, danger: true, onClick: () => deletePath(path, true) },
         ]
       : [
-          { label: 'Open',               icon: <FileText size={14} />,   onClick: () => setFileParam(path) },
+          { label: 'Open',               icon: <FileText size={14} />,   onClick: () => { if (confirmDiscardEdits()) setFileParam(path) } },
           { label: 'Open in new tab',    icon: <ExternalLink size={14} />, onClick: () => {
             // Encrypted: address by opaque nodeId so the new-tab document GET
             // doesn't put a cleartext path into the server's access log.
@@ -761,6 +782,9 @@ export function SpaceView() {
 
   const selectFile = useCallback(
     (p: string) => {
+      // Switching files remounts the editor on the new path — don't let a tap
+      // on the tree silently throw away an unsaved edit on the current one.
+      if (!confirmDiscardEdits()) return
       // Opening a page directly is not a comment jump; clear any pending focus
       // so the scroll-restore below applies normally. (The comments panel sets
       // the id again right after calling this.)
@@ -770,7 +794,7 @@ export function SpaceView() {
       // immediately — keep the drawer behaviour explorer-like.
       if (isMobile) setSidebarOpen(false)
     },
-    [setFileParam, isMobile],
+    [setFileParam, isMobile, confirmDiscardEdits],
   )
 
   // Warm a page's text into the cache on hover (file tree, in-document links,
@@ -1210,7 +1234,7 @@ export function SpaceView() {
   // endpoint; encrypted searches the decrypted corpus in-browser (see below).
   headerActions.push({ key: 'search', label: 'Search', icon: <Search size={18} />, onClick: () => setSearchOpen(true) })
   if (isMarkdownFile(file) && !isForm) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
-  if (!isForm && !encrypted) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { setHistoryMode(v => !v); setEditing(false) } })
+  if (!isForm && !encrypted) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { if (!confirmDiscardEdits()) return; setHistoryMode(v => !v); setEditing(false) } })
   if (!isForm) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove favorite' : 'Add favorite', icon: <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />, active: isBookmarked, onClick: () => toggleBookmark(file) })
   if (!isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: visibleComments.length, onClick: () => setShowComments(v => !v) })
   if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={18} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
@@ -1601,7 +1625,7 @@ export function SpaceView() {
                 ? <HeaderOverflowMenu actions={headerActions} />
                 : headerActions.map(act => <HeaderActionBtn key={act.key} action={act} />)}
               {editVisible && (
-                <button onClick={() => setEditing(v => !v)} title={editing ? 'Preview' : 'Edit'} className={`ml-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)] dark:bg-[color:var(--notation-accent-10)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}>
+                <button onClick={() => { if (!confirmDiscardEdits()) return; setEditing(v => !v) }} title={editing ? 'Preview' : 'Edit'} className={`ml-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)] dark:bg-[color:var(--notation-accent-10)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}>
                   {editing ? <Eye size={16} /> : <Edit3 size={16} />}
                 </button>
               )}
@@ -1768,6 +1792,7 @@ export function SpaceView() {
                         setShowComments(true)
                         setPendingComment(`> ${selectedText.split('\n').join('\n> ')}\n\n`)
                       }}
+                      onDirtyChange={setEditorDirty}
                     />
                   </Suspense>
                 ) : (

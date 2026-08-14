@@ -181,6 +181,48 @@
   /* Let the title block breathe on page one. */
   @page :first { margin-top: 16mm; }
 
+  /* --- Palette reset ------------------------------------------------------
+   * The app-shell reset and article overrides below force literal
+   * black-on-white onto html/body/#root and the article content — but the
+   * shell's wrapper divs are styled with Tailwind arbitrary classes like
+   * bg-[var(--notation-bg)], and that custom property is untouched by either.
+   * Printing from dark mode (or a custom dark palette) left those wrappers
+   * still resolving to their dark value, and print-color-adjust: exact below
+   * makes that dark background actually print behind the (correctly light)
+   * article — the "black on black" bug. Force every --notation-* token back
+   * to its light (:root) value, applied to both :root and .dark so it wins
+   * whichever is active. !important is required: a user's custom palette is
+   * injected via a <style id="notation-theme-style"> appended to <head> at
+   * runtime (theme.ts applyTheme()) and can land after this stylesheet in DOM
+   * order, so specificity/order alone wouldn't beat it. */
+  :root, .dark {
+    --notation-accent: #65A30D !important;
+    --notation-accent-10: #65A30D1A !important;
+    --notation-accent-15: #65A30D26 !important;
+    --notation-accent-20: #65A30D33 !important;
+    --notation-accent-30: #65A30D4D !important;
+    --notation-accent-40: #65A30D66 !important;
+    --notation-accent-50: #65A30D80 !important;
+    --notation-bg: #FFFFFF !important;
+    --notation-bg-elevated: #FAFAFA !important;
+    --notation-chrome-bg: #FAFAFA !important;
+    --notation-chrome-bg-alt: #F4F4F5 !important;
+    --notation-bg-alt: #F4F4F5 !important;
+    --notation-fg: #18181B !important;
+    --notation-fg-muted: #71717A !important;
+    --notation-border: #E4E4E7 !important;
+    --notation-fg-on-elevated: #18181B !important;
+    --notation-fg-on-elevated-muted: #71717A !important;
+    --notation-border-on-elevated: #ECECEC !important;
+    --notation-danger: #DC2626 !important;
+    --notation-warning: #D97706 !important;
+    --notation-success: #059669 !important;
+    --notation-info: #2563EB !important;
+    --notation-fg-on-accent: #FFFFFF !important;
+    --notation-backdrop: rgba(0, 0, 0, 0.35) !important;
+    --notation-code-bg: color-mix(in srgb, var(--notation-bg), black 4%) !important;
+  }
+
   /* --- App-shell reset --------------------------------------------------- */
   html, body, #root {
     background: #ffffff !important;

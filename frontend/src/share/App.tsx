@@ -707,7 +707,13 @@ function ShareUI() {
                   : headerActions.map(a => <HeaderActionBtn key={a.key} action={a} />)}
                 {editVisible && (
                   <button
-                    onClick={() => setEditing(v => !v)}
+                    onClick={() => {
+                      // Leaving edit mode (the Eye/Preview toggle) throws away
+                      // editBuffer just like switching files does — guard it
+                      // the same way `select` above does.
+                      if (dirty && !window.confirm('Discard unsaved changes?')) return
+                      setEditing(v => !v)
+                    }}
                     className={
                       'ml-1 px-3 py-1 rounded-md transition-colors text-sm font-medium ' +
                       (editing
@@ -886,6 +892,9 @@ function ShareUI() {
           files={allFiles}
           onClose={() => setSearchOpen(false)}
           onSelect={(p, opts) => {
+            // Same file-switch data-loss risk as `select` above — this bypasses
+            // it (it also needs to set `q`), so guard it here too.
+            if (dirty && !window.confirm('Discard unsaved changes?')) return
             const next: Record<string, string> = { file: p }
             if (opts?.query) next.q = opts.query
             setSearchParams(next)

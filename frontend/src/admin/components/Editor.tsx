@@ -63,6 +63,11 @@ type Props = {
   allFiles: string[]
   onSaved: (content: string, etag: string | null) => void
   onCommentRequest?: (text: string) => void
+  /** Fires whenever the unsaved/pristine state flips. The editor itself is
+   *  uncontrolled (see below) so the parent has no other way to know there's
+   *  unsaved text — it needs this to guard against silently discarding it
+   *  (switching files, leaving edit mode, closing the tab). */
+  onDirtyChange?: (dirty: boolean) => void
   /** Override the persistence path — encrypted spaces save through EncryptedFS
    *  instead of api.writeFile. Returns the new etag (null for encrypted). When
    *  omitted, the default plaintext api.writeFile path is used unchanged. */
@@ -73,7 +78,7 @@ type Props = {
 }
 
 export default function Editor({
-  spaceID, path, initial, etag, theme, allFiles, onSaved, onCommentRequest, saveFile, readFileText,
+  spaceID, path, initial, etag, theme, allFiles, onSaved, onCommentRequest, onDirtyChange, saveFile, readFileText,
 }: Props) {
   const editorRef = useRef<IEditor | null>(null)
   const monacoRef = useRef<IMonaco | null>(null)
@@ -83,6 +88,18 @@ export default function Editor({
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const dirty = content !== initial
+
+  // Tell the parent whenever the pristine/unsaved state flips, and clear it
+  // on unmount — a file switch or a mode toggle remounts/unmounts this
+  // component, and a stale "dirty" left behind would either block a save
+  // that was already handled or wrongly warn about a discard that already
+  // happened.
+  const onDirtyChangeRef = useRef(onDirtyChange)
+  useEffect(() => { onDirtyChangeRef.current = onDirtyChange }, [onDirtyChange])
+  useEffect(() => {
+    onDirtyChangeRef.current?.(dirty)
+  }, [dirty])
+  useEffect(() => () => onDirtyChangeRef.current?.(false), [])
 
   // ---- refs that the editor-command closures dereference at call time so
   // they always see the latest React state without re-registering commands.
