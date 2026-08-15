@@ -743,7 +743,12 @@ export function SpaceView() {
       setAllComments(fs ? encAllComments(fs) : [])
       return
     }
-    api.getAllComments(spaceID).then(setAllComments).catch(console.error)
+    // Same mount-time race as refreshTree above: spaceMeta (and so `encrypted`)
+    // may not have resolved yet, so this can fire once against the plaintext
+    // endpoint for a space that actually is encrypted — a 409 the encrypted
+    // path above takes back over from as soon as spaceMeta arrives. Swallow
+    // it the same way, instead of logging it as a real error.
+    api.getAllComments(spaceID).then(setAllComments).catch(e => { if ((e as { status?: number })?.status !== 409) console.error(e) })
   }, [spaceID])
   // fsReady re-runs this once the encrypted FS finishes loading its op-log.
   useEffect(() => { refreshAllComments() }, [refreshAllComments, allCommentsRefresh, fsReady])

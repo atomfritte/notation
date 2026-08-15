@@ -1,4 +1,4 @@
-import { Children, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -151,7 +151,12 @@ export function MarkdownView({
     if (!files || files.length === 0) return null
     return buildAutoFileLink({ files, currentFile })
   }, [files, currentFile])
-  const [tool, setTool] = useState<{ x: number; y: number; anchor: AnchorPayload } | null>(null)
+  // x/y are the preferred (below-and-right-of-selection) position, computed
+  // from the selection rect the instant it changes. selTop is the selection's
+  // own top edge (container-relative) — needed by the layout effect below to
+  // flip the toolbar above the selection when there's no room below.
+  const [tool, setTool] = useState<{ x: number; y: number; selTop: number; anchor: AnchorPayload } | null>(null)
+  const toolbarRef = useRef<HTMLDivElement | null>(null)
   // Whether the selection toolbar is showing its emoji-reaction picker.
   const [reacting, setReacting] = useState(false)
   // Reset the picker when the toolbar closes or moves to a DIFFERENT passage.
@@ -159,6 +164,28 @@ export function MarkdownView({
   // rebuilds an equivalent `tool` must not tear the open picker down.
   const toolQuote = tool ? tool.anchor.prefix + '\u0000' + tool.anchor.quote : null
   useEffect(() => { setReacting(false) }, [toolQuote])
+
+  // Re-position the toolbar against its ACTUAL rendered size, after paint —
+  // the two-button default and the 8-emoji reaction picker are different
+  // widths, and `update()` above only has a guessed width to work with. Runs
+  // again when `reacting` toggles (picker mounts/unmounts) so the toolbar
+  // never spills past the viewer's right edge, and flips above the selection
+  // instead of below it when there isn't room underneath (reacting to a
+  // document's last line, for instance, leaves nothing to scroll down to).
+  useLayoutEffect(() => {
+    const el = toolbarRef.current
+    const container = scrollRef.current
+    if (!el || !tool || !container) return
+    const containerRect = container.getBoundingClientRect()
+    const width = el.offsetWidth
+    const height = el.offsetHeight
+    const left = Math.min(Math.max(8, tool.x), Math.max(8, containerRect.width - width - 8))
+    const spaceBelow = containerRect.height - tool.y
+    const above = spaceBelow < height + 8 && tool.selTop > height + 8
+    const top = above ? Math.max(8, tool.selTop - height - 6) : tool.y
+    el.style.left = `${left}px`
+    el.style.top = `${top}px`
+  }, [tool, reacting])
 
   // The in-document comment bubble: which mark it hangs off, the comment ids
   // anchored there, and whether a click pinned it open (a pinned bubble
@@ -364,11 +391,18 @@ export function MarkdownView({
       const container = scrollRef.current?.getBoundingClientRect()
       if (!container) return
       const anchor = buildAnchor(articleRef.current, range, quote)
-      // Clamp x so the toolbar never spills past the right edge of the viewer.
+      // A rough starting position (below-and-right of the selection, clamped
+      // to a guessed width) — the layout effect below re-measures the actual
+      // rendered toolbar (which changes size when the reaction picker opens)
+      // and corrects both x and y for real, including flipping above the
+      // selection when there's no room below (e.g. reacting to a document's
+      // last line). Keeping a rough guess here just avoids a first-paint
+      // flash at the very left edge before that effect runs.
       const x = Math.min(rect.right - container.left, container.width - 110)
       setTool({
         x: Math.max(8, x),
         y: rect.bottom - container.top + 6,
+        selTop: rect.top - container.top,
         anchor,
       })
     }
@@ -425,6 +459,13 @@ export function MarkdownView({
       const m = (e.target as HTMLElement).closest('mark.comment-anchor') as HTMLElement | null
       const ids = m ? markCommentIDs(m) : []
       if (!m || ids.length === 0) return
+      // A click that's really the mouseup of a fresh drag-selection (the
+      // reader re-selecting text inside an existing mark to react again)
+      // shouldn't pin that mark's OLD thread open over the NEW selection's
+      // toolbar — let the toolbar (see the selectionchange effect above) own
+      // the interaction instead.
+      const sel = window.getSelection()
+      if (sel && !sel.isCollapsed && sel.toString().trim().length >= 2) return
       e.preventDefault()
       open(m, true)
       onSelectAnchor?.(ids[0])
@@ -853,6 +894,7 @@ export function MarkdownView({
 
       {tool && (onNewAnchorComment || onNewReaction) && (
         <div
+          ref={toolbarRef}
           className="selection-toolbar"
           style={{ left: tool.x, top: tool.y }}
           // Swallow mousedown so pressing a toolbar button doesn't collapse the

@@ -945,9 +945,15 @@ mark.comment-reaction[data-active="true"] {
   @apply bg-zinc-900;
 }
 
-/* Floating selection toolbar above the user's text selection in the viewer */
+/* Floating selection toolbar above the user's text selection in the viewer.
+   z-[60], one above .comment-bubble's z-50: re-selecting text that's already
+   inside an existing comment/reaction's <mark> also fires that mark's
+   mouseover/click handlers, which (re-)open its bubble at the same spot. The
+   toolbar for the FRESH selection is what the user is actually looking at —
+   it must win the stacking order, not get hidden behind a bubble for the
+   passage's older thread. */
 .selection-toolbar {
-  @apply absolute z-50 flex items-center bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md shadow-xl text-xs font-medium;
+  @apply absolute z-[60] flex items-center bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md shadow-xl text-xs font-medium;
   animation: selection-toolbar-in 0.12s ease-out;
 }
 @keyframes selection-toolbar-in {
