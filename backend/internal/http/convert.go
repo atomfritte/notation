@@ -227,6 +227,12 @@ func (h *adminHandlers) finalizeConvert(w http.ResponseWriter, r *http.Request) 
 			writeInternal(w, r, "convert.finalize.purge_enc", err)
 			return
 		}
+		// Sealed assistant chats are unreadable without the key the Space is
+		// about to lose; the client re-wrote them as plaintext records first.
+		if err := h.store.PurgeChats(id, true); err != nil {
+			writeInternal(w, r, "convert.finalize.purge_chats", err)
+			return
+		}
 		if err := h.git.Reinit(id, adminAuthor(r), "convert to plaintext: reinitialize history"); err != nil {
 			writeInternal(w, r, "convert.finalize.reinit", err)
 			return

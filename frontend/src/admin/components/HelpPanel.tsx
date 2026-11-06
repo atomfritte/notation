@@ -119,6 +119,7 @@ function adminGroups(): Group[] {
         { keys: `${MOD}+Shift+F`, label: 'Search page titles + full text across the Space' },
         { keys: `${MOD}+\\`, label: 'Toggle sidebar' },
         { keys: 'Alt+N', label: 'Create new page' },
+        { keys: 'Alt+A', label: 'Open / close the Claude assistant' },
         { keys: '?', label: 'Show this help' },
       ],
     },

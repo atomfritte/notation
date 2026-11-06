@@ -1478,3 +1478,21 @@ article.prose.cv-auto > * {
 .read-aloud-safe-area {
   padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
 }
+
+/* ── Claude assistant panel ─────────────────────────────────────────────────
+   Replies use the page typography (.prose, for links/code/tables) at a size
+   that suits a narrow side panel. */
+.prose.chat-md {
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.prose.chat-md :where(p, ul, ol, pre, blockquote, table) { margin-top: 0.5em; margin-bottom: 0.5em; }
+.prose.chat-md :where(li) { margin-top: 0.15em; margin-bottom: 0.15em; }
+.prose.chat-md :where(h1, h2, h3, h4) { font-size: 1.05em; margin-top: 0.9em; margin-bottom: 0.35em; }
+.prose.chat-md :where(pre) { font-size: 12px; padding: 0.6em 0.75em; }
+.prose.chat-md :where(code) { font-size: 0.9em; }
+.prose.chat-md > :first-child { margin-top: 0; }
+.prose.chat-md > :last-child { margin-bottom: 0; }
+.chat-diff-add { background: color-mix(in srgb, var(--notation-success) 16%, transparent); color: var(--notation-fg); }
+.chat-diff-del { background: color-mix(in srgb, var(--notation-danger) 16%, transparent); color: var(--notation-fg); }
+.chat-diff-hunk { color: var(--notation-fg-muted); }

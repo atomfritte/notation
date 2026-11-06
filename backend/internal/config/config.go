@@ -51,6 +51,12 @@ type Config struct {
 	// Optional Kokoro ONNX sidecar (higher-quality voice). Empty URL = off.
 	TTSKokoroURL    string
 	TTSKokoroVoices string
+
+	// In-app Claude assistant. The browser talks to the Claude API directly;
+	// the server only stores the key + chat history. An env key overrides (and
+	// locks) the one set in the UI; AIDisabled hides the feature entirely.
+	AnthropicAPIKey string
+	AIDisabled      bool
 }
 
 func Load() (*Config, error) {
@@ -79,6 +85,8 @@ func Load() (*Config, error) {
 		TTSCacheMB:        getEnvInt64("NOTATION_TTS_CACHE_MB", 512),
 		TTSKokoroURL:      getEnv("NOTATION_TTS_KOKORO_URL", ""),
 		TTSKokoroVoices:   getEnv("NOTATION_TTS_KOKORO_VOICES", "de_DE-martin-kokoro"),
+		AnthropicAPIKey:   getEnv("NOTATION_ANTHROPIC_API_KEY", ""),
+		AIDisabled:        getEnv("NOTATION_AI_DISABLED", "") == "1",
 	}
 	if !strings.HasPrefix(cfg.SharePath, "/") || cfg.SharePath == "/" {
 		return nil, fmt.Errorf("NOTATION_SHARE_PATH must be a non-root absolute path, got %q", cfg.SharePath)

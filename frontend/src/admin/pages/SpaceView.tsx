@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
-import { FolderPlus, FolderMinus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync } from 'lucide-react'
+import { FolderPlus, FolderMinus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync, Sparkles } from 'lucide-react'
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
@@ -26,6 +26,8 @@ import { PrepareAudioPanel } from '../components/PrepareAudioPanel'
 import { HeaderActionBtn, HeaderOverflowMenu, useHeaderWidth, headerIsCompact, type HeaderAction } from '../components/HeaderActions'
 // Monaco is heavy (~3MB). Load it only when the user actually starts editing.
 const Editor = lazy(() => import('../components/Editor'))
+// The Claude assistant (and the SDK it pulls in) loads only when first opened.
+const ChatPanel = lazy(() => import('../components/chat/ChatPanel'))
 import { SharePanel } from '../components/SharePanel'
 import { MCPPanel } from '../components/MCPPanel'
 import { CommentThread } from '../components/CommentThread'
@@ -49,6 +51,8 @@ import { ConvertDialog } from '../components/ConvertDialog'
 import { FolderSyncPanel } from '../components/FolderSyncPanel'
 import { folderSyncSupported } from '../lib/fsAccess'
 import { encryptedSyncSpace, plaintextSyncSpace, httpPlaintextTransport, type SyncSpace } from '../lib/syncSpace'
+import { aiPlaintextTransport } from '../lib/ai/aiTransport'
+import { aiAvailable } from '../lib/ai/settings'
 
 // Returns true when the keydown target is an element where the user is
 // composing text — keeps single-key shortcuts like "?" from intercepting
@@ -266,6 +270,35 @@ export function SpaceView() {
       return fsReady && fsRef.current ? encryptedSyncSpace(fsRef.current) : null
     },
     // fsReady flips once the encrypted FS has replayed its op-log; fsRef is a ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [spaceID, spaceMeta, encrypted, fsReady],
+  )
+
+  // ---------- Claude assistant ----------
+  // The assistant works on the Space through the same SyncSpace port as the
+  // folder sync, so it is mode-agnostic too. Its plaintext transport tags each
+  // write so the git history credits the change to "ai:" rather than the admin.
+  const [aiEnabled, setAiEnabled] = useState(false)
+  useEffect(() => { let c = false; aiAvailable().then(v => { if (!c) setAiEnabled(v) }); return () => { c = true } }, [])
+  // Remembered across reloads on desktop (on a phone it is a full-screen sheet,
+  // so it always starts closed).
+  const [showChat, setShowChat] = useState(() => {
+    try { return localStorage.getItem('notation_ai_open') === '1' && window.innerWidth >= 768 } catch { return false }
+  })
+  useEffect(() => {
+    try { if (showChat) localStorage.setItem('notation_ai_open', '1'); else localStorage.removeItem('notation_ai_open') } catch { /* private mode */ }
+    // Three side panels don't fit a laptop screen: opening the assistant takes
+    // the comments' and outline's place there (either can be reopened).
+    if (showChat && window.innerWidth < 1440) { setShowComments(false); setShowOutline(false) }
+  }, [showChat])
+  const aiEnabledRef = useRef(false)
+  useEffect(() => { aiEnabledRef.current = aiEnabled }, [aiEnabled])
+  const aiSpace = useMemo<SyncSpace | null>(
+    () => {
+      if (!spaceID || !spaceMeta) return null
+      if (!encrypted) return plaintextSyncSpace(aiPlaintextTransport(spaceID))
+      return fsReady && fsRef.current ? encryptedSyncSpace(fsRef.current) : null
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [spaceID, spaceMeta, encrypted, fsReady],
   )
@@ -802,6 +835,49 @@ export function SpaceView() {
     [setFileParam, isMobile, confirmDiscardEdits],
   )
 
+  // Assistant ↔ view wiring. The turn loop holds these for a whole turn, so they
+  // read the live view state through refs instead of closing over a snapshot.
+  const fileRef = useRef(file)
+  useEffect(() => { fileRef.current = file }, [file])
+  const editingRef = useRef({ editing: false, dirty: false })
+  useEffect(() => { editingRef.current = { editing, dirty: editing && editorDirty } }, [editing, editorDirty])
+  const onAIChanged = useCallback((paths: string[]) => {
+    if (encryptedRef.current) {
+      if (fsRef.current) setTree(fsToEntries(fsRef.current))
+    } else {
+      for (const p of paths) clearCachedFile(contentKey(spaceID, p))
+      refreshTree()
+    }
+    if (paths.includes(fileRef.current)) setContentNonce(n => n + 1)
+  }, [spaceID, refreshTree])
+  const onAIMoved = useCallback((from: string, to: string) => {
+    // Encrypted routes by nodeId, which a move keeps; a plaintext URL carries
+    // the path, so follow the page to its new name.
+    if (fileRef.current === from && !encryptedRef.current) setFileParam(to, { replace: true })
+  }, [setFileParam])
+  const onAIRemoved = useCallback((path: string) => {
+    if (fileRef.current === path) setFileParam('', { replace: true })
+  }, [setFileParam])
+  // The editor is uncontrolled (Monaco keeps its own buffer): a change written
+  // under it would be silently overwritten by its next save — so a page open in
+  // the editor is off-limits, dirty or not.
+  const aiWriteGuard = useCallback((path: string) => {
+    const ed = editingRef.current
+    if (!ed.editing || fileRef.current !== path) return null
+    return `${path} is open in the editor${ed.dirty ? ' with unsaved changes' : ''}. Ask the user to ${ed.dirty ? 'save and ' : ''}close the editor (switch to reading view), then try again.`
+  }, [])
+  // Claude showing a page (open_page) must not throw away an unsaved edit.
+  const aiOpenPage = useCallback((p: string) => {
+    if (editingRef.current.dirty) return
+    setSelectedCommentId(null)
+    setFileParam(p)
+  }, [setFileParam])
+  const aiNavigate = useCallback((p: string) => {
+    selectFile(p)
+    // Full-screen on a phone: get out of the way so the page is visible.
+    if (isMobile) setShowChat(false)
+  }, [selectFile, isMobile])
+
   // Warm a page's text into the cache on hover (file tree, in-document links,
   // prev/next) so the click that follows paints from cache instead of waiting
   // on the network. Best-effort and deduped — see contentCache.
@@ -1133,6 +1209,11 @@ export function SpaceView() {
         e.preventDefault()
         onNewFile()
       }
+      // Alt+A — the Claude assistant. By code, not key: on macOS Option+A types "å".
+      if (e.altKey && !mod && e.code === 'KeyA' && aiEnabledRef.current) {
+        e.preventDefault()
+        setShowChat(v => !v)
+      }
       // Cmd/Ctrl+K — file palette
       if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -1237,6 +1318,7 @@ export function SpaceView() {
   const headerActions: HeaderAction[] = []
   // Full-text search works for BOTH modes: plaintext hits the server /search
   // endpoint; encrypted searches the decrypted corpus in-browser (see below).
+  if (aiEnabled && aiSpace) headerActions.push({ key: 'assistant', label: 'Claude assistant (Alt+A)', icon: <Sparkles size={18} />, active: showChat, onClick: () => setShowChat(v => !v) })
   headerActions.push({ key: 'search', label: 'Search', icon: <Search size={18} />, onClick: () => setSearchOpen(true) })
   if (isMarkdownFile(file) && !isForm) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
   if (!isForm && !encrypted) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { if (!confirmDiscardEdits()) return; setHistoryMode(v => !v); setEditing(false) } })
@@ -1909,6 +1991,29 @@ export function SpaceView() {
                  />
               </div>
             </div>
+          )}
+
+          {showChat && aiEnabled && aiSpace && (
+            <Suspense fallback={<div className="w-[420px] border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex-shrink-0" />}>
+              <ChatPanel
+                key={`${spaceID}:${encrypted ? 'enc' : 'plain'}`}
+                spaceID={spaceID}
+                spaceName={spaceMeta?.name || spaceID}
+                encrypted={encrypted}
+                space={aiSpace}
+                keyHandle={encrypted ? keyStore.get(spaceID) ?? null : null}
+                openPage={isForm ? '' : file}
+                files={allFilesAny}
+                isMobile={isMobile}
+                onNavigate={aiNavigate}
+                onOpenPage={aiOpenPage}
+                onChanged={onAIChanged}
+                onMoved={onAIMoved}
+                onRemoved={onAIRemoved}
+                writeGuard={aiWriteGuard}
+                onClose={() => setShowChat(false)}
+              />
+            </Suspense>
           )}
         </div>
       </main>

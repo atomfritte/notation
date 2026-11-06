@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yoogie27/notation/internal/ai"
 	"github.com/yoogie27/notation/internal/authstore"
 	"github.com/yoogie27/notation/internal/config"
 	"github.com/yoogie27/notation/internal/gitrepo"
@@ -129,6 +130,7 @@ func newIsoEnv(t *testing.T) *isoEnv {
 		MCP:           mcpSrv,
 		AuthStore:     authstore.New(dataDir),
 		TTS:           synth,
+		AI:            ai.NewStore(dataDir, "", false),
 		SessionSecret: bytes.Repeat([]byte("k"), 32),
 	})
 	if err != nil {

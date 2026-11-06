@@ -23,6 +23,35 @@ Standing principles (mirroring the TTS rule — text never leaves the box withou
 
 ---
 
+## Shipped: the Claude assistant (in-browser agent)
+
+A chat panel per Space where Claude reads, searches and edits pages with tools —
+the in-app counterpart of "folder sync + Claude Code". Design decisions that the
+rest of this roadmap should build on:
+
+- **The agent loop runs in the browser**, not on the server: the tab calls the
+  Claude API directly (`@anthropic-ai/sdk`, `connect-src` allows only
+  `api.anthropic.com`) and works on the Space through the `SyncSpace` port the
+  folder sync uses. That is what makes it work on **zero-knowledge Spaces** — the
+  server never holds plaintext, so a server-side agent couldn't. The server only
+  stores the finished chats (`.notation/chats/`), sealed with the Space key on an
+  encrypted Space and format-checked server-side (no plaintext on an encrypted Space).
+- **Provider: Anthropic API, opt-in per instance** (no key → nothing is sent).
+  The key is stored server-side `0600` (or env), handed to the admin tab via a
+  CSRF-protected POST into memory only; `NOTATION_AI_DISABLED=1` removes the feature.
+- **No silent writes** holds: changes are diffs the user applies or rejects;
+  auto-apply is an explicit per-browser switch, every change keeps an undo.
+  Plaintext edits commit as `ai:<user>`; Claude also appends to `CHANGELOG.md`.
+- **Skills/instructions** follow the agent conventions (`AGENTS.md`/`CLAUDE.md`,
+  `skills/*/SKILL.md`, loaded on demand), plus an optional skill-library Space.
+- Retrieval is tool-driven (`search`, `space_map`, `read_file`) over the Space as
+  the browser sees it. The Phase 1 index (Bleve/embeddings) would make it faster
+  on big plaintext Spaces, but it can't serve encrypted ones — the client-side
+  path stays the baseline.
+
+This covers the "RAG chat panel" of Phase 2 for the owner (not yet for share
+guests) and much of the "`/ai` command" idea of Phase 5.
+
 ## Pillar 0 — Security & isolation (continuous, starts now)
 
 Workspace isolation is the product's trust anchor. Everything below ships alongside,

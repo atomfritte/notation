@@ -6,6 +6,7 @@ import { getActorId } from '../lib/encSpace'
 import { encryptSpaceContent, decryptSpaceContent, type PlaintextSource, type PlaintextSink } from '../lib/convert'
 import { purgeLocalSpaceData } from '../lib/purgeLocalSpaceData'
 import { migrateLegacyComments } from '../lib/encComments'
+import { migrateChats, plainCodec, sealedCodec } from '../lib/ai/chatStore'
 import { EncryptedFS } from '../../shared/vfs/encfs'
 import { HttpEncStore } from '../../shared/vfs/httpEncStore'
 import type { KeyHandle } from '../../shared/crypto/keys'
@@ -86,6 +87,10 @@ export function ConvertDialog({
         const fs = await EncryptedFS.open(store, res.handle, getActorId())
         await migrateLegacyComments(fs, legacyComments)
       }
+      // Assistant chats: re-seal every plaintext chat with the new Space key.
+      // The server accepts the sealed copies while the conversion is open and
+      // drops the plaintext originals at finalize (or the copies on abort).
+      await migrateChats(spaceID, plainCodec, sealedCodec(res.handle))
       setPendingHandle(res.handle)
       setRecovery(res.recoveryDisplay)
       setPhase('recovery')
@@ -131,6 +136,8 @@ export function ConvertDialog({
         writeBytes: (p, bytes) => api.writeFileBinary(spaceID, p, new Blob([bytes as BlobPart])),
       }
       await decryptSpaceContent(store, handle, sink, { actorId: getActorId(), onProgress })
+      // Assistant chats: unseal into plain records before finalize drops the sealed ones.
+      await migrateChats(spaceID, sealedCodec(handle), plainCodec)
       const meta = await api.finalizeConvert(spaceID)
       keyStore.lock(spaceID) // it is plaintext now — drop the key
       onDone(meta)
