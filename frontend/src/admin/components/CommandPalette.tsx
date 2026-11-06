@@ -104,7 +104,7 @@ export function CommandPalette({ open, files, actions = [], onClose, onSelect }:
             value={q}
             onChange={e => setQ(e.target.value)}
             placeholder="Jump to a page, or type an action…"
-            className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
+            className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)]"
           />
           <kbd className="text-[10px] px-1.5 py-0.5 border border-[var(--notation-border)] rounded text-[var(--notation-fg-muted)]">esc</kbd>
         </div>

@@ -194,7 +194,7 @@ export function WikiLinkPicker({
           value={expanded ? headingQ : q}
           onChange={e => (expanded ? setHeadingQ(e.target.value) : setQ(e.target.value))}
           placeholder={expanded ? 'Filter headings…' : 'Search pages…'}
-          className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
+          className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)]"
         />
         {expanded && (
           <button

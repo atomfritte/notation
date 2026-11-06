@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BUILTIN_THEMES, applyTheme, loadCustomThemes, type ModePalette } from './theme'
+import { BUILTIN_THEMES, accentOnChrome, applyTheme, loadCustomThemes, type ModePalette } from './theme'
 
 // The palette contract, pinned: every built-in must be complete (a missing
 // token renders as an invalid CSS var, i.e. an unpainted surface), split-tone
@@ -153,5 +153,47 @@ describe('theme storage migration', () => {
     const css = document.getElementById('notation-theme-style')?.textContent ?? ''
     expect(css.match(/--notation-chrome-bg:/g) ?? []).toHaveLength(2)
     expect(css).toContain('--notation-chrome-bg: #1B1F29')
+  })
+})
+
+describe('accent inside chrome', () => {
+  const contrast = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+
+  it('reads on the chrome of every split-tone theme', () => {
+    // The regression: a split-tone accent tuned for paper (#2563EB, #C0286B…)
+    // painted count badges and match highlights onto the deep chrome at ~2.5:1.
+    for (const t of BUILTIN_THEMES) {
+      for (const mode of ['dark', 'light'] as const) {
+        const p = t[mode]
+        const a = accentOnChrome(p)
+        if (p.chromeBg === p.bgElevated) continue
+        expect(contrast(a, p.chromeBg), `${t.name} ${mode} accent on chrome`).toBeGreaterThanOrEqual(4.5)
+        expect(contrast(a, p.chromeBgAlt), `${t.name} ${mode} accent on chrome card`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+
+  it('leaves uniform themes and already-readable accents untouched', () => {
+    for (const t of BUILTIN_THEMES) {
+      for (const mode of ['dark', 'light'] as const) {
+        const p = t[mode]
+        if (p.chromeBg === p.bgElevated) expect(accentOnChrome(p), `${t.name} ${mode}`).toBe(p.accent)
+      }
+    }
+    // Split-tone dark modes already carry a bright accent.
+    const studio = BUILTIN_THEMES.find(x => x.name === 'Studio')!
+    expect(accentOnChrome(studio.dark)).toBe(studio.dark.accent)
+    expect(accentOnChrome(studio.light)).not.toBe(studio.light.accent)
+  })
+
+  it('works for a custom split-tone theme too', () => {
+    const studio = BUILTIN_THEMES.find(x => x.name === 'Studio')!
+    const custom = { ...studio.light, accent: '#2A9DA8', chromeBg: '#1F3A48', chromeBgAlt: '#5A1E2E', chromeFg: '#EAF4F7' }
+    const a = accentOnChrome(custom)
+    expect(contrast(a, custom.chromeBg)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(a, custom.chromeBgAlt)).toBeGreaterThanOrEqual(4.5)
   })
 })
