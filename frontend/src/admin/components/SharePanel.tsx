@@ -197,7 +197,7 @@ export function SharePanel({ spaceID }: Props) {
                     <span className="px-1.5 py-0.5 bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] rounded">{s.permission}</span>
                   </div>
                   {s.scope && (
-                    <div className="mt-0.5 text-[color:var(--notation-accent)] font-mono truncate" title={`Limited to ${s.scope}`}>
+                    <div className="mt-0.5 text-[color:var(--notation-accent-text)] font-mono truncate" title={`Limited to ${s.scope}`}>
                       ⌖ {s.scope}
                     </div>
                   )}

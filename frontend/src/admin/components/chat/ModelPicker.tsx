@@ -70,7 +70,7 @@ export function ModelPicker({
         title="Choose the model and how thoroughly Claude works"
         className="flex items-center gap-1 max-w-full pl-1.5 pr-1 py-0.5 rounded-md border border-[var(--notation-border)] text-[11.5px] text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] disabled:opacity-50"
       >
-        <Cpu size={11} className="flex-shrink-0 text-[color:var(--notation-accent)]" />
+        <Cpu size={11} className="flex-shrink-0 text-[color:var(--notation-accent-text)]" />
         <span className="truncate font-medium">{short(current.label)}</span>
         {effortLabel && <span className="truncate text-[var(--notation-fg-muted)]">· {effortLabel}</span>}
         <ChevronDown size={11} className="flex-shrink-0 text-[var(--notation-fg-muted)]" />
@@ -110,7 +110,7 @@ export function ModelPicker({
                     onClick={() => onChange(m.id, effort)}
                     className={`w-full text-left flex gap-2 px-2 py-1.5 rounded-lg ${sel ? 'bg-[var(--notation-accent-10)]' : 'hover:bg-[var(--notation-bg-alt)]'}`}
                   >
-                    <span className="w-3.5 flex-shrink-0 pt-0.5">{sel && <Check size={13} className="text-[color:var(--notation-accent)]" />}</span>
+                    <span className="w-3.5 flex-shrink-0 pt-0.5">{sel && <Check size={13} className="text-[color:var(--notation-accent-text)]" />}</span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5 text-[12.5px] font-medium">
                         <span className="truncate">{m.label}</span>

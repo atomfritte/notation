@@ -76,7 +76,7 @@ export function Outline({ content }: Props) {
               className={
                 'block w-full text-left px-2 py-1 rounded-md truncate transition-colors ' +
                 (active === h.id
-                  ? 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)] font-medium border-l-2 border-[var(--notation-border)] dark:border-[color:var(--notation-accent)] -ml-0.5 pl-[6px]'
+                  ? 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent-text)] font-medium border-l-2 border-[var(--notation-border)] dark:border-[color:var(--notation-accent)] -ml-0.5 pl-[6px]'
                   : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-bg-alt)]/70 hover:text-[var(--notation-fg)] dark:text-[var(--notation-fg-muted)] hover:bg-[var(--notation-bg-alt)]/50 hover:text-[var(--notation-fg)]')
               }
               style={{ paddingLeft: (h.level - minLevel) * 12 + 8 }}

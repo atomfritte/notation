@@ -67,7 +67,7 @@ export function UnlockBar({
       <div className="flex items-start gap-2 text-[12.5px]">
         {state === 'legacy'
           ? <ShieldAlert size={15} className="flex-shrink-0 mt-0.5 text-[var(--notation-warning)]" />
-          : <LockKeyhole size={15} className="flex-shrink-0 mt-0.5 text-[color:var(--notation-accent)]" />}
+          : <LockKeyhole size={15} className="flex-shrink-0 mt-0.5 text-[color:var(--notation-accent-text)]" />}
         <div className="min-w-0">
           {state === 'legacy' ? (
             <>

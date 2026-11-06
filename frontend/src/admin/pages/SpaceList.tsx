@@ -204,7 +204,7 @@ export function SpaceList() {
 
         {!online && (
           <div className="mb-6 p-3 rounded-md bg-[color:var(--notation-accent-10)] border border-[color:var(--notation-accent-40)] text-sm text-[var(--notation-fg)] flex items-center gap-2">
-            <CloudOff size={16} className="text-[color:var(--notation-accent)] flex-shrink-0" />
+            <CloudOff size={16} className="text-[color:var(--notation-accent-text)] flex-shrink-0" />
             <span>You’re offline — only spaces marked for offline can be opened.</span>
           </div>
         )}
@@ -280,7 +280,7 @@ function CreateCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-xl border-2 border-dashed border-[var(--notation-border)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors flex flex-col items-center justify-center min-h-[12rem] text-[var(--notation-fg-muted)] hover:text-[color:var(--notation-accent)] group"
+      className="rounded-xl border-2 border-dashed border-[var(--notation-border)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors flex flex-col items-center justify-center min-h-[12rem] text-[var(--notation-fg-muted)] hover:text-[color:var(--notation-accent-text)] group"
     >
       <div className="w-10 h-10 rounded-full border-2 border-current flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
         <Plus size={20} strokeWidth={2} />

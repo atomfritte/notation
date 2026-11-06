@@ -227,7 +227,7 @@ export function WikiLinkPicker({
                     onClick={() => insertFile(f)}
                     className="flex-1 text-left flex items-center gap-2 px-3 py-1.5 text-[var(--notation-fg)] min-w-0"
                   >
-                    <FileText size={12} className={active ? 'text-[color:var(--notation-accent)]' : 'opacity-60'} />
+                    <FileText size={12} className={active ? 'text-[color:var(--notation-accent-text)]' : 'opacity-60'} />
                     <span className="truncate">{clean}</span>
                   </button>
                   <button
@@ -252,7 +252,7 @@ export function WikiLinkPicker({
                 onClick={() => insertFile(expanded)}
                 className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-[var(--notation-fg)] border-b border-[var(--notation-border)]/50"
               >
-                <FileText size={12} className={idx === 0 ? 'text-[color:var(--notation-accent)]' : 'opacity-60'} />
+                <FileText size={12} className={idx === 0 ? 'text-[color:var(--notation-accent-text)]' : 'opacity-60'} />
                 Insert <code className="text-xs bg-[var(--notation-bg-alt)] px-1 rounded">[[{expanded.replace(/\.md$/i, '')}]]</code>
               </button>
             </li>
@@ -273,7 +273,7 @@ export function WikiLinkPicker({
                       className="w-full text-left flex items-center gap-2 py-1.5 text-[var(--notation-fg)]"
                       style={{ paddingLeft: (h.level - 1) * 10 + 12, paddingRight: 12 }}
                     >
-                      <Hash size={10} className={active ? 'text-[color:var(--notation-accent)]' : 'opacity-50'} />
+                      <Hash size={10} className={active ? 'text-[color:var(--notation-accent-text)]' : 'opacity-50'} />
                       <span className="truncate">{h.text}</span>
                     </button>
                   </li>

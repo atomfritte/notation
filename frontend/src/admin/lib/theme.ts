@@ -581,8 +581,79 @@ export function accentOnChrome(p: ModePalette): string {
   return ink
 }
 
+/** What every text colour a theme paints must reach: WCAG AA for body text. */
+const TEXT_MIN = 4.5
+/** The strongest tint accent text sits on: badges (15%), avatars and active rows (20%). */
+const BADGE_TINT = 0.2
+
+/**
+ * `color`, moved toward black (light grounds) or white (dark grounds) just
+ * far enough to read at {@link TEXT_MIN} on every one of `grounds`, and
+ * returned unchanged when it already does. Scaling toward black keeps the
+ * hue; that's why the mix goes to pure ink and not to the theme's fg, which
+ * can be a grey that never reaches AA itself (Solarized's #586E75 on its
+ * #EEE8D5 card).
+ */
+function readable(color: string, grounds: string[]): string {
+  const worst = (c: string) => Math.min(...grounds.map(g => contrastRatio(c, g)))
+  if (worst(color) >= TEXT_MIN) return color
+  const ink = luminance(grounds[0]) > 0.179 ? '#000000' : '#FFFFFF'
+  for (let step = 1; step <= 40; step++) {
+    const c = mix(color, ink, step / 40)
+    if (worst(c) >= TEXT_MIN) return c
+  }
+  return ink
+}
+
+/** The content surfaces, and a table's header row (index.css: elevated + 40% border). */
+const pageGrounds = (p: ModePalette) => [p.bg, p.bgElevated, p.bgAlt, mix(p.bgElevated, p.border, 0.4)]
+/** Both chrome tones, and the sticky header: chrome at 90% over the page. */
+const chromeGrounds = (p: ModePalette) => {
+  const chrome = p.chromeBg || p.bgElevated
+  return [chrome, p.chromeBgAlt || p.bgAlt, mix(chrome, p.bg, 0.1)]
+}
+/** Each ground, and the same ground under the accent's badge tint. */
+const withTint = (grounds: string[], accent: string) => grounds.flatMap(g => [g, mix(g, accent, BADGE_TINT)])
+
+/**
+ * The accent as a TEXT colour: links, count badges, active labels, palette
+ * matches. A theme picks its accent as a fill (buttons, rings, the active
+ * bar), and a fill only has to stand out. Ink has to be read: Lime's #65A30D
+ * is 3:1 on white, Solarized's blue 3.5:1 on its paper, lower still on the
+ * accent's own badge tint. `page` holds for the content surfaces, `chrome`
+ * (from {@link accentOnChrome}) for the chrome ones, which `.surface-elevated`
+ * swaps in. Dark modes and accents that already read are returned as they are.
+ */
+export function accentText(p: ModePalette): { page: string; chrome: string } {
+  const chromeAccent = accentOnChrome(p)
+  return {
+    page: readable(p.accent, withTint(pageGrounds(p), p.accent)),
+    // Plus the border colour: selected sidebar rows paint it as background.
+    chrome: readable(chromeAccent, withTint([...chromeGrounds(p), p.chromeBorder || p.border], chromeAccent)),
+  }
+}
+
+/**
+ * The text colours as painted: each one {@link readable} on the surfaces it
+ * lands on. Theme palettes take their greys from the source scheme, and
+ * those often sit just under AA as body or secondary text — the neutral
+ * zinc-500 at 4.4:1 on the subtle surface, Gruvbox and Solarized muted near
+ * 3.7:1, Tokyo Night's dark comment grey at 2.7:1. The stored theme keeps
+ * what was picked; only the painted value moves, and only as far as needed.
+ */
+export function readableInk(p: ModePalette): Pick<ModePalette, 'fg' | 'fgMuted' | 'chromeFg' | 'chromeFgMuted'> {
+  return {
+    fg: readable(p.fg, pageGrounds(p)),
+    fgMuted: readable(p.fgMuted, pageGrounds(p)),
+    chromeFg: readable(p.chromeFg, chromeGrounds(p)),
+    chromeFgMuted: readable(p.chromeFgMuted, chromeGrounds(p)),
+  }
+}
+
 function paletteToVars(p: ModePalette): Record<string, string> {
   const chromeAccent = accentOnChrome(p)
+  const text = accentText(p)
+  const ink = readableInk(p)
   const chromeAlpha = Object.fromEntries(
     Object.entries(alphaSiblings(chromeAccent)).map(([k, v]) => [k.replace('--notation-accent-', '--notation-accent-chrome-'), v]),
   )
@@ -595,11 +666,11 @@ function paletteToVars(p: ModePalette): Record<string, string> {
     '--notation-chrome-bg': p.chromeBg || p.bgElevated,
     '--notation-chrome-bg-alt': p.chromeBgAlt || p.bgAlt,
     '--notation-bg-alt': p.bgAlt,
-    '--notation-fg': p.fg,
-    '--notation-fg-muted': p.fgMuted,
+    '--notation-fg': ink.fg,
+    '--notation-fg-muted': ink.fgMuted,
     '--notation-border': p.border,
-    '--notation-fg-on-elevated': p.chromeFg,
-    '--notation-fg-on-elevated-muted': p.chromeFgMuted,
+    '--notation-fg-on-elevated': ink.chromeFg,
+    '--notation-fg-on-elevated-muted': ink.chromeFgMuted,
     '--notation-border-on-elevated': p.chromeBorder,
     '--notation-danger': p.danger,
     '--notation-warning': p.warning,
@@ -613,6 +684,10 @@ function paletteToVars(p: ModePalette): Record<string, string> {
     '--notation-accent-on-chrome': chromeAccent,
     '--notation-fg-on-accent-chrome': chromeAccent === p.accent ? p.fgOnAccent : pickOnAccent(chromeAccent),
     ...chromeAlpha,
+    // The accent as ink (see accentText); `.surface-elevated` rebinds
+    // --notation-accent-text to the chrome one.
+    '--notation-accent-text': text.page,
+    '--notation-accent-text-chrome': text.chrome,
   }
 }
 

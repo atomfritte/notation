@@ -8,7 +8,7 @@ const actionColors: Record<string, string> = {
   'read': 'text-[var(--notation-info)] dark:text-[var(--notation-info)]',
   'write': 'text-[var(--notation-warning)] dark:text-[var(--notation-warning)]',
   'delete': 'text-[var(--notation-danger)] dark:text-[var(--notation-danger)]',
-  'comment': 'text-[color:var(--notation-accent)]',
+  'comment': 'text-[color:var(--notation-accent-text)]',
   'mcp': 'text-purple-600 dark:text-purple-400',
 }
 

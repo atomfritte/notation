@@ -186,7 +186,7 @@ export function FileTree({
     <>
     {newCount > 0 && onMarkAllSeen && (
       <div className="flex items-center justify-between px-2 pb-1.5 text-[10px]">
-        <span className="font-semibold text-[color:var(--notation-accent)]">
+        <span className="font-semibold text-[color:var(--notation-accent-text)]">
           {newCount} new
         </span>
         <button
@@ -315,10 +315,10 @@ function FileRow({
         style={{ paddingLeft: depth * 12 + 28 }}
         title={entry.path}
       >
-        <FileText size={14} className={isActive ? 'text-[color:var(--notation-accent)]' : 'opacity-70'} />
+        <FileText size={14} className={isActive ? 'text-[color:var(--notation-accent-text)]' : 'opacity-70'} />
         <span className="truncate flex-1">{entry.name.replace(/\.md$/i, '')}</span>
         {isNew && (
-          <span className="text-[9px] font-bold uppercase bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full flex-shrink-0">
+          <span className="text-[9px] font-bold uppercase bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent-text)] px-1.5 py-0.5 rounded-full flex-shrink-0">
             new
           </span>
         )}
@@ -374,15 +374,15 @@ function DirRow({
           style={{ paddingLeft: depth * 12 + 8 }}
           title={`${entry.path} (form)`}
         >
-          <ClipboardList size={14} className={current === entry.path ? 'text-[color:var(--notation-accent)]' : 'opacity-70'} />
+          <ClipboardList size={14} className={current === entry.path ? 'text-[color:var(--notation-accent-text)]' : 'opacity-70'} />
           <span className="truncate flex-1">{entry.name}</span>
           {newPaths?.has(entry.path) && (
-            <span className="text-[9px] font-bold uppercase bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full flex-shrink-0">
+            <span className="text-[9px] font-bold uppercase bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent-text)] px-1.5 py-0.5 rounded-full flex-shrink-0">
               new
             </span>
           )}
           {entry.entries ? (
-            <span className="text-[9px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full flex-shrink-0">{entry.entries}</span>
+            <span className="text-[9px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent-text)] px-1.5 py-0.5 rounded-full flex-shrink-0">{entry.entries}</span>
           ) : null}
         </button>
       </li>
@@ -439,7 +439,7 @@ function DirRow({
       <div
         className={`flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer transition-colors ${
           isDropTarget
-            ? 'bg-[color:var(--notation-accent-15)] ring-1 ring-[color:var(--notation-accent-40)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]'
+            ? 'bg-[color:var(--notation-accent-15)] ring-1 ring-[color:var(--notation-accent-40)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent-text)]'
             : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)] hover:text-[var(--notation-fg)]'
         }`}
         style={{ paddingLeft: depth * 12 + 8 }}

@@ -276,7 +276,7 @@ function Column({
         <span className="text-xs font-medium text-[var(--notation-fg-muted)] tabular-nums">{ids.length}</span>
         <button
           onClick={() => onQuickCreate(def.id)}
-          className="ml-auto p-1 rounded text-[var(--notation-fg-muted)] hover:text-[color:var(--notation-accent)] hover:bg-[color:var(--notation-accent-10)] transition-colors"
+          className="ml-auto p-1 rounded text-[var(--notation-fg-muted)] hover:text-[color:var(--notation-accent-text)] hover:bg-[color:var(--notation-accent-10)] transition-colors"
           title={`New space in ${def.label}`}
           aria-label={`New space in ${def.label}`}
         >

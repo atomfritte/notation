@@ -637,7 +637,7 @@ function Toolbar({ dirty, saving, err, onSave, onAction }: ToolbarProps) {
         <button
           onClick={onSave}
           disabled={!dirty || saving}
-          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40"
+          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 rounded-md transition-colors disabled:opacity-40"
           title="Save (⌘S)"
         >
           <Save size={13} /> {saving ? 'Saving…' : 'Save'}

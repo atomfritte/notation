@@ -81,7 +81,7 @@ export function SidebarTabs({ active, onPick, badges, wide = false }: Props) {
             {showLabel && <span className="truncate">{t.label}</span>}
             {count > 0 && (
               <span
-                className="flex-shrink-0 text-[10px] font-bold px-1 rounded-full bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)]"
+                className="flex-shrink-0 text-[10px] font-bold px-1 rounded-full bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent-text)]"
                 aria-label={`${count} item${count === 1 ? '' : 's'}`}
               >
                 {count > 99 ? '99+' : count}

@@ -17,7 +17,7 @@ export function HeaderActionBtn({ action }: { action: HeaderAction }) {
       className={
         'p-1.5 rounded-md transition-colors flex items-center ' +
         (action.active
-          ? 'bg-[var(--notation-border)] text-[color:var(--notation-accent)]'
+          ? 'bg-[var(--notation-border)] text-[color:var(--notation-accent-text)]'
           : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]')
       }
     >

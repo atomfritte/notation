@@ -576,7 +576,7 @@ function ShareUI() {
         >
         <div className="p-4 border-b border-[var(--notation-border)]">
           <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium">
-            <div className="w-5 h-5 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase">
+            <div className="w-5 h-5 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent-text)] flex items-center justify-center font-bold text-xs uppercase">
               {info.space.id.charAt(0)}
             </div>
             <span className="truncate">{info.space.name}</span>
@@ -586,7 +586,7 @@ function ShareUI() {
               className={
                 'px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ' +
                 (info.permission === 'edit'
-                  ? 'bg-[color:var(--notation-accent-20)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]'
+                  ? 'bg-[color:var(--notation-accent-20)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent-text)]'
                   : info.permission === 'comment'
                   ? 'bg-[var(--notation-warning)]/40 text-[var(--notation-warning)] dark:bg-[var(--notation-warning)]/10 dark:text-[var(--notation-warning)]'
                   : 'bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] text-[var(--notation-fg-muted)]')
@@ -623,7 +623,7 @@ function ShareUI() {
                 {t.icon}
                 <span className="truncate">{t.label}</span>
                 {t.badge ? (
-                  <span className="text-[9px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full flex-shrink-0">
+                  <span className="text-[9px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent-text)] px-1.5 py-0.5 rounded-full flex-shrink-0">
                     {t.badge}
                   </span>
                 ) : null}
