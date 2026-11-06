@@ -138,7 +138,7 @@ export function PrepareAudioPanel({ open, spaceID, tree, voices, onClose }: Prop
 
               {result && (
                 <div className="flex items-start gap-2 text-sm rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg)] p-3">
-                  <Check size={16} className="text-[var(--notation-accent)] mt-0.5 flex-shrink-0" />
+                  <Check size={16} className="text-[color:var(--notation-accent-text)] mt-0.5 flex-shrink-0" />
                   <div className="text-[var(--notation-fg)]">
                     {result.cancelled ? 'Abgebrochen — ' : 'Fertig — '}
                     {result.clips} Clips aus {result.pages} {result.pages === 1 ? 'Seite' : 'Seiten'} gecacht

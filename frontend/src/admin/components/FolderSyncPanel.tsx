@@ -291,7 +291,7 @@ export function FolderSyncPanel({
         ) : phase === 'result' ? (
           <div className="py-2">
             <div className="flex items-start gap-2 rounded-md border border-[color:var(--notation-accent-40)] bg-[color:var(--notation-accent-10)] p-3 text-sm text-[var(--notation-fg)] mb-4">
-              <Check size={16} className="text-[color:var(--notation-accent)] flex-shrink-0 mt-0.5" />
+              <Check size={16} className="text-[color:var(--notation-accent-text)] flex-shrink-0 mt-0.5" />
               <span>{result}</span>
             </div>
             {failed.length > 0 && (
@@ -344,7 +344,7 @@ export function FolderSyncPanel({
               </div>
             ) : (
               <div className="flex items-start gap-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] p-3 text-xs text-[var(--notation-fg-muted)]">
-                <Info size={16} className="text-[color:var(--notation-accent)] flex-shrink-0 mt-0.5" />
+                <Info size={16} className="text-[color:var(--notation-accent-text)] flex-shrink-0 mt-0.5" />
                 <span>
                   Pull copies this space into the folder you choose so a local tool can edit it. Push writes
                   your edits back — each pushed file lands in the space’s version history like any other
@@ -367,7 +367,7 @@ export function FolderSyncPanel({
                     <div className="text-sm text-[var(--notation-fg)] font-medium truncate flex items-center gap-1.5">
                       {folderName}
                       {granted
-                        ? <span className="text-[10px] font-semibold text-[color:var(--notation-accent)] uppercase tracking-wide">connected</span>
+                        ? <span className="text-[10px] font-semibold text-[color:var(--notation-accent-text)] uppercase tracking-wide">connected</span>
                         : <span className="text-[10px] font-semibold text-[var(--notation-warning)] uppercase tracking-wide">needs re-grant</span>}
                     </div>
                     <div className="text-[11px] text-[var(--notation-fg-muted)]">
@@ -397,14 +397,14 @@ export function FolderSyncPanel({
             {/* Actions */}
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => void doPreparePull()} className="flex flex-col items-start gap-1 p-3 rounded-lg border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors text-left">
-                <FolderDown size={18} className="text-[color:var(--notation-accent)]" />
+                <FolderDown size={18} className="text-[color:var(--notation-accent-text)]" />
                 <span className="text-sm font-semibold text-[var(--notation-fg)]">Pull</span>
                 <span className="text-[11px] text-[var(--notation-fg-muted)] leading-tight">
                   Review what would land in the folder & pick it.
                 </span>
               </button>
               <button onClick={() => void doPreparePush()} className="flex flex-col items-start gap-1 p-3 rounded-lg border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] hover:border-[color:var(--notation-accent-40)] hover:bg-[color:var(--notation-accent-10)] transition-colors text-left">
-                <FolderUp size={18} className="text-[color:var(--notation-accent)]" />
+                <FolderUp size={18} className="text-[color:var(--notation-accent-text)]" />
                 <span className="text-sm font-semibold text-[var(--notation-fg)]">Push</span>
                 <span className="text-[11px] text-[var(--notation-fg-muted)] leading-tight">Review folder edits & apply them back.</span>
               </button>
@@ -522,7 +522,7 @@ export function PullPreview({
                 safe default
               </button>
               <span className="text-[var(--notation-border)]">|</span>
-              <button onClick={() => onSelect(allActionableSelection(prepared.plan))} className="text-[color:var(--notation-accent)] hover:underline">
+              <button onClick={() => onSelect(allActionableSelection(prepared.plan))} className="text-[color:var(--notation-accent-text)] hover:underline">
                 all
               </button>
               <span className="text-[var(--notation-border)]">|</span>
@@ -541,7 +541,7 @@ export function PullPreview({
                   </span>
                   <button
                     onClick={() => setGroup(g.rows, !all)}
-                    className="text-[11px] text-[color:var(--notation-accent)] hover:underline flex-shrink-0"
+                    className="text-[11px] text-[color:var(--notation-accent-text)] hover:underline flex-shrink-0"
                   >
                     {all ? 'none' : 'all'}
                   </button>
@@ -591,8 +591,8 @@ export function PullPreview({
 
 function PullRow({ entry, checked, onToggle }: { entry: PullEntry; checked?: boolean; onToggle?: () => void }) {
   const icon =
-    entry.kind === 'new' ? <Plus size={13} className="text-[color:var(--notation-accent)]" />
-    : entry.kind === 'update' ? <ArrowDownToLine size={13} className="text-[color:var(--notation-accent)]" />
+    entry.kind === 'new' ? <Plus size={13} className="text-[color:var(--notation-accent-text)]" />
+    : entry.kind === 'update' ? <ArrowDownToLine size={13} className="text-[color:var(--notation-accent-text)]" />
     : entry.kind === 'staleLocal' ? <Trash2 size={13} className="text-[var(--notation-danger)]" />
     : entry.kind === 'localOnly' ? <HardDriveDownload size={13} className="text-[var(--notation-fg-muted)]" />
     : <FileClock size={13} className="text-[var(--notation-warning)]" />
@@ -668,7 +668,7 @@ export function PushPreview({
 
       {counts.moved > 0 && (
         <div className="flex items-start gap-2 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] p-2.5 text-[11px] text-[var(--notation-fg-muted)] mb-3">
-          <Info size={13} className="text-[color:var(--notation-accent)] flex-shrink-0 mt-0.5" />
+          <Info size={13} className="text-[color:var(--notation-accent-text)] flex-shrink-0 mt-0.5" />
           <span>
             {counts.moved} file{counts.moved === 1 ? ' was' : 's were'} recognised as <strong>moved</strong>, not
             re-created — so each page keeps its comments, reactions and history at the new path.
@@ -722,9 +722,9 @@ export function PushPreview({
 
 function Row({ entry, dimmed }: { entry: PushEntry; dimmed?: boolean }) {
   const icon =
-    entry.kind === 'new' ? <Plus size={13} className="text-[color:var(--notation-accent)]" />
+    entry.kind === 'new' ? <Plus size={13} className="text-[color:var(--notation-accent-text)]" />
     : entry.kind === 'modified' ? <Pencil size={13} className="text-[var(--notation-warning)]" />
-    : entry.kind === 'moved' ? <MoveRight size={13} className="text-[color:var(--notation-accent)]" />
+    : entry.kind === 'moved' ? <MoveRight size={13} className="text-[color:var(--notation-accent-text)]" />
     : <Trash2 size={13} className="text-[var(--notation-danger)]" />
   return (
     <div className={`flex items-center gap-2 px-3 py-1.5 text-xs ${dimmed ? 'opacity-40' : ''}`}>
@@ -749,7 +749,7 @@ function Row({ entry, dimmed }: { entry: PushEntry; dimmed?: boolean }) {
 
 function Stat({ label, n, tone }: { label: string; n: number; tone: 'accent' | 'warning' | 'danger' | 'muted' }) {
   const color =
-    tone === 'accent' ? 'text-[color:var(--notation-accent)]'
+    tone === 'accent' ? 'text-[color:var(--notation-accent-text)]'
     : tone === 'warning' ? 'text-[var(--notation-warning)]'
     : tone === 'danger' ? 'text-[var(--notation-danger)]'
     : 'text-[var(--notation-fg-muted)]'

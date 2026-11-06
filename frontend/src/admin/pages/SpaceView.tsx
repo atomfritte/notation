@@ -1471,7 +1471,7 @@ export function SpaceView() {
               title="Back to all Spaces"
             >
               <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium w-full min-w-0">
-                <div className="w-5 h-5 flex-shrink-0 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase relative">
+                <div className="w-5 h-5 flex-shrink-0 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent-text)] flex items-center justify-center font-bold text-xs uppercase relative">
                   <span className="group-hover:opacity-0 transition-opacity">{spaceName.charAt(0)}</span>
                   <ChevronLeft size={12} className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
@@ -1651,7 +1651,7 @@ export function SpaceView() {
         {dragOver && (
           <div className="absolute inset-0 z-30 bg-[color:var(--notation-accent-10)] dark:bg-[color:var(--notation-accent-15)] border-4 border-dashed border-[color:var(--notation-accent)] flex items-center justify-center pointer-events-none">
             <div className="bg-[var(--notation-bg-alt)] rounded-lg px-6 py-4 shadow-xl flex items-center gap-3">
-              <Upload size={24} className="text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]" />
+              <Upload size={24} className="text-[var(--notation-fg)] dark:text-[color:var(--notation-accent-text)]" />
               <div>
                 <div className="text-[var(--notation-fg)] font-semibold">Drop to upload</div>
                 <div className="text-xs text-[var(--notation-fg-muted)]">Files land in this Space's root</div>
@@ -1690,7 +1690,7 @@ export function SpaceView() {
 
             {encrypted && (
               <span
-                className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] text-[11px] font-semibold"
+                className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent-text)] text-[11px] font-semibold"
                 title="Zero-knowledge encrypted space — content is decrypted only in your browser"
               >
                 <Lock size={11} /> Encrypted
@@ -1968,7 +1968,7 @@ export function SpaceView() {
               <div className="h-full flex flex-col items-center justify-center text-[var(--notation-fg-muted)] p-8">
                 <FileText size={48} className="mb-4 opacity-20 dark:opacity-10" />
                 <p className="text-lg">Select a page to start writing</p>
-                <button onClick={onNewFile} className="mt-4 px-4 py-2 bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-10)] dark:text-[color:var(--notation-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[color:var(--notation-accent-20)] font-medium rounded-md transition-colors">
+                <button onClick={onNewFile} className="mt-4 px-4 py-2 bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-10)] dark:text-[color:var(--notation-accent-text)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[color:var(--notation-accent-20)] font-medium rounded-md transition-colors">
                   Create Page
                 </button>
               </div>

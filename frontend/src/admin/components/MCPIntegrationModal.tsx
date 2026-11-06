@@ -117,7 +117,7 @@ curl -X POST '${url}' \\
                   className={
                     'px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ' +
                     (tab === t
-                      ? 'border-[var(--notation-border)] dark:border-[color:var(--notation-accent)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)]'
+                      ? 'border-[var(--notation-border)] dark:border-[color:var(--notation-accent)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent-text)]'
                       : 'border-transparent text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]')
                   }
                 >
@@ -177,7 +177,7 @@ curl -X POST '${url}' \\
         <div className="px-5 py-3 border-t border-[var(--notation-border)] flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-sm font-medium bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] rounded-md hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] transition-colors"
+            className="px-4 py-1.5 text-sm font-medium bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] rounded-md hover:opacity-90 transition-colors"
           >
             Done
           </button>

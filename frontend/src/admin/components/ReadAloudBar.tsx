@@ -458,7 +458,7 @@ export function ReadAloudBar({
   return (
     <div className="no-print fixed bottom-0 inset-x-0 z-40 flex justify-center px-3 read-aloud-safe-area pointer-events-none">
       <div className="pointer-events-auto w-full max-w-2xl surface-elevated pill-accent bg-[var(--notation-bg-elevated)] border border-[color:var(--notation-accent-50)] rounded-xl shadow-2xl shadow-[color:var(--notation-accent-20)] px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <Headphones size={18} className="text-[color:var(--notation-accent)] flex-shrink-0" />
+        <Headphones size={18} className="text-[color:var(--notation-accent-text)] flex-shrink-0" />
 
         {engineOptions.length > 1 && (
           <Dropdown value={engineId} onChange={v => switchEngine(v as EngineId)} title="Voice engine"

@@ -413,7 +413,7 @@ export default function ChatPanel(props: ChatPanelProps) {
 
       {/* header */}
       <div className="flex items-center gap-1 px-2.5 py-2 border-b border-[var(--notation-border)] min-h-[44px]">
-        <Sparkles size={15} className="text-[color:var(--notation-accent)] flex-shrink-0 ml-0.5" />
+        <Sparkles size={15} className="text-[color:var(--notation-accent-text)] flex-shrink-0 ml-0.5" />
         <div className="relative flex-1 min-w-0">
           <button
             className="flex items-center gap-1 max-w-full px-1.5 py-1 rounded-md hover:bg-[var(--notation-bg-alt)] text-[13px] font-semibold"
@@ -694,7 +694,7 @@ function EmptyState({
   return (
     <div className="flex flex-col gap-3 py-2">
       <div>
-        <div className="text-[14px] font-semibold flex items-center gap-1.5"><Sparkles size={14} className="text-[color:var(--notation-accent)]" /> What can Claude do here?</div>
+        <div className="text-[14px] font-semibold flex items-center gap-1.5"><Sparkles size={14} className="text-[color:var(--notation-accent-text)]" /> What can Claude do here?</div>
         <p className="text-[12.5px] text-[var(--notation-fg-muted)] mt-1 leading-relaxed">
           Ask about the pages, or have Claude write and reorganise them. You see every change as a diff before it is applied, and can undo it afterwards.
           {encrypted && ' This Space is encrypted: the conversation goes from this tab to Claude directly and is stored sealed.'}

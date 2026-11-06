@@ -175,7 +175,7 @@ export function SearchPanel({ open, onClose, onSelect, onSearch, files }: Props)
                 </span>
                 {byTitle.has(path) && (
                   // Says why a page with no quoted line below it is here at all.
-                  <span className="ml-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-[color:var(--notation-accent-30)] text-[color:var(--notation-accent)] font-sans">
+                  <span className="ml-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-[color:var(--notation-accent-30)] text-[color:var(--notation-accent-text)] font-sans">
                     title
                   </span>
                 )}
@@ -191,7 +191,7 @@ export function SearchPanel({ open, onClose, onSelect, onSearch, files }: Props)
                     className="px-4 py-2 text-xs hover:bg-[var(--notation-bg-alt)] hover:bg-[var(--notation-bg-alt)]/30 cursor-pointer flex gap-3"
                   >
                     <span className="text-[var(--notation-fg-muted)] select-none w-8 text-right shrink-0">{m.line}</span>
-                    <span className="text-[var(--notation-fg-muted)] text-[var(--notation-fg)] truncate">
+                    <span className="text-[var(--notation-fg)] truncate">
                       <Highlight text={m.content} query={q} />
                     </span>
                   </li>
@@ -225,9 +225,10 @@ function Highlight({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((p, k) =>
         p.hit ? (
-          // The tint marks the hit; the text stays foreground — accent text on
-          // its own 30% tint falls below AA (worst in a dark split-tone chrome).
-          <mark key={k} className="bg-[color:var(--notation-accent-30)] text-[var(--notation-fg)] font-medium rounded px-0.5">
+          // The tint marks the hit; the text keeps the line's colour (the global
+          // `mark` rule inherits, and beats a utility class). That colour must
+          // be the full fg: muted ink on the 30% tint fell to ~3.4:1.
+          <mark key={k} className="bg-[color:var(--notation-accent-30)] font-medium rounded px-0.5">
             {p.s}
           </mark>
         ) : (

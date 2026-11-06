@@ -139,19 +139,19 @@ export function SpaceCard({ space, onDelete, online, voices }: { space: api.Meta
           <div className="text-xs text-[var(--notation-fg-muted)] mt-0.5 font-mono truncate">/{space.id}</div>
           <div className="text-[11px] text-[var(--notation-fg-muted)] mt-3 flex items-center gap-2">
             {busy ? (
-              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)]">
+              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent-text)]">
                 <Loader2 size={12} className="animate-spin" />
                 {op === 'voice' ? 'Vertonen' : 'Syncing'} {progress!.total ? `${progress!.done}/${progress!.total}` : '…'}
               </span>
             ) : oerr ? (
               <span className="text-[var(--notation-danger)] truncate" title={oerr}>Offline sync failed</span>
             ) : voiceMsg ? (
-              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)] truncate"
+              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent-text)] truncate"
                 title={voiceFailed.length ? 'Fehlgeschlagen:\n' + voiceFailed.join('\n') : voiceMsg}>
                 <Headphones size={12} className="flex-shrink-0" /> <span className="truncate">{voiceMsg}</span>
               </span>
             ) : synced ? (
-              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent)]">
+              <span className="inline-flex items-center gap-1 text-[color:var(--notation-accent-text)]">
                 <Cloud size={12} fill="currentColor" /> Offline{info ? ` · ${formatDate(new Date(info.syncedAt).toISOString())}` : ''}
                 {info && info.failed > 0 && (
                   <span className="text-[var(--notation-danger)]"

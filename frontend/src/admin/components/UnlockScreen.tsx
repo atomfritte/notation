@@ -79,7 +79,7 @@ export function UnlockScreen({
 
         <div className="surface-gradient bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] rounded-xl shadow-2xl p-6">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-9 h-9 rounded-lg bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent-text)] flex items-center justify-center">
               <Lock size={18} />
             </div>
             <div>

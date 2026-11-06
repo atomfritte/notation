@@ -49,7 +49,7 @@ export function PasskeyLogin({ onDone }: Props) {
         id="passkey-login-btn"
         onClick={login}
         disabled={busy}
-        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] font-semibold text-sm rounded-md transition-colors disabled:opacity-40"
+        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 font-semibold text-sm rounded-md transition-colors disabled:opacity-40"
       >
         <Fingerprint size={16} /> {busy ? 'Waiting for device…' : 'Sign in with passkey'}
       </button>

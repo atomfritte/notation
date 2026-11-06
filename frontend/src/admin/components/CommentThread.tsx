@@ -99,7 +99,7 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, 
         <h3 className="font-semibold text-sm text-[var(--notation-fg)] flex items-center gap-2">
           Comments
           {comments.length > 0 && (
-            <span className="bg-[var(--notation-bg-alt)] text-lime-600 dark:text-[color:var(--notation-accent)] px-2 py-0.5 rounded-full text-xs font-bold">
+            <span className="bg-[var(--notation-bg-alt)] text-[color:var(--notation-accent-text)] px-2 py-0.5 rounded-full text-xs font-bold">
               {comments.length}
             </span>
           )}
@@ -161,14 +161,14 @@ export function CommentThread({ comments, canAdd, initialText, onAdd, onDelete, 
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder="Add a comment…"
-            className="w-full bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none transition-all"
+            className="w-full bg-[var(--notation-bg-alt)] border border-[var(--notation-border)] focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none transition-all"
             rows={2}
             disabled={submitting}
           />
           <button
             type="submit"
             disabled={!text.trim() || submitting}
-            className="self-end px-4 py-1.5 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] font-semibold text-sm rounded-md shadow-sm disabled:opacity-40 hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] transition-colors"
+            className="self-end px-4 py-1.5 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] font-semibold text-sm rounded-md shadow-sm disabled:opacity-40 hover:opacity-90 transition-colors"
           >
             {submitting ? 'Posting…' : 'Post Comment'}
           </button>
@@ -376,7 +376,7 @@ function CommentRow({
             autoFocus
             rows={2}
             disabled={busy}
-            className="w-full bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-lime-500 dark:focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-lime-500 dark:focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none"
+            className="w-full bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] focus:border-[color:var(--notation-accent)] focus:ring-1 focus:ring-[color:var(--notation-accent)] outline-none rounded-md p-2 text-sm text-[var(--notation-fg)] resize-none"
           />
           <div className="flex gap-1.5 justify-end">
             <button
@@ -392,7 +392,7 @@ function CommentRow({
             <button
               type="submit"
               disabled={!replyText.trim() || busy}
-              className="px-3 py-1 text-xs font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] rounded-md hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] disabled:opacity-40"
+              className="px-3 py-1 text-xs font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] rounded-md hover:opacity-90 disabled:opacity-40"
             >
               {busy ? '…' : 'Reply'}
             </button>

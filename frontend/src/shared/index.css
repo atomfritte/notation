@@ -14,7 +14,11 @@
  * pre-bake the common alpha steps as siblings and reference them directly:
  *   bg-[color:var(--notation-accent-10)]  // 10% alpha
  *   bg-[color:var(--notation-accent-30)]  // 30% alpha
- *   text-[color:var(--notation-accent)]   // 100%
+ *   text-[color:var(--notation-accent-text)]  // accent as ink (AA)
+ *
+ * `--notation-accent` is the FILL (buttons, rings, active bars); text in the
+ * accent colour uses `--notation-accent-text`, which theme.ts darkens (light)
+ * or lifts (dark) just enough to read — Lime's own green is 3:1 on white.
  *
  * ThemePalette overrides every variable when the user switches / creates a
  * theme, so all consumers re-render in the new accent automatically.
@@ -37,6 +41,11 @@
      the accent for a uniform theme; see `.surface-elevated`. */
   --notation-accent-on-chrome: #65A30D;
   --notation-fg-on-accent-chrome: #FFFFFF;
+  /* The accent as TEXT (links, badges, active labels) — theme.ts accentText():
+     the accent darkened just enough for AA on the page and on its badge tint.
+     A fill (button, ring, bar) keeps --notation-accent. */
+  --notation-accent-text: #426A08;
+  --notation-accent-text-chrome: #3F6608;
   --notation-accent-chrome-10: #65A30D1A;
   --notation-accent-chrome-15: #65A30D26;
   --notation-accent-chrome-20: #65A30D33;
@@ -51,13 +60,13 @@
   --notation-chrome-bg-alt: #F4F4F5;
   --notation-bg-alt: #F4F4F5;
   --notation-fg: #18181B;
-  --notation-fg-muted: #71717A;
+  --notation-fg-muted: #6B6B74;
   --notation-border: #E4E4E7;
   /* Chrome fg/border — applyTheme overrides these. Defaults match content fg
      so chrome stays legible before the theme loads. See `.surface-elevated`
      below for how these reach the DOM. */
   --notation-fg-on-elevated: #18181B;
-  --notation-fg-on-elevated-muted: #71717A;
+  --notation-fg-on-elevated-muted: #6E6E77;
   --notation-border-on-elevated: #ECECEC;
   /* Status colours — Tailwind 600 (darker for light bg). */
   --notation-danger: #DC2626;
@@ -87,6 +96,8 @@
   --notation-accent-50: #BFF35580;
   --notation-accent-on-chrome: #BFF355;
   --notation-fg-on-accent-chrome: #0A0A0A;
+  --notation-accent-text: #BFF355;
+  --notation-accent-text-chrome: #BFF355;
   --notation-accent-chrome-10: #BFF3551A;
   --notation-accent-chrome-15: #BFF35526;
   --notation-accent-chrome-20: #BFF35533;
@@ -223,6 +234,8 @@
     --notation-accent-50: #65A30D80 !important;
     --notation-accent-on-chrome: #65A30D !important;
     --notation-fg-on-accent-chrome: #FFFFFF !important;
+    --notation-accent-text: #426A08 !important;
+    --notation-accent-text-chrome: #3F6608 !important;
     --notation-accent-chrome-10: #65A30D1A !important;
     --notation-accent-chrome-15: #65A30D26 !important;
     --notation-accent-chrome-20: #65A30D33 !important;
@@ -235,10 +248,10 @@
     --notation-chrome-bg-alt: #F4F4F5 !important;
     --notation-bg-alt: #F4F4F5 !important;
     --notation-fg: #18181B !important;
-    --notation-fg-muted: #71717A !important;
+    --notation-fg-muted: #6B6B74 !important;
     --notation-border: #E4E4E7 !important;
     --notation-fg-on-elevated: #18181B !important;
-    --notation-fg-on-elevated-muted: #71717A !important;
+    --notation-fg-on-elevated-muted: #6E6E77 !important;
     --notation-border-on-elevated: #ECECEC !important;
     --notation-danger: #DC2626 !important;
     --notation-warning: #D97706 !important;
@@ -697,6 +710,7 @@
   --notation-accent-40: var(--notation-accent-chrome-40);
   --notation-accent-50: var(--notation-accent-chrome-50);
   --notation-fg-on-accent: var(--notation-fg-on-accent-chrome);
+  --notation-accent-text: var(--notation-accent-text-chrome);
   /* And the INHERITED text colour with them. The body writes zinc-800, which
      is right on the content side but near-invisible on a deep chrome tone: any
      heading, label or input inside a chrome panel that doesn't name a colour
@@ -768,7 +782,7 @@
 .prose .wiki-link {
   text-decoration: none;
   border-bottom: 1px dashed var(--notation-accent);
-  color: var(--notation-accent);
+  color: var(--notation-accent-text);
   transition: all 0.2s ease-in-out;
 }
 .prose .wiki-link:hover {
@@ -791,7 +805,7 @@
 .prose .auto-file-link {
   text-decoration: none;
   border-bottom: 1px dashed var(--notation-accent);
-  color: var(--notation-accent);
+  color: var(--notation-accent-text);
   transition: background-color 0.15s, border-bottom-color 0.15s;
 }
 .prose .auto-file-link::after {
@@ -811,7 +825,7 @@
    where the word lives inside a <code> and can't carry the underline. */
 .prose .auto-file-link-icon {
   text-decoration: none;
-  color: var(--notation-accent);
+  color: var(--notation-accent-text);
   margin-left: 0.15em;
   font-size: 0.85em;
   vertical-align: 0.1em;
@@ -865,7 +879,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.page-nav-btn:hover .page-nav-title { color: var(--notation-accent); }
+.page-nav-btn:hover .page-nav-title { color: var(--notation-accent-text); }
 
 /* Search-result highlight. MarkdownView wraps occurrences of the search
    query in <mark class="search-hit"> when `?q=...` is in the URL — distinct
@@ -897,7 +911,7 @@
   transition: color 0.2s;
 }
 .prose h1 > a:hover, .prose h2 > a:hover, .prose h3 > a:hover, .prose h4 > a:hover {
-  color: var(--notation-accent);
+  color: var(--notation-accent-text);
 }
 
 /* Highlight / Bookmark passages. The tint marks the passage; the text keeps
@@ -1210,10 +1224,10 @@ mark.comment-reaction[data-active="true"] {
 }
 .prose .prose-table-frame .table-tools button[aria-pressed='true'] {
   background: var(--notation-accent-15);
-  color: var(--color-lime-600);
+  color: var(--notation-accent-text);
 }
 .dark .prose .prose-table-frame .table-tools button[aria-pressed='true'] {
-  color: var(--notation-accent);
+  color: var(--notation-accent-text);
 }
 .prose .prose-table-frame .table-tools .table-tools-sep {
   width: 1px;
@@ -1358,6 +1372,47 @@ mark.comment-reaction[data-active="true"] {
   padding: 0 !important;
 }
 
+/* Light-mode hljs palette — GitHub's current syntax colours ("prettylights").
+   The bundled github.css carries the older set (#d73a49 keywords, #6a737d
+   comments, #e36209 built-ins), which sits at 3.2–4.4:1 on our code
+   background, lower on a tinted theme page (Solarized, Bug-Petrol). These
+   keep AA on every built-in light code surface. `.dark` rules below win. */
+:is(.prose, pre.hljs) .hljs-doctag,
+:is(.prose, pre.hljs) .hljs-keyword,
+:is(.prose, pre.hljs) .hljs-meta .hljs-keyword,
+:is(.prose, pre.hljs) .hljs-template-tag,
+:is(.prose, pre.hljs) .hljs-template-variable,
+:is(.prose, pre.hljs) .hljs-type,
+:is(.prose, pre.hljs) .hljs-variable.language_   { color: #cf222e; }
+:is(.prose, pre.hljs) .hljs-title,
+:is(.prose, pre.hljs) .hljs-title.class_,
+:is(.prose, pre.hljs) .hljs-title.class_.inherited__,
+:is(.prose, pre.hljs) .hljs-title.function_      { color: #6639ba; }
+:is(.prose, pre.hljs) .hljs-attr,
+:is(.prose, pre.hljs) .hljs-attribute,
+:is(.prose, pre.hljs) .hljs-literal,
+:is(.prose, pre.hljs) .hljs-meta,
+:is(.prose, pre.hljs) .hljs-number,
+:is(.prose, pre.hljs) .hljs-operator,
+:is(.prose, pre.hljs) .hljs-variable,
+:is(.prose, pre.hljs) .hljs-selector-attr,
+:is(.prose, pre.hljs) .hljs-selector-class,
+:is(.prose, pre.hljs) .hljs-selector-id,
+:is(.prose, pre.hljs) .hljs-section             { color: #0550ae; }
+:is(.prose, pre.hljs) .hljs-regexp,
+:is(.prose, pre.hljs) .hljs-string,
+:is(.prose, pre.hljs) .hljs-meta .hljs-string   { color: #0a3069; }
+:is(.prose, pre.hljs) .hljs-built_in,
+:is(.prose, pre.hljs) .hljs-symbol              { color: #953800; }
+:is(.prose, pre.hljs) .hljs-comment,
+:is(.prose, pre.hljs) .hljs-code,
+:is(.prose, pre.hljs) .hljs-formula             { color: #57606a; }
+:is(.prose, pre.hljs) .hljs-name,
+:is(.prose, pre.hljs) .hljs-quote,
+:is(.prose, pre.hljs) .hljs-selector-tag,
+:is(.prose, pre.hljs) .hljs-selector-pseudo,
+:is(.prose, pre.hljs) .hljs-addition            { color: #116329; }
+
 /* Dark-mode hljs palette — github-dark's colours, scoped to `.dark` so the
    bundled github.css (light) acts as the base + the overrides only kick
    in when the documentElement has the `.dark` class. */
@@ -1413,7 +1468,7 @@ mark.comment-reaction[data-active="true"] {
   --tw-prose-body: var(--notation-fg);
   --tw-prose-headings: var(--notation-fg);
   --tw-prose-lead: var(--notation-fg-muted);
-  --tw-prose-links: var(--notation-accent);
+  --tw-prose-links: var(--notation-accent-text);
   --tw-prose-bold: var(--notation-fg);
   --tw-prose-counters: var(--notation-fg-muted);
   --tw-prose-bullets: var(--notation-fg-muted);
@@ -1432,7 +1487,7 @@ mark.comment-reaction[data-active="true"] {
   --tw-prose-body: var(--notation-fg);
   --tw-prose-headings: var(--notation-fg);
   --tw-prose-lead: var(--notation-fg-muted);
-  --tw-prose-links: var(--notation-accent);
+  --tw-prose-links: var(--notation-accent-text);
   --tw-prose-bold: var(--notation-fg);
   --tw-prose-counters: var(--notation-fg-muted);
   --tw-prose-bullets: var(--notation-fg-muted);

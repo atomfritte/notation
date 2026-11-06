@@ -192,7 +192,7 @@ function DownloadView({ url, path }: { url: string; path: string }) {
       <a
         href={url}
         download={filename}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] font-medium text-sm rounded-md transition-colors"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 font-medium text-sm rounded-md transition-colors"
       >
         <Download size={14} /> Download
       </a>

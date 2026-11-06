@@ -127,12 +127,12 @@ export function CommandPalette({ open, files, actions = [], onClose, onSelect }:
             >
               {r.kind === 'file' ? (
                 <>
-                  <FileText size={14} className={i === idx ? 'text-[color:var(--notation-accent)]' : 'opacity-50'} />
+                  <FileText size={14} className={i === idx ? 'text-[color:var(--notation-accent-text)]' : 'opacity-50'} />
                   <Highlighted text={r.path.replace(/\.md$/i, '')} positions={r.positions} />
                 </>
               ) : (
                 <>
-                  <span className={`flex-shrink-0 flex items-center [&>svg]:w-3.5 [&>svg]:h-3.5 ${i === idx ? 'text-[color:var(--notation-accent)]' : 'opacity-60'}`}>{r.action.icon ?? <Zap size={14} />}</span>
+                  <span className={`flex-shrink-0 flex items-center [&>svg]:w-3.5 [&>svg]:h-3.5 ${i === idx ? 'text-[color:var(--notation-accent-text)]' : 'opacity-60'}`}>{r.action.icon ?? <Zap size={14} />}</span>
                   <Highlighted text={r.action.label} positions={r.positions} />
                   {r.action.active && <span className="text-[10.5px] text-[var(--notation-fg-muted)]">on</span>}
                   {r.action.hint && <kbd className="text-[10.5px] text-[var(--notation-fg-muted)] font-sans">{r.action.hint}</kbd>}
@@ -163,7 +163,7 @@ function Highlighted({ text, positions }: { text: string; positions: number[] })
   return (
     <span className="truncate">
       {[...text].map((ch, i) => (
-        <span key={i} className={set.has(i) ? 'text-[color:var(--notation-accent)] font-semibold' : ''}>
+        <span key={i} className={set.has(i) ? 'text-[color:var(--notation-accent-text)] font-semibold' : ''}>
           {ch}
         </span>
       ))}

@@ -143,10 +143,10 @@ export function ActionMenu({
               <span className="flex-shrink-0 flex items-center text-[var(--notation-fg-muted)]">{a.icon}</span>
               <span className="flex-1 min-w-0 truncate">{a.label}</span>
               {a.badge ? (
-                <span className="text-[10px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full">{a.badge}</span>
+                <span className="text-[10px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent-text)] px-1.5 py-0.5 rounded-full">{a.badge}</span>
               ) : null}
               {a.hint && !isMobile && <kbd className="text-[10.5px] text-[var(--notation-fg-muted)] font-sans">{a.hint}</kbd>}
-              {a.active && <Check size={14} className="text-[color:var(--notation-accent)] flex-shrink-0" />}
+              {a.active && <Check size={14} className="text-[color:var(--notation-accent-text)] flex-shrink-0" />}
             </button>
           ))}
         </div>

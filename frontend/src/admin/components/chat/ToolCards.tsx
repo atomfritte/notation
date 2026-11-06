@@ -183,7 +183,7 @@ export function ApprovalCard({
       aria-label="Change waiting for your approval"
     >
       <div className="flex items-center gap-1.5 px-2.5 py-2 text-[12.5px] font-medium">
-        <Sparkles size={13} className="text-[color:var(--notation-accent)] flex-shrink-0" />
+        <Sparkles size={13} className="text-[color:var(--notation-accent-text)] flex-shrink-0" />
         <KindIcon kind={record.kind} />
         <span className="truncate">{record.summary}</span>
         <Counts r={record} />

@@ -65,7 +65,7 @@ export function ShareCommentsPanel({ comments, currentFile, onSelect }: Props) {
           >
             <FileText size={14} className="flex-shrink-0 opacity-70" />
             <span className="truncate flex-1 text-left">{stripMdExt(g.path)}</span>
-            <span className="text-[10px] font-bold text-[color:var(--notation-accent)] bg-[color:var(--notation-accent-15)] px-1.5 py-0.5 rounded-full">
+            <span className="text-[10px] font-bold text-[color:var(--notation-accent-text)] bg-[color:var(--notation-accent-15)] px-1.5 py-0.5 rounded-full">
               {g.total}
             </span>
           </button>

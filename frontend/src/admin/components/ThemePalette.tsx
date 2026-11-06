@@ -122,7 +122,7 @@ export function ThemePalette({ onClose }: Props) {
       >
         <div className="flex items-start justify-between px-6 pt-6 pb-4">
           <h2 className="text-xl font-bold text-[var(--notation-fg)] flex items-center gap-2">
-            <Palette size={18} className="text-[color:var(--notation-accent)]" /> Themes
+            <Palette size={18} className="text-[color:var(--notation-accent-text)]" /> Themes
           </h2>
           <button
             onClick={onClose}
@@ -273,8 +273,12 @@ function EditTab({
         <HeaderStyleRow />
       </PaletteSection>
 
+      <p className="text-[11px] text-[var(--notation-fg-muted)]">
+        Text, muted text and the accent used as text are deepened just enough when painted if they would read below 4.5:1 on their surface. What you pick here is saved as picked.
+      </p>
+
       <PaletteSection title="Content surface">
-        <ColorRow label="Accent" help="Links, cursor, primary buttons, active states."
+        <ColorRow label="Accent" help="Links, cursor, primary buttons, active states. As link or badge text it is deepened where needed to stay readable."
           value={palette.accent} onChange={v => onChangePalette(editMode, { accent: v })} />
         <ColorRow label="Background" help="Page body — the main content area."
           value={palette.bg} onChange={v => onChangePalette(editMode, { bg: v })} />
@@ -340,7 +344,7 @@ function EditTab({
         <button
           onClick={onSave}
           disabled={!working.name.trim()}
-          className="px-3 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:opacity-90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          className="px-3 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
         >
           <Save size={14} /> Save
         </button>
@@ -380,7 +384,7 @@ function ImportTab({
         <button
           onClick={onImport}
           disabled={!value.trim()}
-          className="px-3 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:opacity-90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          className="px-3 py-2 rounded-md text-sm font-semibold bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 disabled:opacity-40 transition-colors flex items-center gap-1.5"
         >
           <Download size={14} /> Parse &amp; preview
         </button>
@@ -454,7 +458,7 @@ function ThemeCard({
         </div>
         <div className="px-2.5 py-2 flex items-center justify-between bg-[var(--notation-bg-elevated)]">
           <span className="text-xs font-medium text-[var(--notation-fg)] truncate">{theme.name}</span>
-          {active && <Check size={12} className="text-[color:var(--notation-accent)] flex-shrink-0" />}
+          {active && <Check size={12} className="text-[color:var(--notation-accent-text)] flex-shrink-0" />}
         </div>
       </button>
       {onDelete && (

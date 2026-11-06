@@ -121,7 +121,7 @@ export function HistoryView({ spaceID, path, theme, onClose, onRestored }: Props
             <button
               onClick={doRestore}
               disabled={restoring}
-              className="px-3 py-1.5 text-sm font-medium bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] rounded-md transition-colors disabled:opacity-40 flex items-center gap-1.5"
+              className="px-3 py-1.5 text-sm font-medium bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 rounded-md transition-colors disabled:opacity-40 flex items-center gap-1.5"
             >
               <RotateCcw size={14} /> {restoring ? 'Restoring…' : 'Restore this version'}
             </button>

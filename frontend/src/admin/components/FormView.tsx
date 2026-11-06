@@ -79,7 +79,7 @@ export function FormView({
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-3xl mx-auto p-4 md:p-8">
         <header className="flex items-center gap-2.5 mb-1">
-          <ClipboardList size={22} className="text-[color:var(--notation-accent)]" />
+          <ClipboardList size={22} className="text-[color:var(--notation-accent-text)]" />
           <h1 className="text-2xl font-bold text-[var(--notation-fg)] tracking-tight flex-1 truncate">{schema.title}</h1>
           {onEditTemplate && (
             <button
@@ -109,7 +109,7 @@ export function FormView({
               }
             >
               {t.icon}{t.label}
-              {t.badge ? <span className="text-[10px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full">{t.badge}</span> : null}
+              {t.badge ? <span className="text-[10px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent-text)] px-1.5 py-0.5 rounded-full">{t.badge}</span> : null}
             </button>
           ))}
         </div>
@@ -237,7 +237,7 @@ function EntryForm({
             Cancel
           </button>
         )}
-        {done && <span className="text-sm text-[color:var(--notation-accent)] flex items-center gap-1"><Check size={14} /> Saved</span>}
+        {done && <span className="text-sm text-[color:var(--notation-accent-text)] flex items-center gap-1"><Check size={14} /> Saved</span>}
       </div>
     </form>
   )
@@ -353,7 +353,7 @@ function RatingPicker({ levels, value, onChange }: { levels: number; value: numb
     <div className="flex gap-0.5 items-center">
       {Array.from({ length: levels }, (_, i) => i + 1).map(n => (
         <button key={n} type="button" onClick={() => onChange(value === n ? '' : n)} title={`${n}/${levels}`}
-          className="p-0.5 text-[color:var(--notation-accent)] hover:scale-110 transition-transform">
+          className="p-0.5 text-[color:var(--notation-accent-text)] hover:scale-110 transition-transform">
           <Star size={22} fill={n <= value ? 'currentColor' : 'none'} className={n <= value ? '' : 'text-[var(--notation-fg-muted)]'} />
         </button>
       ))}
@@ -656,7 +656,7 @@ function FieldValue({ field, value }: { field: FormField; value: unknown }) {
     case 'rating': {
       const n = toNum(value), levels = field.levels || 5
       return (
-        <span className="inline-flex items-center gap-0.5 text-[color:var(--notation-accent)]">
+        <span className="inline-flex items-center gap-0.5 text-[color:var(--notation-accent-text)]">
           {Array.from({ length: levels }, (_, i) => (
             <Star key={i} size={16} fill={i < n ? 'currentColor' : 'none'} className={i < n ? '' : 'text-[var(--notation-fg-muted)]'} />
           ))}
@@ -679,7 +679,7 @@ function FieldValue({ field, value }: { field: FormField; value: unknown }) {
     case 'bool':
       return <span>{value === true ? 'Yes' : 'No'}</span>
     case 'url':
-      return <a href={String(value)} target="_blank" rel="noreferrer" className="text-[color:var(--notation-accent)] underline break-all">{String(value)}</a>
+      return <a href={String(value)} target="_blank" rel="noreferrer" className="text-[color:var(--notation-accent-text)] underline break-all">{String(value)}</a>
     default:
       return <span>{String(value)}</span>
   }

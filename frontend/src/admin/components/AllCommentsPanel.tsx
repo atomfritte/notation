@@ -196,7 +196,7 @@ export function AllCommentsPanel({
             <span className={'truncate flex-1 text-left' + (g.missing ? ' line-through decoration-1' : '')}>
               {g.path.replace(/\.md$/i, '')}
             </span>
-            <span className="text-[10px] font-bold text-[color:var(--notation-accent)] bg-[color:var(--notation-accent-15)] px-1.5 py-0.5 rounded-full">
+            <span className="text-[10px] font-bold text-[color:var(--notation-accent-text)] bg-[color:var(--notation-accent-15)] px-1.5 py-0.5 rounded-full">
               {g.total}
             </span>
           </button>
@@ -336,7 +336,7 @@ function MissingTarget({
       {state === 'idle' && resolveTargets && (
         <button
           onClick={hunt}
-          className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-[color:var(--notation-accent)] hover:underline"
+          className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-[color:var(--notation-accent-text)] hover:underline"
         >
           <Search size={11} /> Find where it went
         </button>

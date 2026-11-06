@@ -70,7 +70,7 @@ export function MCPPanel({ spaceID }: Props) {
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] rounded-md transition-colors mb-3"
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 rounded-md transition-colors mb-3"
           >
             <Plus size={12} /> New token
           </button>
@@ -88,7 +88,7 @@ export function MCPPanel({ spaceID }: Props) {
             <div className="flex gap-1">
               <button
                 type="submit"
-                className="flex-1 px-2 py-1 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] text-xs font-medium rounded-md hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944]"
+                className="flex-1 px-2 py-1 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] text-xs font-medium rounded-md hover:opacity-90"
               >
                 Create
               </button>

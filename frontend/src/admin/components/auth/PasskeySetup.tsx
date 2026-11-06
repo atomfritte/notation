@@ -57,7 +57,7 @@ export function PasskeySetup({ onDone }: Props) {
         <button
           onClick={register}
           disabled={busy}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:bg-[var(--notation-bg-alt)] dark:hover:bg-[#a6d944] font-semibold text-sm rounded-md transition-colors disabled:opacity-40"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 font-semibold text-sm rounded-md transition-colors disabled:opacity-40"
         >
           <Fingerprint size={16} /> {busy ? 'Waiting for device…' : 'Register passkey'}
         </button>
@@ -69,15 +69,15 @@ export function PasskeySetup({ onDone }: Props) {
         )}
         <ul className="text-xs text-[var(--notation-fg-muted)] mt-4 space-y-1.5">
           <li className="flex items-center gap-2">
-            <Check size={12} className="text-[color:var(--notation-accent)]" />
+            <Check size={12} className="text-[color:var(--notation-accent-text)]" />
             Nothing is sent or stored on a server.
           </li>
           <li className="flex items-center gap-2">
-            <Check size={12} className="text-[color:var(--notation-accent)]" />
+            <Check size={12} className="text-[color:var(--notation-accent-text)]" />
             Works with Touch ID, Face ID, Windows Hello, YubiKey…
           </li>
           <li className="flex items-center gap-2">
-            <Check size={12} className="text-[color:var(--notation-accent)]" />
+            <Check size={12} className="text-[color:var(--notation-accent-text)]" />
             You can add more devices later.
           </li>
         </ul>
