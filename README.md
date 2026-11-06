@@ -281,7 +281,7 @@ All configuration is via environment variables. None are required for a basic lo
 
 | Variable | Default | Description |
 |---|---|---|
-| `NOTATION_ANTHROPIC_API_KEY` | *(empty)* | Claude API key for the assistant. Optional: the key can also be entered in the app (stored `0600` in `<data>/.notation/ai.json`). When set, it wins and the in-app field is read-only. |
+| `NOTATION_ANTHROPIC_API_KEY` | *(empty)* | Claude API key for the assistant. Optional: the key is normally entered in the app, where the browser encrypts it under a chat password before storing it (`<data>/.notation/ai.json` holds only the sealed copy). When set, it wins, needs no chat password, and the in-app key settings are read-only. |
 | `NOTATION_AI_DISABLED` | `0` | Set to `1` to remove the assistant entirely (its endpoints answer 404 and the UI hides it). |
 
 ### Behind a reverse proxy
@@ -414,14 +414,15 @@ Work on a Space with local tools — an editor, a script, a coding agent — and
 
 A chat panel on the right of every Space (the ✨ button in the header, or `Alt` + `A`). Ask about the pages, or have Claude write, restructure and tidy them — the way you would with a coding agent after a folder sync, without leaving the app.
 
-- **Bring your own key.** Add a Claude API key once in the panel (or via `NOTATION_ANTHROPIC_API_KEY`); usage is billed to that key. Pick the model (Opus 5.5 by default) and how much effort Claude spends per chat; the panel shows an estimated cost and the current context size.
+- **Bring your own key, sealed with a chat password.** Add a Claude API key once in the panel, together with a chat password (or set `NOTATION_ANTHROPIC_API_KEY`); usage is billed to that key. The browser encrypts the key (Argon2id → AES-256-GCM) before it is stored, so the server — and its disk and backups — only ever hold a sealed copy. Enter the password once per tab to unlock; *Lock* (or a reload, or signing out) forgets the key again. Forgot the password? *Replace key…* in the settings. A plaintext key stored by an older version is sealed the next time you open the panel.
+- **Pick the model.** The model pill under the message box lists every model your key can use (live from the Models API, with prices for the ones notation knows) and how much effort Claude spends; *Use for new chats* makes the pick the default. The panel shows an estimated cost and the current context size.
 - **You approve every change.** Writes, edits, moves and deletes are shown as a diff first — *Apply*, *Reject* (optionally telling Claude what to do instead), or *Apply all in this chat*. An *Auto-apply* switch skips the question; every applied change keeps an *Undo* button, which refuses to overwrite edits made after it. A page open in the editor with unsaved changes is never touched.
 - **Works on encrypted Spaces.** The whole agent loop runs in your browser tab: it talks to the Claude API directly and reads/writes the Space through the same interface as the folder sync — the decrypted, in-browser file system for an encrypted Space. The notation server is not in the conversation path.
 - **Chats persist per Space**, across sessions and devices, in `<space>/.notation/chats/` (plaintext Space) or **sealed with the Space key** (encrypted Space — AES-GCM, each record bound to its chat id and role). The server refuses plaintext chat records on an encrypted Space, and encrypting/decrypting a Space re-seals or unseals its chats as part of the conversion.
 - **Space instructions and skills.** A non-generated `AGENTS.md` / `CLAUDE.md` in the Space root is Claude's brief; every `SKILL.md` (e.g. `skills/protokoll/SKILL.md`) is offered as a skill that Claude loads on demand. A *skill library* Space (settings) adds skills to every chat. Same conventions as Claude Code after a folder sync, so a Space behaves the same either way.
 - **Traceable.** Claude appends one entry per request to `CHANGELOG.md`. On a plaintext Space each change is a git commit by `ai:<you>`.
 
-**What leaves the box.** What Claude reads to answer you — pages, search hits — is sent to Anthropic's API under your key (API data isn't used for model training). Nothing else: the key is fetched into the tab's memory only (never browser storage), admin-only, CSRF-protected; Magic-Link guests and MCP tokens can't reach it or the chats. Page content is treated as untrusted input (a page can't instruct Claude to act), and no change happens without the approval flow above.
+**What leaves the box.** What Claude reads to answer you — pages, search hits — is sent to Anthropic's API under your key (API data isn't used for model training). Nothing else: the sealed key is handed to the signed-in admin's tab only (CSRF-protected), unlocked there with the chat password into memory (never browser storage); Magic-Link guests and MCP tokens can't reach it or the chats. Page content is treated as untrusted input (a page can't instruct Claude to act), and no change happens without the approval flow above.
 
 ---
 

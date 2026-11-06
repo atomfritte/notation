@@ -7,12 +7,21 @@
 // see plaintext to proxy a request. The server's only part is to keep the
 // owner's API key (so it follows them across devices) and a few defaults.
 //
-// File: <data>/.notation/ai.json, mode 0600, written atomically. The key can also
-// come from the environment (NOTATION_ANTHROPIC_API_KEY); then it never touches
-// the disk and the settings UI shows it as managed by the environment.
+// The key is stored SEALED: the browser encrypts it under a chat password
+// (Argon2id → AES-256-GCM) before it ever reaches this server, so the server —
+// and anyone who reads its disk or backups — holds only ciphertext it cannot
+// open. The admin's browser fetches the sealed record and unlocks it with the
+// password, into memory only.
+//
+// File: <data>/.notation/ai.json, mode 0600, written atomically. The key can
+// instead come from the environment (NOTATION_ANTHROPIC_API_KEY): no password
+// then, by the operator's choice, and it never touches the disk. Installs from
+// before sealing may still hold a plaintext key ("legacy"); the browser seals
+// it on next use and the plaintext is dropped.
 package ai
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,12 +46,12 @@ const (
 
 // Errors returned by Update for invalid input (surfaced as 400s).
 var (
-	ErrInvalidKey          = errors.New("invalid API key: expected an Anthropic key (sk-ant-…)")
 	ErrInvalidModel        = errors.New("invalid model id")
 	ErrInvalidEffort       = errors.New("invalid effort: use low, medium, high, xhigh or max")
 	ErrInstructionsTooLong = fmt.Errorf("instructions too long (max %d bytes)", MaxInstructionsBytes)
 	ErrInvalidSkillsSpace  = errors.New("invalid skills space id")
 	ErrKeyFromEnv          = errors.New("the API key is set via NOTATION_ANTHROPIC_API_KEY; change it there")
+	ErrInvalidSealedKey    = errors.New("invalid sealed key record")
 )
 
 var (
@@ -53,16 +62,66 @@ var (
 	// Mirrors space.idPattern (kept local to avoid an import cycle risk).
 	spaceIDPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9_-]{1,30}[a-z0-9])?$`)
 	validEfforts   = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true, "max": true}
+	// The hint is chosen by the browser (it alone sees the key): the fixed
+	// prefix plus the key's last four characters, so the owner recognises it.
+	hintPattern = regexp.MustCompile(`^sk-ant-…[A-Za-z0-9_-]{4}$`)
 )
+
+// SealedKey is the API key encrypted in the browser under the chat password.
+// The server validates its SHAPE (so a bad record can't wedge or DoS the
+// unlock) but cannot open it.
+type SealedKey struct {
+	V   int       `json:"v"`
+	KDF SealedKDF `json:"kdf"`
+	// Salt for the password derivation, base64.
+	Salt string `json:"salt"`
+	// Framed AES-GCM ciphertext of the key (version||suite||nonce||ct||tag), base64.
+	Ciphertext string `json:"ct"`
+	// "sk-ant-…ABCD", set by the browser.
+	Hint string `json:"hint"`
+}
+
+// SealedKDF are the Argon2id parameters the key was sealed with.
+type SealedKDF struct {
+	Algorithm   string `json:"algorithm"`
+	MemoryKiB   int    `json:"memory_kib"`
+	Iterations  int    `json:"iterations"`
+	Parallelism int    `json:"parallelism"`
+}
+
+func (k *SealedKey) valid() bool {
+	if k == nil || k.V != 1 || k.KDF.Algorithm != "argon2id" {
+		return false
+	}
+	// Bounds a browser can run in a few seconds (and that aren't trivially
+	// weak). The default is 64 MiB × 3; the browser clamps to the same range.
+	if k.KDF.MemoryKiB < 19456 || k.KDF.MemoryKiB > 256<<10 || k.KDF.Iterations < 1 || k.KDF.Iterations > 10 ||
+		k.KDF.Parallelism < 1 || k.KDF.Parallelism > 4 {
+		return false
+	}
+	salt, err := base64.StdEncoding.DecodeString(k.Salt)
+	if err != nil || len(salt) < 16 || len(salt) > 64 {
+		return false
+	}
+	ct, err := base64.StdEncoding.DecodeString(k.Ciphertext)
+	// header(2) + nonce(12) + tag(16) + a key of 20..256 bytes.
+	if err != nil || len(ct) < 2+12+16+20 || len(ct) > 2+12+16+256 {
+		return false
+	}
+	return hintPattern.MatchString(k.Hint)
+}
 
 // Settings is what ai.json holds.
 type Settings struct {
-	APIKey        string    `json:"api_key,omitempty"`
-	DefaultModel  string    `json:"default_model,omitempty"`
-	DefaultEffort string    `json:"default_effort,omitempty"`
-	Instructions  string    `json:"instructions,omitempty"`
-	SkillsSpace   string    `json:"skills_space,omitempty"`
-	UpdatedAt     time.Time `json:"updated_at,omitempty"`
+	// Legacy plaintext key (before sealing existed). Never written any more;
+	// replaced as soon as the browser stores a sealed key.
+	APIKey        string     `json:"api_key,omitempty"`
+	SealedKey     *SealedKey `json:"sealed_key,omitempty"`
+	DefaultModel  string     `json:"default_model,omitempty"`
+	DefaultEffort string     `json:"default_effort,omitempty"`
+	Instructions  string     `json:"instructions,omitempty"`
+	SkillsSpace   string     `json:"skills_space,omitempty"`
+	UpdatedAt     time.Time  `json:"updated_at,omitempty"`
 }
 
 // View is the settings as the admin UI sees them: everything except the key,
@@ -70,7 +129,7 @@ type Settings struct {
 type View struct {
 	Enabled       bool   `json:"enabled"`
 	Configured    bool   `json:"configured"`
-	KeySource     string `json:"key_source"` // "env" | "settings" | ""
+	KeySource     string `json:"key_source"` // "env" | "sealed" | "legacy" | ""
 	KeyHint       string `json:"key_hint,omitempty"`
 	DefaultModel  string `json:"default_model"`
 	DefaultEffort string `json:"default_effort"`
@@ -78,9 +137,12 @@ type View struct {
 	SkillsSpace   string `json:"skills_space"`
 }
 
-// Update is a partial change: nil fields stay as they are.
+// Update is a partial change: nil fields stay as they are. There is no way to
+// store a plaintext key: the browser seals it first.
 type Update struct {
-	APIKey        *string `json:"api_key,omitempty"`
+	SealedKey *SealedKey `json:"sealed_key,omitempty"`
+	// ClearKey removes the stored key (sealed or legacy).
+	ClearKey      bool    `json:"clear_key,omitempty"`
 	DefaultModel  *string `json:"default_model,omitempty"`
 	DefaultEffort *string `json:"default_effort,omitempty"`
 	Instructions  *string `json:"instructions,omitempty"`
@@ -176,39 +238,56 @@ func (s *Store) viewOf(st Settings) View {
 		Instructions:  st.Instructions,
 		SkillsSpace:   st.SkillsSpace,
 	}
-	key, src := s.keyOf(st)
-	if key != "" && !s.disabled {
+	if s.disabled {
+		return v
+	}
+	km := s.keyOf(st)
+	if km.Source != "" {
 		v.Configured = true
-		v.KeySource = src
-		v.KeyHint = hint(key)
+		v.KeySource = km.Source
+		if km.Sealed != nil {
+			v.KeyHint = km.Sealed.Hint
+		} else {
+			v.KeyHint = hint(km.APIKey)
+		}
 	}
 	return v
 }
 
-func (s *Store) keyOf(st Settings) (string, string) {
-	if s.envKey != "" {
-		return s.envKey, "env"
-	}
-	if st.APIKey != "" {
-		return st.APIKey, "settings"
-	}
-	return "", ""
+// KeyMaterial is what the browser needs to get at the key: the plaintext key
+// (environment, or a legacy store the browser is about to seal) or the sealed
+// record it opens with the chat password.
+type KeyMaterial struct {
+	Source string     `json:"source"` // "env" | "sealed" | "legacy"
+	APIKey string     `json:"api_key,omitempty"`
+	Sealed *SealedKey `json:"sealed_key,omitempty"`
 }
 
-// APIKey returns the effective key ("" when none is configured or the feature
-// is disabled).
-func (s *Store) APIKey() (string, error) {
+func (s *Store) keyOf(st Settings) KeyMaterial {
+	switch {
+	case s.envKey != "":
+		return KeyMaterial{Source: "env", APIKey: s.envKey}
+	case st.SealedKey != nil:
+		return KeyMaterial{Source: "sealed", Sealed: st.SealedKey}
+	case st.APIKey != "":
+		return KeyMaterial{Source: "legacy", APIKey: st.APIKey}
+	}
+	return KeyMaterial{}
+}
+
+// Key returns the key material (Source "" when none is configured or the
+// feature is disabled).
+func (s *Store) Key() (KeyMaterial, error) {
 	if s.disabled {
-		return "", nil
+		return KeyMaterial{}, nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, err := s.load()
 	if err != nil {
-		return "", err
+		return KeyMaterial{}, err
 	}
-	key, _ := s.keyOf(st)
-	return key, nil
+	return s.keyOf(st), nil
 }
 
 // Apply validates and persists a partial update, returning the new view.
@@ -219,15 +298,17 @@ func (s *Store) Apply(u Update) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	if u.APIKey != nil {
-		key := strings.TrimSpace(*u.APIKey)
+	if u.SealedKey != nil || u.ClearKey {
 		if s.envKey != "" {
 			return View{}, ErrKeyFromEnv
 		}
-		if key != "" && !validKey(key) {
-			return View{}, ErrInvalidKey
+		if u.SealedKey != nil && !u.SealedKey.valid() {
+			return View{}, ErrInvalidSealedKey
 		}
-		st.APIKey = key // "" clears it
+		st.SealedKey = u.SealedKey // nil when clearing
+		// Either way the legacy plaintext copy goes: a sealed key supersedes
+		// it, and clearing means clearing everything.
+		st.APIKey = ""
 	}
 	if u.DefaultModel != nil {
 		m := strings.TrimSpace(*u.DefaultModel)
@@ -263,26 +344,8 @@ func (s *Store) Apply(u Update) (View, error) {
 	return s.viewOf(st), nil
 }
 
-// validKey is a shape check, not authentication: it catches a paste of the
-// wrong thing (a URL, a sentence, an admin key) before it is stored. The API
-// decides whether the key actually works.
-func validKey(k string) bool {
-	if len(k) < 20 || len(k) > 256 || !strings.HasPrefix(k, "sk-ant-") {
-		return false
-	}
-	// Admin keys (sk-ant-admin…) can manage the organisation — far more than a
-	// chat needs. Refuse them so one never ends up in a browser.
-	if strings.HasPrefix(k, "sk-ant-admin") {
-		return false
-	}
-	for _, r := range k {
-		if !(r == '-' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
-			return false
-		}
-	}
-	return true
-}
-
+// hint is the recognisable tail of a plaintext key (env or legacy). A sealed
+// key's hint is set by the browser.
 func hint(k string) string {
 	if len(k) <= 8 {
 		return "…"

@@ -37,8 +37,11 @@ rest of this roadmap should build on:
   stores the finished chats (`.notation/chats/`), sealed with the Space key on an
   encrypted Space and format-checked server-side (no plaintext on an encrypted Space).
 - **Provider: Anthropic API, opt-in per instance** (no key → nothing is sent).
-  The key is stored server-side `0600` (or env), handed to the admin tab via a
-  CSRF-protected POST into memory only; `NOTATION_AI_DISABLED=1` removes the feature.
+  The key is sealed in the browser under a chat password (Argon2id → AES-256-GCM)
+  before it is stored, so the server holds only ciphertext (or it comes from env);
+  the sealed record is handed to the admin tab via a CSRF-protected POST and
+  unlocked into memory only; `NOTATION_AI_DISABLED=1` removes the feature. The model
+  list comes live from the Models API, and its capability data shapes each request.
 - **No silent writes** holds: changes are diffs the user applies or rejects;
   auto-apply is an explicit per-browser switch, every change keeps an undo.
   Plaintext edits commit as `ai:<user>`; Claude also appends to `CHANGELOG.md`.

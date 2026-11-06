@@ -23,12 +23,14 @@ import (
 // not, without seeing plaintext. The handlers below cover only what has to be
 // server-side:
 //
-//   - instance settings (/api/admin/ai/settings): the owner's API key (stored
-//     0600, or taken from NOTATION_ANTHROPIC_API_KEY) plus defaults. Reads are
-//     redacted; the key never appears in a settings response.
-//   - key issue (POST /api/admin/ai/key): hands the key to the signed-in admin's
-//     browser for the duration of the page. POST so it sits behind the CSRF
-//     check, and no-store so it never lands in a cache.
+//   - instance settings (/api/admin/ai/settings): the owner's API key, SEALED
+//     in the browser under a chat password before it gets here (or taken from
+//     NOTATION_ANTHROPIC_API_KEY), plus defaults. Reads are redacted; not even
+//     the sealed record appears in a settings response.
+//   - key issue (POST /api/admin/ai/key): hands the sealed record (or the env /
+//     legacy plaintext key) to the signed-in admin's browser, which unlocks it
+//     into memory. POST so it sits behind the CSRF check, and no-store so it
+//     never lands in a cache.
 //   - chat history (/api/admin/spaces/{id}/chats): opaque records the server
 //     stores but never parses. A zero-knowledge Space only accepts sealed
 //     records (see space/chats.go).
@@ -71,7 +73,7 @@ func (h *adminHandlers) putAISettings(w http.ResponseWriter, r *http.Request) {
 	v, err := h.ai.Apply(u)
 	if err != nil {
 		switch {
-		case errors.Is(err, ai.ErrInvalidKey), errors.Is(err, ai.ErrInvalidModel),
+		case errors.Is(err, ai.ErrInvalidSealedKey), errors.Is(err, ai.ErrInvalidModel),
 			errors.Is(err, ai.ErrInvalidEffort), errors.Is(err, ai.ErrInstructionsTooLong),
 			errors.Is(err, ai.ErrInvalidSkillsSpace), errors.Is(err, ai.ErrKeyFromEnv):
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -80,7 +82,7 @@ func (h *adminHandlers) putAISettings(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if u.APIKey != nil {
+	if u.SealedKey != nil || u.ClearKey {
 		rid, _ := r.Context().Value(chimw.RequestIDKey).(string)
 		slog.Default().Info("ai api key changed", "cleared", v.KeySource == "", "req_id", rid)
 	}
@@ -92,19 +94,19 @@ func (h *adminHandlers) issueAIKey(w http.ResponseWriter, r *http.Request) {
 	if !h.aiEnabled(w) {
 		return
 	}
-	key, err := h.ai.APIKey()
+	km, err := h.ai.Key()
 	if err != nil {
 		writeInternal(w, r, "ai.key", err)
 		return
 	}
-	if key == "" {
+	if km.Source == "" {
 		writeError(w, http.StatusNotFound, "no API key configured")
 		return
 	}
 	rid, _ := r.Context().Value(chimw.RequestIDKey).(string)
-	slog.Default().Info("ai api key issued to admin browser", "req_id", rid)
+	slog.Default().Info("ai api key issued to admin browser", "source", km.Source, "req_id", rid)
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]string{"api_key": key})
+	writeJSON(w, http.StatusOK, km)
 }
 
 // ---- chat history ----

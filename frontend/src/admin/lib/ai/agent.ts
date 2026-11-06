@@ -25,7 +25,8 @@ import type {
 } from '@anthropic-ai/sdk/resources/beta/messages/messages'
 import type { Chat, ToolRecord } from './chatStore'
 import { DEFAULT_MODEL, addUsage, modelInfo, type Effort } from './models'
-import { forgetSessionKey, sessionKey } from './settings'
+import { forgetSessionKey, KeyLockedError, sessionKey } from './settings'
+import { adaptiveFor, effortFor } from './modelList'
 import { MUTATING_TOOLS, TOOLS, ToolInputError, prepareTool, type ToolContext } from './tools'
 
 /** Marks the context block of a user message; the UI hides it behind a chip. */
@@ -95,7 +96,7 @@ export class AssistantError extends Error {
 
 let cached: { key: string; client: Anthropic } | null = null
 
-async function client(): Promise<Anthropic> {
+export async function client(): Promise<Anthropic> {
   const key = await sessionKey()
   if (cached?.key !== key) {
     // The owner's own key, used from the owner's own signed-in session — the
@@ -105,7 +106,7 @@ async function client(): Promise<Anthropic> {
   return cached.client
 }
 
-type Feature = 'fallbacks' | 'blockBinding' | 'eager' | 'display'
+type Feature = 'fallbacks' | 'blockBinding' | 'eager' | 'display' | 'effort' | 'thinking'
 
 /**
  * Features a model turned out not to accept (a 400 naming them). Dropped for the
@@ -125,13 +126,18 @@ function featureFromError(message: string): Feature | null {
   if (m.includes('block_binding') || m.includes('prefix_mismatch') || m.includes('thinking-binding')) return 'blockBinding'
   if (m.includes('eager_input_streaming')) return 'eager'
   if (m.includes('display')) return 'display'
+  if (m.includes('effort')) return 'effort'
+  if (m.includes('adaptive') || m.includes('thinking')) return 'thinking'
   return null
 }
 
 export function buildParams(chat: Chat, model: string, effort: Effort): MessageCreateParamsStreaming {
   const betas: string[] = []
   const fallbacks = has(model, 'fallbacks')
-  const binding = has(model, 'blockBinding')
+  // What the Models API reported for this model, then what a 400 taught us.
+  const thinking = adaptiveFor(model) && has(model, 'thinking')
+  const binding = thinking && has(model, 'blockBinding')
+  const level = has(model, 'effort') ? effortFor(model, effort) : null
   if (fallbacks) betas.push('server-side-fallback-2026-07-01')
   if (binding) betas.push('thinking-binding-controls-2026-08-01')
   const eager = has(model, 'eager')
@@ -145,14 +151,16 @@ export function buildParams(chat: Chat, model: string, effort: Effort): MessageC
     cache_control: { type: 'ephemeral' },
     messages: chat.body.messages,
     tools: TOOLS.map(t => (eager ? { ...t, eager_input_streaming: true } : t)),
-    thinking: {
-      type: 'adaptive',
-      ...(has(model, 'display') ? { display: 'summarized' as const } : {}),
-      // A changed prefix (an older chat after an app update changed the tool
-      // descriptions) drops the stale thinking instead of failing the request.
-      ...(binding ? { block_binding: { prefix_mismatch_behavior: 'drop_block' as const } } : {}),
-    },
-    output_config: { effort },
+    ...(thinking ? {
+      thinking: {
+        type: 'adaptive' as const,
+        ...(has(model, 'display') ? { display: 'summarized' as const } : {}),
+        // A changed prefix (an older chat after an app update changed the tool
+        // descriptions) drops the stale thinking instead of failing the request.
+        ...(binding ? { block_binding: { prefix_mismatch_behavior: 'drop_block' as const } } : {}),
+      },
+    } : {}),
+    ...(level ? { output_config: { effort: level } } : {}),
     // On a safety decline, re-run on the model Anthropic recommends for that
     // category instead of returning the refusal.
     ...(fallbacks ? { fallbacks: 'default' as const } : {}),
@@ -161,9 +169,10 @@ export function buildParams(chat: Chat, model: string, effort: Effort): MessageC
 }
 
 function friendly(err: unknown): AssistantError {
+  if (err instanceof KeyLockedError) return new AssistantError(err.message, 'auth')
   if (err instanceof Anthropic.AuthenticationError) {
     forgetSessionKey()
-    return new AssistantError('The API key was rejected. Check it in the assistant settings.', 'auth')
+    return new AssistantError('The API key was rejected — it may have been revoked. Replace it in the assistant settings.', 'auth')
   }
   if (err instanceof Anthropic.PermissionDeniedError) {
     return new AssistantError('This API key may not use the selected model.', 'auth')

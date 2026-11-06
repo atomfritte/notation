@@ -12,21 +12,25 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BetaContentBlock, BetaContentBlockParam, BetaMessage } from '@anthropic-ai/sdk/resources/beta/messages/messages'
 import {
-  ArrowUp, Brain, Check, ChevronDown, ChevronRight, Copy, FileText, History, Loader2, Lock, MessageSquarePlus,
+  ArrowUp, Brain, Check, ChevronDown, ChevronRight, Copy, FileText, History, Loader2, LockKeyhole, ShieldCheck, MessageSquarePlus,
   RotateCcw, Settings2, Sparkles, Square, Trash2, X, Zap, CircleAlert, Info, Ban,
 } from 'lucide-react'
 import type { KeyHandle } from '../../../shared/crypto/keys'
 import type { SyncSpace } from '../../lib/syncSpace'
 import { AgentFS } from '../../lib/ai/agentFs'
-import { CONTEXT_TAG, isApprovingAll, runTurn, setApprovingAll, type ApprovalDecision, type PendingApproval } from '../../lib/ai/agent'
+import { CONTEXT_TAG, client, isApprovingAll, runTurn, setApprovingAll, type ApprovalDecision, type PendingApproval } from '../../lib/ai/agent'
 import { HttpChatStore, newChatId, plainCodec, sealedCodec, type Chat, type ChatMeta, type ChatStore, type Notice } from '../../lib/ai/chatStore'
-import { DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS, MODELS, emptyUsage, formatCost, formatTokens, isEffort, modelInfo, type Effort } from '../../lib/ai/models'
-import { getAISettings, type AISettings } from '../../lib/ai/settings'
+import { DEFAULT_EFFORT, DEFAULT_MODEL, emptyUsage, formatCost, formatTokens, isEffort, modelInfo, type Effort } from '../../lib/ai/models'
+import { refreshModels } from '../../lib/ai/modelList'
+import { useKeyMemory } from '../../lib/ai/keyMemory'
+import { getAISettings, keyState, lockKey, saveAISettings, type AISettings } from '../../lib/ai/settings'
 import { collectBrief, type Brief } from '../../lib/ai/skills'
 import { buildSystemPrompt } from '../../lib/ai/systemPrompt'
 import { AISettingsDialog, AISettingsForm } from './AISettingsDialog'
 import { ChatMarkdown } from './ChatMarkdown'
 import { ApprovalCard, ToolCard } from './ToolCards'
+import { UnlockBar } from './KeyGate'
+import { ModelPicker } from './ModelPicker'
 
 export interface ChatPanelProps {
   spaceID: string
@@ -77,10 +81,17 @@ export default function ChatPanel(props: ChatPanelProps) {
   // ── settings ──
   const [settings, setSettings] = useState<AISettings | null>(null)
   const [settingsErr, setSettingsErr] = useState<string | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  // true = open on the key section ("Forgot the password?").
+  const [settingsOpen, setSettingsOpen] = useState<false | 'all' | 'key'>(false)
   useEffect(() => {
     getAISettings().then(setSettings).catch(e => setSettingsErr((e as Error).message))
   }, [])
+  // Re-render on lock/unlock; the key itself never enters React state.
+  useKeyMemory()
+  const kState = keyState(settings)
+  const keyReady = kState === 'ready'
+  // Once the key is usable, learn which models it can use (cached for a day).
+  useEffect(() => { if (keyReady) void refreshModels(client) }, [keyReady])
 
   // ── store ──
   const store = useMemo<ChatStore | null>(() => {
@@ -171,7 +182,7 @@ export default function ChatPanel(props: ChatPanelProps) {
   }, [spaceID])
   const [includePage, setIncludePage] = useState(true)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => { inputRef.current?.focus({ preventScroll: true }) }, [settings?.configured])
+  useEffect(() => { inputRef.current?.focus({ preventScroll: true }) }, [settings?.configured, keyReady])
 
   const persist = useCallback((c: Chat) => {
     if (!store) return Promise.resolve()
@@ -232,7 +243,7 @@ export default function ChatPanel(props: ChatPanelProps) {
 
   // ── send ──
   const send = useCallback(async (text?: string) => {
-    if (running || !settings?.configured || !store) return
+    if (running || !settings?.configured || !store || !keyReady) return
     if (text !== undefined && !text.trim()) return
     setRunning(true)
     setSaveErr(null)
@@ -292,7 +303,7 @@ export default function ChatPanel(props: ChatPanelProps) {
       rerender()
       setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0)
     }
-  }, [running, settings, store, loadBrief, model, effort, spaceID, props, encrypted, setChat, setDraft, includePage, persist, rerender])
+  }, [running, settings, store, keyReady, loadBrief, model, effort, spaceID, props, encrypted, setChat, setDraft, includePage, persist, rerender])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -409,12 +420,15 @@ export default function ChatPanel(props: ChatPanelProps) {
         </div>
         {encrypted && (
           <span className="p-1 text-[var(--notation-success)]" title="Encrypted Space: this chat is stored sealed with the Space key. The server can't read it.">
-            <Lock size={14} />
+            <ShieldCheck size={14} />
           </span>
         )}
         <IconBtn label="New chat" onClick={newChat} disabled={running}><MessageSquarePlus size={16} /></IconBtn>
         <IconBtn label="Chat history" onClick={() => setHistoryOpen(v => !v)}><History size={16} /></IconBtn>
-        <IconBtn label="Assistant settings" onClick={() => setSettingsOpen(true)} disabled={!settings}><Settings2 size={16} /></IconBtn>
+        {settings?.key_source === 'sealed' && keyReady && (
+          <IconBtn label="Lock the assistant (forget the API key in this tab)" onClick={() => { stop(); lockKey() }}><LockKeyhole size={16} /></IconBtn>
+        )}
+        <IconBtn label="Assistant settings" onClick={() => setSettingsOpen('all')} disabled={!settings}><Settings2 size={16} /></IconBtn>
         <IconBtn label="Close assistant" onClick={onClose}><X size={16} /></IconBtn>
       </div>
 
@@ -429,7 +443,7 @@ export default function ChatPanel(props: ChatPanelProps) {
             <div className="text-[15px] font-semibold mb-1">Chat with Claude about this Space</div>
             <p className="text-[12.5px] text-[var(--notation-fg-muted)] leading-relaxed">
               Claude can read, search and edit the pages here — on encrypted Spaces too, because everything runs in this browser tab.
-              Add your Claude API key to start. Usage is billed to that key.
+              Add your Claude API key and choose a chat password to start. Usage is billed to that key.
             </p>
           </div>
           <AISettingsForm settings={settings} onSaved={setSettings} firstRun />
@@ -486,6 +500,14 @@ export default function ChatPanel(props: ChatPanelProps) {
 
           {saveErr && <Banner kind="error" onDismiss={() => setSaveErr(null)} className="mx-3 mb-1">Couldn't save this chat: {saveErr}</Banner>}
 
+          {kState === 'locked' || kState === 'legacy' ? (
+            <UnlockBar
+              state={kState}
+              hint={settings.key_hint}
+              onDone={(s) => { if (s) setSettings(s) }}
+              onForgot={() => setSettingsOpen('key')}
+            />
+          ) : (
           <Composer
             inputRef={inputRef}
             draft={draft}
@@ -496,22 +518,31 @@ export default function ChatPanel(props: ChatPanelProps) {
             openPage={props.openPage}
             includePage={includePage}
             setIncludePage={setIncludePage}
-            model={model}
-            effort={effort}
-            onModel={(m) => setPick({ model: m, effort })}
-            onEffort={(e) => setPick({ model, effort: e })}
+            picker={
+              <ModelPicker
+                model={model}
+                effort={effort}
+                disabled={running}
+                onChange={(m, e) => setPick({ model: m, effort: e })}
+                isDefault={model === (settings.default_model || DEFAULT_MODEL) && effort === (isEffort(settings.default_effort) ? settings.default_effort : DEFAULT_EFFORT)}
+                onMakeDefault={async () => setSettings(await saveAISettings({ default_model: model, default_effort: effort }))}
+                onRefresh={keyReady ? () => refreshModels(client, true) : undefined}
+              />
+            }
             autoApply={autoApply}
             setAutoApply={setAutoApply}
             approvingAll={chat ? isApprovingAll(chat.meta.id) : false}
             onStopApprovingAll={() => { if (chat) { setApprovingAll(chat.meta.id, false); rerender() } }}
             chat={chat}
           />
+          )}
         </>
       )}
 
       {settingsOpen && settings && (
         <AISettingsDialog
           settings={settings}
+          focusKey={settingsOpen === 'key'}
           onClose={() => setSettingsOpen(false)}
           onSaved={(s) => { setSettings(s); briefRef.current = null }}
         />
@@ -842,7 +873,7 @@ function liveVerb(name: string): string {
 
 function Composer({
   inputRef, draft, setDraft, running, onSend, onStop, openPage, includePage, setIncludePage,
-  model, effort, onModel, onEffort, autoApply, setAutoApply, approvingAll, onStopApprovingAll, chat,
+  picker, autoApply, setAutoApply, approvingAll, onStopApprovingAll, chat,
 }: {
   inputRef: React.RefObject<HTMLTextAreaElement | null>
   draft: string
@@ -853,10 +884,7 @@ function Composer({
   openPage: string
   includePage: boolean
   setIncludePage: (v: boolean) => void
-  model: string
-  effort: Effort
-  onModel: (m: string) => void
-  onEffort: (e: Effort) => void
+  picker: React.ReactNode
   autoApply: boolean
   setAutoApply: (v: boolean) => void
   approvingAll: boolean
@@ -921,25 +949,7 @@ function Composer({
         )}
       </div>
       <div className="flex items-center gap-1 text-[11px] text-[var(--notation-fg-muted)] flex-wrap">
-        <select
-          value={model}
-          onChange={e => onModel(e.target.value)}
-          className="bg-transparent hover:text-[var(--notation-fg)] rounded px-0.5 py-0.5 max-w-[9.5rem] outline-none"
-          title={modelInfo(model).blurb}
-          aria-label="Model"
-        >
-          {MODELS.map(m => <option key={m.id} value={m.id}>{m.label.replace('Claude ', '')}</option>)}
-          {!MODELS.some(m => m.id === model) && <option value={model}>{model}</option>}
-        </select>
-        <select
-          value={effort}
-          onChange={e => { const v = e.target.value; if (isEffort(v)) onEffort(v) }}
-          className="bg-transparent hover:text-[var(--notation-fg)] rounded px-0.5 py-0.5 outline-none"
-          title={EFFORTS.find(x => x.id === effort)?.blurb}
-          aria-label="Effort"
-        >
-          {EFFORTS.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
-        </select>
+        {picker}
         <label className="flex items-center gap-1 px-1 cursor-pointer hover:text-[var(--notation-fg)]" title="Apply Claude's changes right away instead of asking each time. Every change can still be undone.">
           <input type="checkbox" checked={autoApply} onChange={e => setAutoApply(e.target.checked)} className="accent-[color:var(--notation-accent)]" />
           Auto-apply

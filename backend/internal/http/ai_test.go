@@ -12,7 +12,14 @@ import (
 	"github.com/yoogie27/notation/internal/auth"
 )
 
-const testAIKey = "sk-ant-api03-testkeytestkeytestkeytestkey_-WXYZ"
+// A sealed key record as the browser would send it (the ciphertext is opaque
+// to the server, so any bytes of the right length do).
+var testSealedKey = `{"sealed_key":{"v":1,"kdf":{"algorithm":"argon2id","memory_kib":65536,"iterations":3,"parallelism":1},` +
+	`"salt":"` + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{1}, 16)) + `",` +
+	`"ct":"` + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 2+12+16+48)) + `",` +
+	`"hint":"sk-ant-…WXYZ"}}`
+
+var testSealedCT = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 2+12+16+48))
 
 func chatPayload(meta, body []byte) []byte {
 	b, _ := json.Marshal(map[string]string{
@@ -28,23 +35,23 @@ func fakeSealed() []byte {
 	return b
 }
 
-// The key goes in through settings and only comes back out through the
+// The sealed key goes in through settings and only comes back out through the
 // CSRF-guarded POST — never in a settings read.
 func TestAIKeyNeverInSettingsResponse(t *testing.T) {
 	e := newIsoEnv(t)
-	put := e.admin(http.MethodPut, "/api/admin/ai/settings", []byte(`{"api_key":"`+testAIKey+`"}`))
+	put := e.admin(http.MethodPut, "/api/admin/ai/settings", []byte(testSealedKey))
 	if put.Code != http.StatusOK {
 		t.Fatalf("PUT settings = %d %s", put.Code, put.Body)
 	}
-	if strings.Contains(put.Body.String(), "testkeytestkey") {
-		t.Fatalf("PUT response leaks the key: %s", put.Body)
+	if strings.Contains(put.Body.String(), testSealedCT) {
+		t.Fatalf("PUT response carries the sealed key: %s", put.Body)
 	}
 	get := e.admin(http.MethodGet, "/api/admin/ai/settings", nil)
-	if get.Code != http.StatusOK || strings.Contains(get.Body.String(), "testkeytestkey") {
+	if get.Code != http.StatusOK || strings.Contains(get.Body.String(), testSealedCT) {
 		t.Fatalf("GET settings = %d %s", get.Code, get.Body)
 	}
-	if !strings.Contains(get.Body.String(), `"configured":true`) {
-		t.Errorf("settings not marked configured: %s", get.Body)
+	if !strings.Contains(get.Body.String(), `"configured":true`) || !strings.Contains(get.Body.String(), `"key_source":"sealed"`) {
+		t.Errorf("settings not marked configured+sealed: %s", get.Body)
 	}
 
 	// No CSRF token → refused, even for the signed-in admin.
@@ -53,7 +60,7 @@ func TestAIKeyNeverInSettingsResponse(t *testing.T) {
 		t.Errorf("key issue without CSRF = %d, want 403", noCSRF.Code)
 	}
 	key := e.admin(http.MethodPost, "/api/admin/ai/key", nil)
-	if key.Code != http.StatusOK || !strings.Contains(key.Body.String(), testAIKey) {
+	if key.Code != http.StatusOK || !strings.Contains(key.Body.String(), testSealedCT) || !strings.Contains(key.Body.String(), `"source":"sealed"`) {
 		t.Fatalf("key issue = %d %s", key.Code, key.Body)
 	}
 	if cc := key.Header().Get("Cache-Control"); cc != "no-store" {
@@ -61,11 +68,16 @@ func TestAIKeyNeverInSettingsResponse(t *testing.T) {
 	}
 }
 
-func TestAIRejectsAdminKey(t *testing.T) {
+// A plaintext key can no longer be stored at all — the browser seals it first.
+func TestAIRefusesPlaintextKey(t *testing.T) {
 	e := newIsoEnv(t)
-	rec := e.admin(http.MethodPut, "/api/admin/ai/settings", []byte(`{"api_key":"sk-ant-admin01-abcdefghijklmnopqrstuvwxyz"}`))
+	rec := e.admin(http.MethodPut, "/api/admin/ai/settings", []byte(`{"api_key":"sk-ant-api03-testkeytestkeytestkeytestkey_-WXYZ"}`))
 	if rec.Code != http.StatusBadRequest {
-		t.Errorf("admin key accepted: %d %s", rec.Code, rec.Body)
+		t.Errorf("plaintext key accepted: %d %s", rec.Code, rec.Body)
+	}
+	bad := e.admin(http.MethodPut, "/api/admin/ai/settings", []byte(strings.Replace(testSealedKey, `"memory_kib":65536`, `"memory_kib":99999999`, 1)))
+	if bad.Code != http.StatusBadRequest {
+		t.Errorf("out-of-bounds KDF accepted: %d %s", bad.Code, bad.Body)
 	}
 }
 
@@ -73,13 +85,13 @@ func TestAIRejectsAdminKey(t *testing.T) {
 // admin session, and the key endpoint is not on any share/MCP route.
 func TestAIKeyUnreachableWithoutAdminSession(t *testing.T) {
 	e := newIsoEnv(t)
-	_ = e.admin(http.MethodPut, "/api/admin/ai/settings", []byte(`{"api_key":"`+testAIKey+`"}`))
+	_ = e.admin(http.MethodPut, "/api/admin/ai/settings", []byte(testSealedKey))
 	for _, target := range []string{
 		"/s/api/" + e.alphaShareTok + "/ai/key",
 		"/mcp/alpha/ai/key",
 	} {
 		rec := e.do(http.MethodPost, target, nil, map[string]string{"Authorization": "Bearer " + e.alphaMCPTok})
-		if strings.Contains(rec.Body.String(), testAIKey) {
+		if strings.Contains(rec.Body.String(), testSealedCT) {
 			t.Fatalf("%s leaked the key", target)
 		}
 	}

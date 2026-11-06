@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/base64"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,14 +13,24 @@ const goodKey = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789_-ABCD"
 
 func strp(s string) *string { return &s }
 
-func TestKeyIsStoredOwnerOnlyAndNeverInTheView(t *testing.T) {
+func sealed(hint string) *SealedKey {
+	return &SealedKey{
+		V:          1,
+		KDF:        SealedKDF{Algorithm: "argon2id", MemoryKiB: 65536, Iterations: 3, Parallelism: 1},
+		Salt:       base64.StdEncoding.EncodeToString(make([]byte, 16)),
+		Ciphertext: base64.StdEncoding.EncodeToString(make([]byte, 2+12+16+len(goodKey))),
+		Hint:       hint,
+	}
+}
+
+func TestSealedKeyIsStoredOwnerOnlyAndNeverInTheView(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir, "", false)
-	v, err := s.Apply(Update{APIKey: strp(goodKey)})
+	v, err := s.Apply(Update{SealedKey: sealed("sk-ant-…ABCD")})
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if !v.Configured || v.KeySource != "settings" || v.KeyHint != "sk-ant-…ABCD" {
+	if !v.Configured || v.KeySource != "sealed" || v.KeyHint != "sk-ant-…ABCD" {
 		t.Errorf("view = %+v", v)
 	}
 	info, err := os.Stat(filepath.Join(dir, ".notation", "ai.json"))
@@ -29,32 +40,74 @@ func TestKeyIsStoredOwnerOnlyAndNeverInTheView(t *testing.T) {
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("ai.json mode = %o, want 0600", perm)
 	}
-	got, _ := s.View()
-	if strings.Contains(got.KeyHint, "abcdefghij") {
-		t.Errorf("view leaks the key: %+v", got)
-	}
-	key, err := s.APIKey()
-	if err != nil || key != goodKey {
-		t.Errorf("APIKey = %q, %v", key, err)
+	km, err := s.Key()
+	if err != nil || km.Source != "sealed" || km.Sealed == nil || km.APIKey != "" {
+		t.Errorf("Key = %+v, %v", km, err)
 	}
 	// Clearing.
-	v, err = s.Apply(Update{APIKey: strp("")})
+	v, err = s.Apply(Update{ClearKey: true})
 	if err != nil || v.Configured {
 		t.Errorf("clear: %+v %v", v, err)
 	}
+	if km, _ := s.Key(); km.Source != "" {
+		t.Errorf("cleared store still hands out %+v", km)
+	}
 }
 
-func TestKeyShapeIsChecked(t *testing.T) {
+// An install from before sealing keeps working until the browser seals the
+// key; storing the sealed key removes the plaintext from disk.
+func TestLegacyPlaintextKeyIsReplacedBySealing(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".notation"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, ".notation", "ai.json")
+	if err := os.WriteFile(path, []byte(`{"api_key":"`+goodKey+`","default_model":"claude-sonnet-5-5"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(dir, "", false)
+	v, _ := s.View()
+	if v.KeySource != "legacy" || v.KeyHint != "sk-ant-…ABCD" {
+		t.Errorf("legacy view = %+v", v)
+	}
+	km, _ := s.Key()
+	if km.Source != "legacy" || km.APIKey != goodKey {
+		t.Errorf("legacy key = %+v", km)
+	}
+	if _, err := s.Apply(Update{SealedKey: sealed("sk-ant-…ABCD")}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	if strings.Contains(string(raw), "abcdefghij") || strings.Contains(string(raw), `"api_key"`) {
+		t.Errorf("plaintext key still on disk after sealing: %s", raw)
+	}
+	if !strings.Contains(string(raw), "claude-sonnet-5-5") {
+		t.Errorf("sealing dropped the other settings: %s", raw)
+	}
+}
+
+func TestSealedKeyShapeIsChecked(t *testing.T) {
 	s := NewStore(t.TempDir(), "", false)
-	for _, bad := range []string{
-		"hello",
-		"https://console.anthropic.com/settings/keys",
-		"sk-ant-admin01-abcdefghijklmnopqrstuvwxyz",  // admin keys never go to a browser
-		"sk-ant-api03 with spaces in it xxxxxxxxxxx", // a pasted sentence
-		"sk-ant-" + strings.Repeat("x", 300),
+	b64 := base64.StdEncoding.EncodeToString
+	for name, mut := range map[string]func(k *SealedKey){
+		"version":       func(k *SealedKey) { k.V = 2 },
+		"algorithm":     func(k *SealedKey) { k.KDF.Algorithm = "pbkdf2" },
+		"weak memory":   func(k *SealedKey) { k.KDF.MemoryKiB = 1024 },
+		"huge memory":   func(k *SealedKey) { k.KDF.MemoryKiB = 8 << 20 }, // would wedge the browser
+		"iterations":    func(k *SealedKey) { k.KDF.Iterations = 0 },
+		"many passes":   func(k *SealedKey) { k.KDF.Iterations = 1000 },
+		"parallelism":   func(k *SealedKey) { k.KDF.Parallelism = 64 },
+		"short salt":    func(k *SealedKey) { k.Salt = b64(make([]byte, 4)) },
+		"bad salt":      func(k *SealedKey) { k.Salt = "not base64!" },
+		"empty ct":      func(k *SealedKey) { k.Ciphertext = "" },
+		"huge ct":       func(k *SealedKey) { k.Ciphertext = b64(make([]byte, 4096)) },
+		"hint sentence": func(k *SealedKey) { k.Hint = "<script>alert(1)</script>" },
+		"hint is key":   func(k *SealedKey) { k.Hint = goodKey },
 	} {
-		if _, err := s.Apply(Update{APIKey: strp(bad)}); !errors.Is(err, ErrInvalidKey) {
-			t.Errorf("Apply(%q) = %v, want ErrInvalidKey", bad, err)
+		k := sealed("sk-ant-…ABCD")
+		mut(k)
+		if _, err := s.Apply(Update{SealedKey: k}); !errors.Is(err, ErrInvalidSealedKey) {
+			t.Errorf("%s: Apply = %v, want ErrInvalidSealedKey", name, err)
 		}
 	}
 }
@@ -65,8 +118,14 @@ func TestEnvKeyWinsAndLocksTheSetting(t *testing.T) {
 	if !v.Configured || v.KeySource != "env" {
 		t.Errorf("view = %+v", v)
 	}
-	if _, err := s.Apply(Update{APIKey: strp(goodKey)}); !errors.Is(err, ErrKeyFromEnv) {
+	if _, err := s.Apply(Update{SealedKey: sealed("sk-ant-…ABCD")}); !errors.Is(err, ErrKeyFromEnv) {
 		t.Errorf("setting a key over an env key = %v, want ErrKeyFromEnv", err)
+	}
+	if _, err := s.Apply(Update{ClearKey: true}); !errors.Is(err, ErrKeyFromEnv) {
+		t.Errorf("clearing an env key = %v, want ErrKeyFromEnv", err)
+	}
+	if km, _ := s.Key(); km.Source != "env" || km.APIKey != goodKey {
+		t.Errorf("env key = %+v", km)
 	}
 	// Defaults stay editable.
 	if _, err := s.Apply(Update{DefaultModel: strp("claude-sonnet-5-5"), DefaultEffort: strp("high")}); err != nil {
@@ -83,7 +142,7 @@ func TestDisabledHidesTheKey(t *testing.T) {
 	if v.Enabled || v.Configured {
 		t.Errorf("view = %+v", v)
 	}
-	if k, _ := s.APIKey(); k != "" {
+	if km, _ := s.Key(); km.Source != "" || km.APIKey != "" {
 		t.Errorf("disabled store hands out a key")
 	}
 }

@@ -5,6 +5,9 @@ import type { SyncNode, SyncSpace } from '../syncSpace'
 import { GUIDE_MARKER } from '../spaceGuide'
 import { AgentFS, AgentFsError, globToRegExp, normalizePath } from './agentFs'
 import { buildParams } from './agent'
+import { checkApiKey, kdfParamsOf, openApiKey, sealApiKey, WrongPasswordError } from './keySeal'
+import { effortFor, liveModel, refreshModels } from './modelList'
+import { DEFAULT_KDF_PARAMS } from '../../../shared/crypto/kdf'
 import { plainCodec, sealedCodec, newChatId, type Chat } from './chatStore'
 import { unifiedDiff } from './diff'
 import { addUsage, emptyUsage } from './models'
@@ -314,6 +317,91 @@ describe('request shape', () => {
 
   it('tool definitions are stable between requests (prompt cache)', () => {
     expect(JSON.stringify(buildParams(chat(), 'claude-opus-5-5', 'high').tools)).toBe(JSON.stringify(buildParams(chat(), 'claude-opus-5-5', 'max').tools))
+  })
+})
+
+describe('sealed API key', () => {
+  // The lowest cost the server (and the open-side clamp) accepts, to keep the test quick.
+  const quick = { ...DEFAULT_KDF_PARAMS, memoryKiB: 19456, iterations: 1 }
+  const KEY = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789_-WXYZ'
+
+  it('round-trips with the password and fails closed without it', async () => {
+    const sealed = await sealApiKey(KEY, 'correct horse', quick)
+    expect(sealed.hint).toBe('sk-ant-…WXYZ')
+    expect(JSON.stringify(sealed)).not.toContain('abcdefghij')
+    expect(await openApiKey(sealed, 'correct horse')).toBe(KEY)
+    await expect(openApiKey(sealed, 'wrong horse')).rejects.toBeInstanceOf(WrongPasswordError)
+  }, 30_000)
+
+  it('detects tampering', async () => {
+    const sealed = await sealApiKey(KEY, 'pw-pw-pw-pw', quick)
+    const ct = atob(sealed.ct)
+    const flipped = btoa(ct.slice(0, -1) + String.fromCharCode(ct.charCodeAt(ct.length - 1) ^ 1))
+    await expect(openApiKey({ ...sealed, ct: flipped }, 'pw-pw-pw-pw')).rejects.toBeInstanceOf(WrongPasswordError)
+  }, 30_000)
+
+  it('clamps a hostile KDF cost instead of obeying it', () => {
+    // A tampered record asking for 8 GiB × 10^6 passes must not hang the tab.
+    const p = kdfParamsOf({ v: 1, kdf: { algorithm: 'argon2id', memory_kib: 8 << 20, iterations: 1_000_000, parallelism: 64 }, salt: '', ct: '', hint: '' })
+    expect(p).toMatchObject({ memoryKiB: 262144, iterations: 10, parallelism: 4 })
+    const low = kdfParamsOf({ v: 1, kdf: { algorithm: 'argon2id', memory_kib: 1, iterations: 0, parallelism: 0 }, salt: '', ct: '', hint: '' })
+    expect(low).toMatchObject({ memoryKiB: 19456, iterations: 1, parallelism: 1 })
+  })
+
+  it('refuses things that are not a usable API key', () => {
+    expect(checkApiKey(KEY)).toBeNull()
+    expect(checkApiKey('sk-ant-admin01-abcdefghijklmnopqrstuvwxyz')).toMatch(/admin key/)
+    expect(checkApiKey('hello')).not.toBeNull()
+    expect(checkApiKey('sk-ant-api03 with spaces xxxxxxxxxxxx')).not.toBeNull()
+  })
+})
+
+describe('live model list', () => {
+  const chat = (): Chat => ({
+    meta: { v: 1, id: newChatId(), title: '', createdAt: '', updatedAt: '', model: 'x', effort: 'high', usage: emptyUsage(), contextTokens: 0, messageCount: 0 },
+    body: { v: 1, system: 'S', messages: [{ role: 'user', content: 'hi' }], tools: {}, notices: [] },
+  })
+  const sup = (supported: boolean) => ({ supported })
+  const fake = {
+    models: {
+      async *list() {
+        yield { id: 'claude-opus-5-5', display_name: 'Claude Opus 5.5', created_at: '2026-09-01T00:00:00Z', lifecycle: 'active', capabilities: null }
+        yield {
+          id: 'claude-future-6', display_name: 'Claude Future 6', created_at: '2026-12-01T00:00:00Z', lifecycle: 'active',
+          capabilities: { thinking: { supported: true, types: { adaptive: sup(true) } }, effort: { supported: true, low: sup(true), medium: sup(true), high: sup(true), xhigh: null, max: sup(false) } },
+        }
+        yield {
+          id: 'claude-old-3', display_name: 'Claude Old 3', created_at: '2024-01-01T00:00:00Z', lifecycle: 'deprecated',
+          capabilities: { thinking: { supported: false, types: { adaptive: sup(false) } }, effort: { supported: false } },
+        }
+        yield { id: 'claude-gone-2', display_name: 'Gone', created_at: '2023-01-01T00:00:00Z', lifecycle: 'retired', capabilities: null }
+      },
+    },
+  }
+
+  it('merges the API list and adapts requests to each model', async () => {
+    await refreshModels(async () => fake as never, true)
+    expect(liveModel('claude-gone-2')).toBeUndefined()
+    expect(liveModel('claude-future-6')).toMatchObject({ label: 'Claude Future 6', known: false, released: '2026-12-01' })
+    expect(liveModel('claude-old-3')?.deprecated).toBe(true)
+    // Effort the model doesn't take → the nearest one it does.
+    expect(effortFor('claude-future-6', 'max')).toBe('high')
+    expect(effortFor('claude-future-6', 'medium')).toBe('medium')
+    const future = buildParams(chat(), 'claude-future-6', 'xhigh')
+    expect(future.output_config).toEqual({ effort: 'high' })
+    expect(future.thinking).toMatchObject({ type: 'adaptive' })
+    // No adaptive thinking and no effort → neither is sent.
+    const old = buildParams(chat(), 'claude-old-3', 'high')
+    expect(old.thinking).toBeUndefined()
+    expect(old.output_config).toBeUndefined()
+    expect(old.betas ?? []).not.toContain('thinking-binding-controls-2026-08-01')
+    // Unknown capabilities (null) → the full request, as before.
+    expect(buildParams(chat(), 'claude-opus-5-5', 'max').output_config).toEqual({ effort: 'max' })
+  })
+
+  it('keeps the previous list when the API call fails', async () => {
+    await refreshModels(async () => { throw new Error('offline') }, true)
+    expect(liveModel('claude-future-6')).toBeDefined()
   })
 })
 
