@@ -65,6 +65,12 @@ const writeLS = (k: string, v: string | null) => {
 
 const today = () => new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD, local
 
+/**
+ * Unsent drafts per Space survive closing the panel — in memory only, never in
+ * browser storage, so nothing typed about an encrypted Space lands on disk.
+ */
+const drafts = new Map<string, string>()
+
 export default function ChatPanel(props: ChatPanelProps) {
   const { spaceID, encrypted, keyHandle, isMobile, onClose } = props
 
@@ -157,7 +163,12 @@ export default function ChatPanel(props: ChatPanelProps) {
   const model = pick?.model || chat?.meta.model || settings?.default_model || DEFAULT_MODEL
   const effort = pick?.effort ?? chat?.meta.effort ?? (isEffort(settings?.default_effort) ? settings!.default_effort as Effort : DEFAULT_EFFORT)
 
-  const [draft, setDraft] = useState('')
+  const [draft, setDraftState] = useState(() => drafts.get(spaceID) ?? '')
+  const setDraft = useCallback((t: string) => {
+    setDraftState(t)
+    if (t) drafts.set(spaceID, t)
+    else drafts.delete(spaceID)
+  }, [spaceID])
   const [includePage, setIncludePage] = useState(true)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => { inputRef.current?.focus({ preventScroll: true }) }, [settings?.configured])
@@ -191,7 +202,7 @@ export default function ChatPanel(props: ChatPanelProps) {
     briefRef.current = null
     loadBrief(true).then(b => setSkills(b.skills)).catch(() => {})
     setTimeout(() => inputRef.current?.focus(), 0)
-  }, [running, setChat, loadBrief])
+  }, [running, setChat, setDraft, loadBrief])
 
   const openChat = useCallback(async (meta: ChatMeta) => {
     if (!store || running) return
@@ -281,7 +292,7 @@ export default function ChatPanel(props: ChatPanelProps) {
       rerender()
       setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0)
     }
-  }, [running, settings, store, loadBrief, model, effort, spaceID, props, encrypted, setChat, includePage, persist, rerender])
+  }, [running, settings, store, loadBrief, model, effort, spaceID, props, encrypted, setChat, setDraft, includePage, persist, rerender])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()

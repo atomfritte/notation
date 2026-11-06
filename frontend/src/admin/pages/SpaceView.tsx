@@ -280,7 +280,17 @@ export function SpaceView() {
   // write so the git history credits the change to "ai:" rather than the admin.
   const [aiEnabled, setAiEnabled] = useState(false)
   useEffect(() => { let c = false; aiAvailable().then(v => { if (!c) setAiEnabled(v) }); return () => { c = true } }, [])
-  const [showChat, setShowChat] = useState(false)
+  // Remembered across reloads on desktop (on a phone it is a full-screen sheet,
+  // so it always starts closed).
+  const [showChat, setShowChat] = useState(() => {
+    try { return localStorage.getItem('notation_ai_open') === '1' && window.innerWidth >= 768 } catch { return false }
+  })
+  useEffect(() => {
+    try { if (showChat) localStorage.setItem('notation_ai_open', '1'); else localStorage.removeItem('notation_ai_open') } catch { /* private mode */ }
+    // Three side panels don't fit a laptop screen: opening the assistant takes
+    // the comments' and outline's place there (either can be reopened).
+    if (showChat && window.innerWidth < 1440) { setShowComments(false); setShowOutline(false) }
+  }, [showChat])
   const aiEnabledRef = useRef(false)
   useEffect(() => { aiEnabledRef.current = aiEnabled }, [aiEnabled])
   const aiSpace = useMemo<SyncSpace | null>(
@@ -829,8 +839,8 @@ export function SpaceView() {
   // read the live view state through refs instead of closing over a snapshot.
   const fileRef = useRef(file)
   useEffect(() => { fileRef.current = file }, [file])
-  const unsavedRef = useRef(false)
-  useEffect(() => { unsavedRef.current = editing && editorDirty }, [editing, editorDirty])
+  const editingRef = useRef({ editing: false, dirty: false })
+  useEffect(() => { editingRef.current = { editing, dirty: editing && editorDirty } }, [editing, editorDirty])
   const onAIChanged = useCallback((paths: string[]) => {
     if (encryptedRef.current) {
       if (fsRef.current) setTree(fsToEntries(fsRef.current))
@@ -848,14 +858,17 @@ export function SpaceView() {
   const onAIRemoved = useCallback((path: string) => {
     if (fileRef.current === path) setFileParam('', { replace: true })
   }, [setFileParam])
-  const aiWriteGuard = useCallback((path: string) => (
-    unsavedRef.current && fileRef.current === path
-      ? `${path} is open in the editor with unsaved changes. Ask the user to save or discard them first, then try again.`
-      : null
-  ), [])
+  // The editor is uncontrolled (Monaco keeps its own buffer): a change written
+  // under it would be silently overwritten by its next save — so a page open in
+  // the editor is off-limits, dirty or not.
+  const aiWriteGuard = useCallback((path: string) => {
+    const ed = editingRef.current
+    if (!ed.editing || fileRef.current !== path) return null
+    return `${path} is open in the editor${ed.dirty ? ' with unsaved changes' : ''}. Ask the user to ${ed.dirty ? 'save and ' : ''}close the editor (switch to reading view), then try again.`
+  }, [])
   // Claude showing a page (open_page) must not throw away an unsaved edit.
   const aiOpenPage = useCallback((p: string) => {
-    if (unsavedRef.current) return
+    if (editingRef.current.dirty) return
     setSelectedCommentId(null)
     setFileParam(p)
   }, [setFileParam])
