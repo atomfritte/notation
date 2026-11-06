@@ -203,24 +203,4 @@ export class AgentFS {
   }
 }
 
-/**
- * Translate a shell-style glob to an anchored RegExp: `**` any depth, `*` one
- * segment, `?` one character. A pattern without a slash matches the basename
- * at any depth, which is what people mean by `*.md`.
- */
-export function globToRegExp(glob: string): RegExp {
-  let g = glob.trim().replace(/^\.\/+/, '').replace(/^\/+/, '')
-  if (!g.includes('/')) g = '**/' + g
-  let re = ''
-  for (let i = 0; i < g.length; i++) {
-    const c = g[i]
-    if (c === '*') {
-      if (g[i + 1] === '*') {
-        // `**/` matches zero or more whole segments.
-        if (g[i + 2] === '/') { re += '(?:.*/)?'; i += 2 } else { re += '.*'; i++ }
-      } else re += '[^/]*'
-    } else if (c === '?') re += '[^/]'
-    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-  }
-  return new RegExp(`^${re}$`, 'i')
-}
+export { globToRegExp } from './skillFormat'

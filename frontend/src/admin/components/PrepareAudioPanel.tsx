@@ -183,7 +183,7 @@ export function PrepareAudioPanel({ open, spaceID, tree, voices, onClose }: Prop
           <button
             onClick={start}
             disabled={running || !pages.length || !voiceId}
-            className="px-3 py-1.5 text-sm rounded-md bg-[var(--notation-accent)] text-white font-medium hover:opacity-90 disabled:opacity-40 flex items-center gap-1.5"
+            className="px-3 py-1.5 text-sm rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] font-medium hover:opacity-90 disabled:opacity-40 flex items-center gap-1.5"
           >
             {running ? <Loader2 size={14} className="animate-spin" /> : <Headphones size={14} />}
             {running ? 'Vertont…' : 'Vertonen'}

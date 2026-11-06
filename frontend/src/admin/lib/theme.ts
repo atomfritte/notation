@@ -187,8 +187,11 @@ export const BUILTIN_THEMES: Theme[] = [
   },
   {
     name: 'Solarized', builtIn: true,
-    dark:  fillPalette({ accent: '#268BD2', bg: '#002B36', bgElevated: '#003B49', fg: '#839496', fgMuted: '#586E75', border: '#073642' }, NEUTRAL_DARK),
-    light: fillPalette({ accent: '#268BD2', bg: '#FDF6E3', bgElevated: '#EEE8D5', fg: '#586E75', fgMuted: '#93A1A1', border: '#E0DAC4' }, NEUTRAL_LIGHT),
+    // One step up the Solarized ramp in both modes (base01/base1 as muted read at
+    // ~2.3:1): dark body is base1, secondary base0.
+    dark:  fillPalette({ accent: '#268BD2', bg: '#002B36', bgElevated: '#003B49', fg: '#93A1A1', fgMuted: '#839496', border: '#073642' }, NEUTRAL_DARK),
+    // Light secondary is base00 (base1 on base3 is 2.2:1).
+    light: fillPalette({ accent: '#268BD2', bg: '#FDF6E3', bgElevated: '#EEE8D5', fg: '#586E75', fgMuted: '#657B83', border: '#E0DAC4' }, NEUTRAL_LIGHT),
   },
   {
     name: 'Nord', builtIn: true,
@@ -542,7 +545,47 @@ function mix(a: string, b: string, ratio: number): string {
   ).join('')
 }
 
+/** WCAG contrast ratio of two hex colours (1 … 21). */
+function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+/** How readable accent TEXT must be against the chrome surface. */
+const ACCENT_ON_CHROME_MIN = 4.5
+
+/**
+ * The accent as painted INSIDE chrome (sidebar, panels, palettes, menus).
+ *
+ * A split-tone theme tunes its accent for the bright page — dark enough to
+ * read as a link on paper — and then paints the same accent onto a deep
+ * chrome tone, where the count badges, active markers and match highlights
+ * dropped to ~2.5:1. In that case the chrome gets its own accent: the theme's
+ * hue, moved toward the chrome's ink just far enough to read (≥ 4.5:1 against
+ * the chrome card surface, which is the lighter of the two chrome tones).
+ *
+ * Uniform themes paint chrome and page alike; their accent is a deliberate
+ * choice and stays exactly as it is, so page and sidebar keep matching.
+ */
+export function accentOnChrome(p: ModePalette): string {
+  const chrome = (p.chromeBg || p.bgElevated).toUpperCase()
+  if (chrome === p.bgElevated.toUpperCase()) return p.accent
+  const card = p.chromeBgAlt || chrome
+  const worst = (c: string) => Math.min(contrastRatio(c, chrome), contrastRatio(c, card))
+  if (worst(p.accent) >= ACCENT_ON_CHROME_MIN) return p.accent
+  const ink = p.chromeFg || pickOnSurface(chrome)
+  for (let step = 1; step <= 20; step++) {
+    const c = mix(p.accent, ink, step / 20)
+    if (worst(c) >= ACCENT_ON_CHROME_MIN) return c
+  }
+  return ink
+}
+
 function paletteToVars(p: ModePalette): Record<string, string> {
+  const chromeAccent = accentOnChrome(p)
+  const chromeAlpha = Object.fromEntries(
+    Object.entries(alphaSiblings(chromeAccent)).map(([k, v]) => [k.replace('--notation-accent-', '--notation-accent-chrome-'), v]),
+  )
   return {
     '--notation-accent': p.accent,
     '--notation-bg': p.bg,
@@ -565,6 +608,11 @@ function paletteToVars(p: ModePalette): Record<string, string> {
     '--notation-fg-on-accent': p.fgOnAccent,
     '--notation-backdrop': p.backdrop,
     ...alphaSiblings(p.accent),
+    // The chrome's own accent (see accentOnChrome); `.surface-elevated` rebinds
+    // --notation-accent* and --notation-fg-on-accent to these.
+    '--notation-accent-on-chrome': chromeAccent,
+    '--notation-fg-on-accent-chrome': chromeAccent === p.accent ? p.fgOnAccent : pickOnAccent(chromeAccent),
+    ...chromeAlpha,
   }
 }
 

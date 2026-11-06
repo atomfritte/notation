@@ -146,7 +146,7 @@ export function SearchPanel({ open, onClose, onSelect, onSearch, files }: Props)
               if (e.key === 'Escape') onClose()
             }}
             placeholder={files ? 'Search page titles and content…' : 'Search across all pages…'}
-            className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)] placeholder-zinc-400"
+            className="flex-1 bg-transparent outline-none text-sm text-[var(--notation-fg)]"
           />
           {loading && <span className="text-xs text-[var(--notation-fg-muted)]">searching…</span>}
           <button onClick={onClose} className="text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]">
@@ -225,7 +225,9 @@ function Highlight({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((p, k) =>
         p.hit ? (
-          <mark key={k} className="bg-[color:var(--notation-accent-30)] text-[var(--notation-fg)] dark:text-[color:var(--notation-accent)] rounded px-0.5">
+          // The tint marks the hit; the text stays foreground — accent text on
+          // its own 30% tint falls below AA (worst in a dark split-tone chrome).
+          <mark key={k} className="bg-[color:var(--notation-accent-30)] text-[var(--notation-fg)] font-medium rounded px-0.5">
             {p.s}
           </mark>
         ) : (

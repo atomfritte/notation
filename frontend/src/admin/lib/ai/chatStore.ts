@@ -80,6 +80,13 @@ export interface ChatBody {
   messages: BetaMessageParam[]
   tools: Record<string, ToolRecord>
   notices: Notice[]
+  /**
+   * Which instruction files are in Claude's context (Claude Code's memory
+   * rules, instructions.ts): the mode the Space started in, the files loaded
+   * so far — at the start and on demand — and the path-scoped skills already
+   * announced. Absent in chats from before it existed.
+   */
+  memory?: { mode: 'claude' | 'agents'; loaded: string[]; skills?: string[] }
 }
 
 export interface Chat {

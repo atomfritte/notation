@@ -18,13 +18,13 @@ import {
 import type { KeyHandle } from '../../../shared/crypto/keys'
 import type { SyncSpace } from '../../lib/syncSpace'
 import { AgentFS } from '../../lib/ai/agentFs'
-import { CONTEXT_TAG, client, isApprovingAll, runTurn, setApprovingAll, type ApprovalDecision, type PendingApproval } from '../../lib/ai/agent'
+import { CONTEXT_TAG, SKILL_TAG, client, isApprovingAll, runTurn, setApprovingAll, type ApprovalDecision, type PendingApproval, type TurnContext } from '../../lib/ai/agent'
 import { HttpChatStore, newChatId, plainCodec, sealedCodec, type Chat, type ChatMeta, type ChatStore, type Notice } from '../../lib/ai/chatStore'
 import { DEFAULT_EFFORT, DEFAULT_MODEL, emptyUsage, formatCost, formatTokens, isEffort, modelInfo, type Effort } from '../../lib/ai/models'
 import { refreshModels } from '../../lib/ai/modelList'
 import { useKeyMemory } from '../../lib/ai/keyMemory'
 import { getAISettings, keyState, lockKey, saveAISettings, type AISettings } from '../../lib/ai/settings'
-import { collectBrief, type Brief } from '../../lib/ai/skills'
+import { collectBrief, matchSlashCommand, renderSkill, type Brief } from '../../lib/ai/skills'
 import { buildSystemPrompt } from '../../lib/ai/systemPrompt'
 import { AISettingsDialog, AISettingsForm } from './AISettingsDialog'
 import { ChatMarkdown } from './ChatMarkdown'
@@ -146,13 +146,18 @@ export default function ChatPanel(props: ChatPanelProps) {
     }
     return briefRef.current
   }, [props.space, settings?.skills_space, spaceID])
-  const [skills, setSkills] = useState<Brief['skills']>([])
+  const [skills, setSkillsState] = useState<Brief['skills']>([])
+  const [memoryFiles, setMemoryFiles] = useState<string[]>([])
+  const setSkills = useCallback((b: Brief) => {
+    setSkillsState(b.skills)
+    setMemoryFiles(b.memory.files.map(f => f.path))
+  }, [])
   useEffect(() => {
     if (!settings?.configured) return
     let cancelled = false
-    loadBrief(true).then(b => { if (!cancelled) setSkills(b.skills) }).catch(() => {})
+    loadBrief(true).then(b => { if (!cancelled) setSkills(b) }).catch(() => {})
     return () => { cancelled = true }
-  }, [settings?.configured, loadBrief])
+  }, [settings?.configured, loadBrief, setSkills])
 
   // ── per-turn state ──
   const [running, setRunning] = useState(false)
@@ -211,9 +216,9 @@ export default function ChatPanel(props: ChatPanelProps) {
     setPick(null)
     setDraft('')
     briefRef.current = null
-    loadBrief(true).then(b => setSkills(b.skills)).catch(() => {})
+    loadBrief(true).then(b => setSkills(b)).catch(() => {})
     setTimeout(() => inputRef.current?.focus(), 0)
-  }, [running, setChat, setDraft, loadBrief])
+  }, [running, setChat, setDraft, loadBrief, setSkills])
 
   const openChat = useCallback(async (meta: ChatMeta) => {
     if (!store || running) return
@@ -260,10 +265,23 @@ export default function ChatPanel(props: ChatPanelProps) {
             messages: [],
             tools: {},
             notices: [],
+            memory: { mode: brief.memory.mode, loaded: brief.memory.files.map(f => f.path) },
           },
         }
         setChat(c)
-        setSkills(brief.skills)
+        setSkills(brief)
+      }
+      // `/name args` runs a skill, as in Claude Code: its rendered content goes
+      // into this turn alongside the message.
+      let skillRun: TurnContext['skill']
+      const slash = text !== undefined ? matchSlashCommand(text, brief.skills) : null
+      if (slash) {
+        const src = brief.sources[slash.skill.source]
+        try {
+          if (src) skillRun = { name: slash.skill.name, path: slash.skill.path, content: renderSkill(slash.skill, await src.read(slash.skill.path), slash.args) }
+        } catch (e) {
+          setSaveErr(`Couldn't load the skill ${slash.skill.name}: ${(e as Error).message}`)
+        }
       }
       if (text !== undefined) setDraft('')
       const ctrl = new AbortController()
@@ -281,7 +299,7 @@ export default function ChatPanel(props: ChatPanelProps) {
       await runTurn({
         chat: current,
         text: text?.trim(),
-        context: { openPage: includePage && props.openPage ? props.openPage : undefined, today: today(), undone },
+        context: { openPage: includePage && props.openPage ? props.openPage : undefined, today: today(), undone, skill: skillRun },
         model,
         effort,
         tools: { fs, brief, openPage: props.onOpenPage },
@@ -468,6 +486,8 @@ export default function ChatPanel(props: ChatPanelProps) {
                 openPage={props.openPage}
                 encrypted={encrypted}
                 skills={skills}
+                memoryFiles={memoryFiles}
+                onOpenFile={props.onOpenPage}
                 onPrompt={(t, sendNow) => {
                   if (sendNow) void send(t)
                   else { setDraft(t); setTimeout(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(t.length, t.length) } }, 0) }
@@ -512,6 +532,7 @@ export default function ChatPanel(props: ChatPanelProps) {
             inputRef={inputRef}
             draft={draft}
             setDraft={setDraft}
+            commands={skills.filter(s => s.userInvocable)}
             running={running}
             onSend={() => void send(draft)}
             onStop={stop}
@@ -650,13 +671,17 @@ function HistoryMenu({
 }
 
 function EmptyState({
-  openPage, encrypted, skills, onPrompt,
+  openPage, encrypted, skills, memoryFiles, onOpenFile, onPrompt,
 }: {
   openPage: string
   encrypted: boolean
   skills: Brief['skills']
+  /** Instruction files in force (CLAUDE.md …), for the "Instructions" line. */
+  memoryFiles: string[]
+  onOpenFile: (path: string) => void
   onPrompt: (text: string, sendNow: boolean) => void
 }) {
+  const runnable = skills.filter(s => s.userInvocable)
   const page = openPage ? openPage.split('/').pop() : ''
   const ideas: { label: string; text: string; send: boolean }[] = []
   if (openPage) {
@@ -686,21 +711,29 @@ function EmptyState({
           </button>
         ))}
       </div>
-      {skills.length > 0 && (
+      {runnable.length > 0 && (
         <div>
           <div className="text-[11px] uppercase tracking-wide text-[var(--notation-fg-muted)] mb-1">Skills</div>
           <div className="flex flex-wrap gap-1.5">
-            {skills.map(s => (
+            {runnable.map(s => (
               <button
                 key={s.source + s.path}
-                onClick={() => onPrompt(`Use the skill “${s.name}” to `, false)}
-                title={s.description}
-                className="text-[12px] px-2 py-0.5 rounded-full bg-[var(--notation-accent-10)] hover:bg-[var(--notation-accent-20)]"
+                onClick={() => onPrompt(`/${s.name} `, false)}
+                title={`${s.description}${s.argumentHint ? `\nArguments: ${s.argumentHint}` : ''}`}
+                className="text-[12px] px-2 py-0.5 rounded-full bg-[var(--notation-accent-10)] hover:bg-[var(--notation-accent-20)] font-mono"
               >
-                {s.name}
+                /{s.name}
               </button>
             ))}
           </div>
+        </div>
+      )}
+      {memoryFiles.length > 0 && (
+        <div className="text-[11.5px] text-[var(--notation-fg-muted)] flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          <span title="Instruction files Claude follows in this Space — loaded the way Claude Code loads them">Instructions:</span>
+          {memoryFiles.map(f => (
+            <button key={f} onClick={() => onOpenFile(f)} className="font-mono text-[var(--notation-fg)] hover:underline">{f}</button>
+          ))}
         </div>
       )}
     </div>
@@ -716,6 +749,11 @@ function blocksOf(content: string | AnyBlock[]): AnyBlock[] {
 }
 
 const isContextBlock = (b: AnyBlock) => b.type === 'text' && b.text.startsWith(`<${CONTEXT_TAG}>`)
+const skillOfBlock = (b: AnyBlock): { name: string; path: string } | null => {
+  if (b.type !== 'text' || !b.text.startsWith(`<${SKILL_TAG} `)) return null
+  const m = /^<[\w-]+ name="([^"]*)" path="([^"]*)">/.exec(b.text)
+  return m ? { name: m[1], path: m[2] } : null
+}
 
 function pageFromContext(b: AnyBlock | undefined): string | null {
   if (!b || b.type !== 'text') return null
@@ -744,6 +782,17 @@ const Messages = memo(function Messages({
     const blocks = blocksOf(m.content as string | AnyBlock[])
     if (m.role === 'user') {
       blocks.forEach((b, j) => {
+        const skill = skillOfBlock(b)
+        if (skill) {
+          out.push(
+            <div key={`${i}.${j}`} className="flex justify-end -mt-1">
+              <span className="flex items-center gap-1 text-[10.5px] text-[var(--notation-fg-muted)]" title={`The skill ${skill.path} was attached to this message`}>
+                <Sparkles size={10} /> Skill <span className="font-mono">{skill.name}</span>
+              </span>
+            </div>,
+          )
+          return
+        }
         if (b.type !== 'text' || isContextBlock(b)) return
         const page = pageFromContext(blocks[j + 1])
         out.push(<UserBubble key={`${i}.${j}`} text={b.text} page={page} onNavigate={onNavigate} />)
@@ -872,12 +921,14 @@ function liveVerb(name: string): string {
 // ── composer ─────────────────────────────────────────────────────────────────
 
 function Composer({
-  inputRef, draft, setDraft, running, onSend, onStop, openPage, includePage, setIncludePage,
+  inputRef, draft, setDraft, commands, running, onSend, onStop, openPage, includePage, setIncludePage,
   picker, autoApply, setAutoApply, approvingAll, onStopApprovingAll, chat,
 }: {
   inputRef: React.RefObject<HTMLTextAreaElement | null>
   draft: string
   setDraft: (s: string) => void
+  /** Skills the user can run with `/name`. */
+  commands: Brief['skills']
   running: boolean
   onSend: () => void
   onStop: () => void
@@ -899,10 +950,42 @@ function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`
   }, [draft, inputRef])
 
+  // `/` at the start offers the skills, like Claude Code's slash menu.
+  const [menuIdx, setMenuIdx] = useState(0)
+  const [menuClosed, setMenuClosed] = useState<string | null>(null)
+  const slash = /^\/([\w:.-]*)$/.exec(draft)
+  const matches = slash && menuClosed !== draft
+    ? commands.filter(c => c.name.toLowerCase().startsWith(slash[1].toLowerCase())).slice(0, 8)
+    : []
+  const sel = Math.min(menuIdx, Math.max(0, matches.length - 1))
+  const complete = (name: string) => {
+    setDraft(`/${name} `)
+    setMenuIdx(0)
+    inputRef.current?.focus()
+  }
+
   const usage = chat?.meta.usage
   const ctx = chat?.meta.contextTokens ?? 0
   return (
-    <div className="border-t border-[var(--notation-border)] px-2.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-col gap-1.5">
+    <div className="relative border-t border-[var(--notation-border)] px-2.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-col gap-1.5">
+      {matches.length > 0 && (
+        <div role="listbox" aria-label="Skills" className="absolute left-2.5 right-2.5 bottom-full mb-1 z-20 rounded-lg border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] text-[var(--notation-fg)] shadow-xl py-1 max-h-[45vh] overflow-y-auto">
+          {matches.map((c, k) => (
+            <button
+              key={c.source + c.path}
+              type="button"
+              role="option"
+              aria-selected={k === sel}
+              onMouseDown={(e) => { e.preventDefault(); complete(c.name) }}
+              onMouseEnter={() => setMenuIdx(k)}
+              className={`w-full text-left px-2.5 py-1.5 flex flex-col ${k === sel ? 'bg-[var(--notation-bg-alt)]' : ''}`}
+            >
+              <span className="text-[12.5px] font-mono">/{c.name}{c.argumentHint ? <span className="text-[var(--notation-fg-muted)]"> {c.argumentHint}</span> : null}{c.source === 'library' ? <span className="ml-1.5 font-sans text-[10.5px] text-[var(--notation-fg-muted)]">library</span> : null}</span>
+              {c.description && <span className="text-[11px] text-[var(--notation-fg-muted)] line-clamp-2">{c.description}</span>}
+            </button>
+          ))}
+        </div>
+      )}
       {(openPage || approvingAll) && (
         <div className="flex items-center gap-1.5 flex-wrap">
           {openPage && (
@@ -928,6 +1011,19 @@ function Composer({
           value={draft}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={(e) => {
+            if (matches.length > 0) {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault()
+                setMenuIdx((sel + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length)
+                return
+              }
+              if ((e.key === 'Tab' || e.key === 'Enter') && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                complete(matches[sel].name)
+                return
+              }
+              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenuClosed(draft); return }
+            }
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               if (!running) onSend()
@@ -937,6 +1033,8 @@ function Composer({
           placeholder={running ? 'Claude is working… (Esc to stop)' : chat?.body.messages.length ? 'Reply…' : 'Ask Claude about this Space…'}
           className="flex-1 min-w-0 resize-none bg-transparent outline-none text-[13.5px] leading-[1.45] py-1 max-h-[220px]"
           aria-label="Message to Claude"
+          aria-autocomplete={commands.length ? 'list' : undefined}
+          aria-expanded={commands.length ? matches.length > 0 : undefined}
         />
         {running ? (
           <button onClick={onStop} className="p-1.5 rounded-lg bg-[var(--notation-fg)] text-[var(--notation-bg)] hover:opacity-85" title="Stop (Esc)" aria-label="Stop">

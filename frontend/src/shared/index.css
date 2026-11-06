@@ -33,6 +33,16 @@
   --notation-accent-30: #65A30D4D;
   --notation-accent-40: #65A30D66;
   --notation-accent-50: #65A30D80;
+  /* The accent as painted inside chrome — theme.ts accentOnChrome(). Equal to
+     the accent for a uniform theme; see `.surface-elevated`. */
+  --notation-accent-on-chrome: #65A30D;
+  --notation-fg-on-accent-chrome: #FFFFFF;
+  --notation-accent-chrome-10: #65A30D1A;
+  --notation-accent-chrome-15: #65A30D26;
+  --notation-accent-chrome-20: #65A30D33;
+  --notation-accent-chrome-30: #65A30D4D;
+  --notation-accent-chrome-40: #65A30D66;
+  --notation-accent-chrome-50: #65A30D80;
   --notation-bg: #FFFFFF;
   --notation-bg-elevated: #FAFAFA;
   /* Chrome surface (sidebar/header/panels). Same as bg-elevated for a uniform
@@ -75,6 +85,14 @@
   --notation-accent-30: #BFF3554D;
   --notation-accent-40: #BFF35566;
   --notation-accent-50: #BFF35580;
+  --notation-accent-on-chrome: #BFF355;
+  --notation-fg-on-accent-chrome: #0A0A0A;
+  --notation-accent-chrome-10: #BFF3551A;
+  --notation-accent-chrome-15: #BFF35526;
+  --notation-accent-chrome-20: #BFF35533;
+  --notation-accent-chrome-30: #BFF3554D;
+  --notation-accent-chrome-40: #BFF35566;
+  --notation-accent-chrome-50: #BFF35580;
   --notation-bg: #0A0A0A;
   --notation-bg-elevated: #111111;
   --notation-chrome-bg: #111111;
@@ -203,6 +221,14 @@
     --notation-accent-30: #65A30D4D !important;
     --notation-accent-40: #65A30D66 !important;
     --notation-accent-50: #65A30D80 !important;
+    --notation-accent-on-chrome: #65A30D !important;
+    --notation-fg-on-accent-chrome: #FFFFFF !important;
+    --notation-accent-chrome-10: #65A30D1A !important;
+    --notation-accent-chrome-15: #65A30D26 !important;
+    --notation-accent-chrome-20: #65A30D33 !important;
+    --notation-accent-chrome-30: #65A30D4D !important;
+    --notation-accent-chrome-40: #65A30D66 !important;
+    --notation-accent-chrome-50: #65A30D80 !important;
     --notation-bg: #FFFFFF !important;
     --notation-bg-elevated: #FAFAFA !important;
     --notation-chrome-bg: #FAFAFA !important;
@@ -659,6 +685,18 @@
   --notation-fg: var(--notation-fg-on-elevated);
   --notation-fg-muted: var(--notation-fg-on-elevated-muted);
   --notation-border: var(--notation-border-on-elevated);
+  /* The chrome's own accent: in a split-tone theme the page accent is tuned
+     for paper and reads at ~2.5:1 on the deep chrome (count badges, active
+     markers, match highlights). theme.ts accentOnChrome() lifts it just far
+     enough; for a uniform theme these are the accent itself. */
+  --notation-accent: var(--notation-accent-on-chrome);
+  --notation-accent-10: var(--notation-accent-chrome-10);
+  --notation-accent-15: var(--notation-accent-chrome-15);
+  --notation-accent-20: var(--notation-accent-chrome-20);
+  --notation-accent-30: var(--notation-accent-chrome-30);
+  --notation-accent-40: var(--notation-accent-chrome-40);
+  --notation-accent-50: var(--notation-accent-chrome-50);
+  --notation-fg-on-accent: var(--notation-fg-on-accent-chrome);
   /* And the INHERITED text colour with them. The body writes zinc-800, which
      is right on the content side but near-invisible on a deep chrome tone: any
      heading, label or input inside a chrome panel that doesn't name a colour
@@ -862,10 +900,12 @@
   color: var(--notation-accent);
 }
 
-/* Highlight / Bookmark passages */
+/* Highlight / Bookmark passages. The tint marks the passage; the text keeps
+   its colour — accent text on its own 30% tint is below AA in light themes
+   and in a dark split-tone chrome. (Unlayered, so this beats utilities.) */
 mark {
   background-color: var(--notation-accent-30);
-  color: var(--notation-accent);
+  color: inherit;
   border-radius: 0.125rem;
   padding: 0.125rem 0.25rem;
   @apply rounded-sm;

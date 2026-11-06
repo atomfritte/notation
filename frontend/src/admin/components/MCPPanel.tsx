@@ -81,7 +81,7 @@ export function MCPPanel({ spaceID }: Props) {
             <input
               value={label}
               onChange={e => setLabel(e.target.value)}
-              className="border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] px-2 py-1.5 rounded-md text-xs w-full text-[var(--notation-fg)] placeholder-zinc-400"
+              className="border border-[var(--notation-border)] bg-[var(--notation-bg-alt)] px-2 py-1.5 rounded-md text-xs w-full text-[var(--notation-fg)]"
               placeholder="Label (e.g. claude-laptop)"
               autoFocus
             />

@@ -286,7 +286,7 @@ export function AISettingsForm({
             className="px-2.5 py-1.5 rounded-md border border-[var(--notation-border)] bg-[var(--notation-bg)] outline-none focus:border-[color:var(--notation-accent)] resize-y"
           />
           <span className="text-[11px] text-[var(--notation-fg-muted)]">
-            A Space can add its own: an <code>AGENTS.md</code> or <code>CLAUDE.md</code> in its root, and skills as <code>skills/&lt;name&gt;/SKILL.md</code> — the same files Claude Code reads after a folder sync.
+            Like your personal <code>CLAUDE.md</code> in Claude Code. A Space adds its own — <code>CLAUDE.md</code> / <code>CLAUDE.local.md</code> or <code>AGENTS.md</code>, also in folders, and skills as <code>skills/&lt;name&gt;/SKILL.md</code> — loaded by Claude Code's rules. A folder sync hands Claude Code the same instructions and skills.
           </span>
         </section>
 
@@ -303,7 +303,7 @@ export function AISettingsForm({
             {spaces?.map(s => <option key={s.id} value={s.id}>{s.name || s.id}</option>)}
           </select>
           <span className="text-[11px] text-[var(--notation-fg-muted)]">
-            A plaintext Space whose <code>SKILL.md</code> skills are offered in every chat. A Space's own skill of the same name wins.
+            A plaintext Space whose <code>SKILL.md</code> skills are offered in every chat — like personal skills in Claude Code, they win over a Space's own skill of the same name.
           </span>
         </section>
 
