@@ -353,7 +353,7 @@ export function AISettingsDialog({
       onMouseDown={onClose}
     >
       <div
-        className="w-full max-w-xl max-h-[88vh] overflow-y-auto surface-gradient bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl"
+        className="w-full max-w-xl max-h-[88vh] overflow-y-auto surface-elevated surface-gradient bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-xl shadow-2xl"
         onMouseDown={e => e.stopPropagation()}
         role="dialog"
         aria-label="Assistant settings"
