@@ -28,9 +28,14 @@ import { DEFAULT_MODEL, addUsage, modelInfo, type Effort } from './models'
 import { forgetSessionKey, KeyLockedError, sessionKey } from './settings'
 import { adaptiveFor, effortFor } from './modelList'
 import { MUTATING_TOOLS, TOOLS, ToolInputError, prepareTool, type ToolContext } from './tools'
+import { normalizePath } from './agentFs'
+import { folderInstructions, renderInstruction } from './instructions'
+import { pathMatcher } from './skillFormat'
 
 /** Marks the context block of a user message; the UI hides it behind a chip. */
 export const CONTEXT_TAG = 'notation-context'
+/** Marks a skill the user ran with `/name`; the UI shows it as a chip. */
+export const SKILL_TAG = 'notation-skill'
 
 const MAX_TOKENS = 64_000
 /** Hard stop for runaway tool loops within one user turn. */
@@ -43,6 +48,8 @@ export interface TurnContext {
   today: string
   /** Changes the user reverted with the undo button since the last message. */
   undone?: string[]
+  /** A skill the user ran with `/name`, rendered (skills.ts renderSkill). */
+  skill?: { name: string; path: string; content: string }
 }
 
 export interface PendingApproval {
@@ -205,13 +212,63 @@ function userMessage(text: string, ctx: TurnContext): BetaMessageParam {
     lines.push('Since your last reply, the user reverted these changes of yours with the undo button (the files are back as they were before):')
     for (const u of ctx.undone) lines.push(`- ${u}`)
   }
-  return {
-    role: 'user',
-    content: [
-      { type: 'text', text },
-      { type: 'text', text: `<${CONTEXT_TAG}>\n${lines.join('\n')}\n</${CONTEXT_TAG}>` },
-    ],
+  const content: BetaContentBlockParam[] = [
+    { type: 'text', text },
+    { type: 'text', text: `<${CONTEXT_TAG}>\n${lines.join('\n')}\n</${CONTEXT_TAG}>` },
+  ]
+  // Claude Code puts a skill run with `/name` into the conversation as part of
+  // the user's turn; so do we, right after the message that ran it.
+  if (ctx.skill) {
+    const s = ctx.skill
+    content.push({ type: 'text', text: `<${SKILL_TAG} name="${s.name}" path="${s.path}">\n${s.content}\n</${SKILL_TAG}>` })
   }
+  return { role: 'user', content }
+}
+
+/** The files a tool call reads or writes — what brings folder instructions into play. */
+function touchedBy(call: BetaToolUseBlock): { path: string; op: 'read' | 'write' }[] {
+  const input = (call.input ?? {}) as Record<string, unknown>
+  const one = (key: string, op: 'read' | 'write') => {
+    try { return [{ path: normalizePath(input[key]), op }] } catch { return [] }
+  }
+  switch (call.name) {
+    case 'read_file': return one('path', 'read')
+    case 'write_file':
+    case 'edit_file': return one('path', 'write')
+    case 'move_file': return one('to', 'write')
+    default: return []
+  }
+}
+
+/**
+ * What a successful tool call brings into play, Claude Code style: the
+ * CLAUDE.md (or AGENTS.md) of each folder Claude just worked in, the first
+ * time, and path-scoped skills whose files it touched. Appended to the tool
+ * result; recorded in the chat so nothing is announced twice.
+ */
+async function followUps(call: BetaToolUseBlock, a: TurnArgs): Promise<string> {
+  const mem = a.chat.body.memory
+  const touched = touchedBy(call)
+  if (!mem || !touched.length) return ''
+  const parts: string[] = []
+  try {
+    const fs = a.tools.fs
+    const loaded = new Set(mem.loaded)
+    const found = await folderInstructions({ files: await fs.files(), read: (p) => fs.tryReadText(p) }, touched, loaded, mem.mode)
+    mem.loaded = [...loaded]
+    for (const f of found) parts.push(renderInstruction(f))
+  } catch { /* the tool result stands on its own */ }
+  const announced = new Set(mem.skills ?? [])
+  for (const s of a.tools.brief.skills) {
+    if (!s.paths || !s.modelInvocable || announced.has(s.name)) continue
+    const match = pathMatcher(s.paths)
+    if (!touched.some(t => match(t.path))) continue
+    announced.add(s.name)
+    parts.push(`The skill "${s.name}" applies to the file you just worked on — ${s.description || 'no description'}. Call load_skill with its name before you continue.`)
+  }
+  mem.skills = [...announced]
+  if (!parts.length) return ''
+  return `\n\n<system-reminder>\n${parts.join('\n\n')}\n</system-reminder>`
 }
 
 function titleFrom(text: string): string {
@@ -403,7 +460,7 @@ async function runCall(call: BetaToolUseBlock, truncated: boolean, a: TurnArgs):
       tools[call.id] = { ...record, status: 'done', auto: auto || undefined }
       if (prepared.undo) hooks.registerUndo(call.id, prepared.undo)
       hooks.update(chat)
-      return result(text)
+      return result(text + (await followUps(call, a)))
     } catch (e) {
       return fail(record, 'error', `The change failed: ${(e as Error).message}`)
     }
@@ -413,7 +470,7 @@ async function runCall(call: BetaToolUseBlock, truncated: boolean, a: TurnArgs):
     const text = await prepared.run()
     tools[call.id] = { ...record, status: 'done' }
     hooks.update(chat)
-    return result(text)
+    return result(text + (await followUps(call, a)))
   } catch (e) {
     return fail(record, 'error', (e as Error).message)
   }

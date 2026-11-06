@@ -15,7 +15,7 @@ submissions.
 
 ## How to create one
 
-Write \`<folder>/_form.md\` with \`write_file\` — the folder is created with it.
+Create \`<folder>/_form.md\` — the folder is created with it, no separate step.
 That's it: the folder now shows up as a form. Editing a form = editing \`_form.md\`.
 
 ## Template syntax

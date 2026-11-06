@@ -19,7 +19,7 @@ import { AgentFS, AgentFsError, globToRegExp, normalizePath } from './agentFs'
 import type { ToolRecord } from './chatStore'
 import { unifiedDiff } from './diff'
 import { FORMS_GUIDE } from './formsGuide'
-import type { Brief } from './skills'
+import { renderSkill, type Brief } from './skills'
 
 export class ToolInputError extends Error {}
 
@@ -137,12 +137,13 @@ export const TOOLS: BetaTool[] = [
   },
   {
     name: 'load_skill',
-    description: 'Load a skill listed in the system prompt: returns its SKILL.md instructions and the list of its other files. Pass `file` to read one of those other files (a template, a reference).',
+    description: 'Load a skill listed in the system prompt: returns its SKILL.md instructions and the list of its other files. Pass `file` to read one of those other files (a template, a reference). Pass `args` to hand the skill its arguments, as a user would after /name.',
     input_schema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Skill name as listed.' },
         file: { type: 'string', description: 'Optional: a file inside the skill\'s folder, relative to it, e.g. "template.md".' },
+        args: { type: 'string', description: 'Optional: arguments for the skill ($ARGUMENTS, $0, $1, … in its text).' },
       },
       required: ['name'],
     },
@@ -535,10 +536,15 @@ export async function prepareTool(name: string, raw: unknown, ctx: ToolContext):
     case 'load_skill': {
       const want = (str(i, 'name', { required: true }) ?? '').trim().toLowerCase()
       const fileRaw = str(i, 'file')
+      const args = str(i, 'args', { allowEmpty: true }) ?? ''
       const skill = ctx.brief.skills.find(s => s.name.toLowerCase() === want)
       if (!skill) {
-        const names = ctx.brief.skills.map(s => s.name)
+        const names = ctx.brief.skills.filter(s => s.modelInvocable).map(s => s.name)
         throw new ToolInputError(names.length ? `No skill "${want}". Available: ${names.join(', ')}` : 'This Space has no skills.')
+      }
+      // Claude Code: `disable-model-invocation: true` — only the user runs it.
+      if (!skill.modelInvocable && !fileRaw) {
+        throw new ToolInputError(`The skill "${skill.name}" is run by the user only (with /${skill.name}); don't load it yourself.`)
       }
       const source = ctx.brief.sources[skill.source]
       if (!source) throw new ToolInputError(`the ${skill.source} skills are not reachable right now`)
@@ -560,7 +566,7 @@ export async function prepareTool(name: string, raw: unknown, ctx: ToolContext):
           const list = others.length
             ? `\n\nOther files of this skill (load with file="<relative path>"):\n${others.slice(0, 200).map(f => '- ' + (dir ? f.slice(dir.length + 1) : f)).join('\n')}`
             : ''
-          return `Skill "${skill.name}" (${skill.path}${skill.source === 'library' ? ', from the skill library' : ''})\n\n${text}${list}`
+          return `Skill "${skill.name}" (${skill.path}${skill.source === 'library' ? ', from the skill library' : ''})\n\n${renderSkill(skill, text, args)}${list}`
         },
       }
     }

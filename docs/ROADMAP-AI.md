@@ -45,8 +45,12 @@ rest of this roadmap should build on:
 - **No silent writes** holds: changes are diffs the user applies or rejects;
   auto-apply is an explicit per-browser switch, every change keeps an undo.
   Plaintext edits commit as `ai:<user>`; Claude also appends to `CHANGELOG.md`.
-- **Skills/instructions** follow the agent conventions (`AGENTS.md`/`CLAUDE.md`,
-  `skills/*/SKILL.md`, loaded on demand), plus an optional skill-library Space.
+- **Skills/instructions** are loaded by Claude Code's own rules (CLAUDE.md /
+  CLAUDE.local.md or AGENTS.md, `@imports`, folder files on demand; SKILL.md
+  frontmatter, `/name` invocation), plus an optional skill-library Space. The
+  folder sync hands Claude Code the identical set — one briefing text
+  (`spaceBriefing.ts`) in `.claude/rules/`, skills mirrored into
+  `.claude/skills/` — so panel and CLI work from the same instructions.
 - Retrieval is tool-driven (`search`, `space_map`, `read_file`) over the Space as
   the browser sees it. The Phase 1 index (Bleve/embeddings) would make it faster
   on big plaintext Spaces, but it can't serve encrypted ones — the client-side

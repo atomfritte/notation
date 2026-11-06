@@ -8,19 +8,35 @@
  * that doesn't know invents its own conventions and the push brings back
  * something the app can't render properly.
  *
- * So {@link pull} writes {@link GUIDE_FILENAMES} — the two names CLI agents load
- * by themselves — into the folder root. They are **tooling, not content**:
+ * The briefing is the SAME text the in-app assistant works from
+ * (spaceBriefing.ts), and the pull hands Claude Code everything else the
+ * assistant gets too — the owner's instructions for every Space and the
+ * skills (the Space's own and the skill library's). Where each piece goes is
+ * chosen by how Claude Code loads files (code.claude.com/docs/en/memory):
  *
- *   - every generated guide starts with {@link GUIDE_MARKER}, and the push
- *     strips exactly the marked files back out ({@link isGeneratedGuide}), so
- *     the Space never gains an `AGENTS.md` it didn't ask for;
- *   - a guide is only written for a name the Space does NOT itself use, so a
- *     real `AGENTS.md` page in the Space always wins and round-trips normally;
- *   - delete the marker line and the file stops being ours — it becomes an
- *     ordinary file the next push carries into the Space.
+ *   - `.claude/rules/notation-space.md` — the briefing. Rules without `paths:`
+ *     load at every start, next to whatever CLAUDE.md or AGENTS.md is there,
+ *     so the briefing arrives whichever instruction files the Space has. A
+ *     dot-directory: the sync ignores it both ways, so it can never travel
+ *     into the Space.
+ *   - `.claude/skills/<name>/SKILL.md` — every skill the assistant offers, so
+ *     Claude Code lists and runs it (`/name`) natively.
+ *   - `AGENTS.md` — when the Space has none: a short pointer at the rules file,
+ *     for other agents. Short on purpose: Claude Code reads it too when there
+ *     is no CLAUDE file, and the briefing must not arrive twice.
  *
- * The text is regenerated on every pull, so it always describes the Space in
- * front of it (name, encrypted or not, which form folders exist).
+ * **No `CLAUDE.md` is generated.** Claude Code reads `AGENTS.md` (and a
+ * folder's own `AGENTS.md`, on demand) only while no `CLAUDE.md` or
+ * `CLAUDE.local.md` is on the path — a generated one would switch that off,
+ * and Claude Code would then load different instruction files than the
+ * assistant, which follows the same rule on the Space's own files
+ * (ai/instructions.ts). A `CLAUDE.md` an older pull generated is removed.
+ *
+ * All of it is **tooling, not content**: every generated file carries
+ * {@link GUIDE_MARKER}, the push strips the root guides back out
+ * ({@link isGeneratedGuide}) and never sees dot-directories, a name the Space
+ * itself uses is never overwritten, and a file whose marker the user deleted
+ * is theirs from then on. It is regenerated on every pull.
  */
 
 /**
@@ -30,20 +46,16 @@
 export const GUIDE_MARKER = '<!-- notation:folder-guide'
 
 /**
- * Root-level names a generated guide may occupy — the files CLI agents pick up
- * without being told: `AGENTS.md` (the cross-tool convention) and `CLAUDE.md`
- * (Claude Code), the latter a pointer at the former so there is one source of
- * truth.
+ * Root-level names a generated guide may occupy: `AGENTS.md`, and `CLAUDE.md`
+ * from pulls before v3 — still recognised, so the push keeps stripping it and
+ * the pull can clear it away.
  */
 export const GUIDE_FILENAMES = ['AGENTS.md', 'CLAUDE.md'] as const
 
-/**
- * The running log the briefing tells an agent to keep. Unlike the guides this
- * one is NOT ours — it is ordinary Space content, so it pushes back, comes down
- * on the next pull, and the next session can read what the last one did. Named
- * here so the guide text and anything else referring to it can't drift apart.
- */
-export const CHANGELOG_NAME = 'CHANGELOG.md'
+import { CHANGELOG_NAME, sharedSections } from './spaceBriefing'
+import { mirrorFrontmatter, neutralizeShell, parseFrontmatter, skillFromText } from './ai/skillFormat'
+
+export { CHANGELOG_NAME }
 
 /** What the guide says about THIS Space. */
 export interface GuideContext {
@@ -55,9 +67,11 @@ export interface GuideContext {
   formFolders: string[]
   /** How many files the pull wrote (context for an agent sizing the corpus). */
   fileCount: number
+  /** The owner's instructions for every Space (assistant settings). */
+  ownerInstructions?: string
 }
 
-/** One file to drop into the folder root. */
+/** One generated file: its path in the folder and its text. */
 export interface GuideFile {
   name: string
   content: string
@@ -78,70 +92,48 @@ export function isGuideName(path: string): boolean {
   return (GUIDE_FILENAMES as readonly string[]).includes(path)
 }
 
+/** Where the briefing goes for Claude Code (see the module comment). */
+export const RULES_PATH = '.claude/rules/notation-space.md'
+/** Where skill mirrors go: `.claude/skills/<dir>/`. */
+export const SKILLS_DIR = '.claude/skills'
+
 /**
- * The guide files for a Space. `AGENTS.md` carries the whole briefing;
- * `CLAUDE.md` is a three-line pointer at it (Claude Code follows the `@`
- * import), so editing one file keeps both tools in sync.
+ * True when a file's first 16 KB carry our marker. Skill mirrors put it right
+ * after their frontmatter, which can run long (a 1.5K description, `paths:`).
  */
-export function guideFiles(ctx: GuideContext): GuideFile[] {
-  return [
-    { name: 'AGENTS.md', content: agentsGuide(ctx) },
-    { name: 'CLAUDE.md', content: claudePointer(ctx) },
-  ]
+export function carriesMarker(bytes: Uint8Array): boolean {
+  return new TextDecoder().decode(bytes.subarray(0, 16_384)).includes(GUIDE_MARKER)
 }
 
-const header = (title: string) => `${GUIDE_MARKER} v2 — generated by notation on every pull. Not part of the Space: the push strips it back out. Delete this line to turn the file into real content. -->\n\n# ${title}\n`
+const header = (title: string, what: string) =>
+  `${GUIDE_MARKER} v3 — generated by notation on every pull. ${what} Delete this line to turn the file into real content. -->\n\n# ${title}\n`
 
-function claudePointer(ctx: GuideContext): string {
-  return (
-    header(`notation Space — ${ctx.spaceName}`) +
-    `
-This folder is a checkout of a **notation** Space. The full briefing — what the
-Space is, which Markdown features render, how Forms work, and what the push does
-with your changes — lives in \`AGENTS.md\`:
+const ROOT_WHAT = 'Not part of the Space: the push strips it back out.'
+const DOT_WHAT = 'Lives in a dot-folder, which the sync never pushes.'
 
-@AGENTS.md
-
-One rule from it up front, because it applies to every single change you make
-here: append an entry to \`${CHANGELOG_NAME}\` describing what was asked for and
-which files you touched. Append only — never rewrite what is already logged.
-\`AGENTS.md\` has the exact format.
-`
-  )
-}
-
-function agentsGuide(ctx: GuideContext): string {
-  const forms =
-    ctx.formFolders.length > 0
-      ? `This Space currently has ${ctx.formFolders.length} form folder${ctx.formFolders.length === 1 ? '' : 's'}: ` +
-        ctx.formFolders.map((f) => `\`${f}/\``).join(', ') +
-        '.\n'
-      : 'This Space has no form folders yet — create one by adding a `_form.md` to a folder.\n'
-
+/** The whole briefing — identical in AGENTS.md and the rules file. */
+function briefing(ctx: GuideContext): string {
   const crypto = ctx.encrypted
-    ? `
-> **This Space is end-to-end encrypted.** The server only ever holds ciphertext;
+    ? `> **This Space is end-to-end encrypted.** The server only ever holds ciphertext;
 > the files in this folder were decrypted in the browser and written here in the
 > clear on purpose, so local tools can work on them. Treat the folder as
 > sensitive: don't copy it somewhere public, and don't commit it to a remote
-> repository. The push re-encrypts everything in the browser again.
-`
-    : `
-> This Space is stored as plain files with per-Space git history. Every file the
-> push writes lands in that history like any other edit.
-`
+> repository. The push re-encrypts everything in the browser again.`
+    : `> This Space is stored as plain files with per-Space git history. Every file the
+> push writes lands in that history like any other edit.`
 
-  return (
-    header(`notation Space — ${ctx.spaceName}`) +
-    `
-You are working in a local checkout of a **notation** Space: a self-hosted notes
+  const intro = `You are working in a local checkout of a **notation** Space: a self-hosted notes
 and file workspace (flat files, git history per Space, share links, comments,
 forms, an MCP server). Someone pulled the Space into this folder so local tools
-could edit it, and will push the result back through a reviewed diff.
+could edit it, and will push the result back through a reviewed diff. The same
+briefing guides notation's built-in assistant, so a Space is worked on the same
+way here and in the app.
 
 There are currently **${ctx.fileCount} file${ctx.fileCount === 1 ? '' : 's'}** here from the Space.
-${crypto}
-## How this folder syncs
+
+${crypto}`
+
+  const sync = `## How this folder syncs
 
 - **Nothing here is live.** A human clicks *Pull* (Space → folder) and *Push*
   (folder → Space) in the app. The push shows a change preview — new, modified,
@@ -154,162 +146,97 @@ ${crypto}
   brand-new file.
 - **Conflicts resolve folder-wins**, and are listed before anything is applied.
 - **Ignored on both sides**: every dotfile and dot-directory (\`.git\`, \`.env\`,
-  the \`.notation-sync.json\` manifest) and any \`node_modules/\`. Scratch files
-  you leave outside those names WILL be proposed for the Space — clean up after
-  yourself, or hide the file behind a leading dot.
-- **This briefing never travels.** \`AGENTS.md\` and \`CLAUDE.md\` are regenerated
-  on every pull and stripped from every push.
+  \`.claude/\`, the \`.notation-sync.json\` manifest) and any \`node_modules/\`.
+  Scratch files you leave outside those names WILL be proposed for the Space —
+  clean up after yourself, or hide the file behind a leading dot.
+- **This briefing never travels.** It is regenerated on every pull, like the
+  skills under \`${SKILLS_DIR}/\` and a root \`AGENTS.md\` pointer when the Space
+  has no \`AGENTS.md\` of its own. Edit the Space's own instruction files
+  (\`CLAUDE.md\`, \`AGENTS.md\`) to change how it is worked on, not these.`
 
-## What renders in notation
+  return [intro, sync, ...sharedSections(ctx, 'folder', ctx.ownerInstructions)].join('\n\n') + '\n'
+}
 
-Markdown is the native format (\`.md\`, \`.markdown\`, \`.mdx\`). On top of
-CommonMark + GFM the viewer supports:
+/**
+ * The generated files for a Space, keyed by folder path. `spaceHas.agents`:
+ * the Space holds an `AGENTS.md` of its own — content, never replaced.
+ */
+export function guideFiles(ctx: GuideContext, spaceHas: { agents: boolean } = { agents: false }): GuideFile[] {
+  const title = `notation Space — ${ctx.spaceName}`
+  const out: GuideFile[] = [{ name: RULES_PATH, content: header(title, DOT_WHAT) + '\n' + briefing(ctx) }]
+  if (!spaceHas.agents) {
+    out.push({
+      name: 'AGENTS.md',
+      content: header(title, ROOT_WHAT) + `
+This folder is a checkout of a **notation** Space. Before you change anything,
+read the briefing in \`${RULES_PATH}\` (Claude Code loads it by itself): what
+the Space is, how this folder syncs, what renders, Forms, comment anchors — and
+the \`${CHANGELOG_NAME}\` entry every change needs. notation's skills are in
+\`${SKILLS_DIR}/\`, one folder per skill.
+`,
+    })
+  }
+  return out
+}
 
-| Feature | Syntax |
-|---|---|
-| Wiki-links | \`[[other-page]]\`, \`[[other-page#section]]\`, \`[[other-page\\|label]]\` |
-| Heading anchors | every heading is linkable; ids are slugified from the text |
-| Mermaid diagrams | a fenced code block with the \`mermaid\` language |
-| Math | \`$inline$\` and \`$$display$$\` (KaTeX) |
-| Code | fenced blocks, 30+ languages, highlighted |
-| Task lists, tables, footnotes | standard GFM |
+/** A skill to mirror into `.claude/skills/` for Claude Code. */
+export interface SkillMirrorInput {
+  /** Skill name (frontmatter `name`, or its folder). */
+  name: string
+  source: 'space' | 'library'
+  /** SKILL.md path in its Space. */
+  path: string
+  /** SKILL.md text. */
+  text: string
+  /** Library skills only: the skill folder's other files (relative path → bytes). */
+  extra?: Map<string, Uint8Array>
+}
 
-Wiki-links resolve against the Space's own file set, so keep link targets in
-step when you rename a page. Raw HTML is sanitised before it renders — script
-tags, event handlers and inline styles are dropped, so don't reach for them.
+/** A skill's folder name under `.claude/skills/`: Claude Code's name format. */
+export function skillDirName(name: string): string {
+  return name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64)
+}
 
-Other file types the app can display without conversion: images, PDF, video,
-audio, \`.xlsx\`/\`.ods\`/\`.csv\` (table view), \`.docx\` (converted to prose), and
-any source file (highlighted). Everything else is offered as a download.
-
-## Forms
-
-A **Form** is simply a folder that contains a file named \`_form.md\`. The app
-then renders that folder as a fillable form instead of a file list: people
-submit entries, and each submission is stored as a sibling Markdown file in the
-same folder.
-
-${forms}
-### Authoring \`_form.md\`
-
-It is ordinary Markdown with two special rules:
-
-- the first \`# Heading\` is the form title;
-- **every line containing a \`[type]\` tag becomes a field**, labelled by the text
-  before the tag. A run of underscores (\`______\`) is an optional "fill in the
-  blank" placeholder and is stripped. If the field line carries no label, the
-  previous non-empty line is used as one (handy for big text fields).
-
-Modifiers after the tag: \`(required)\` or \`(*)\`, and \`(default: value)\`.
-Choices for \`select\`/\`buttons\`/\`multiselect\` go inline — \`[select: low, high]\`
-— or as a trailing group \`(low, high)\`. \`[slider: min, max, step]\` defaults to
-\`0, 100, 1\`; \`[rating: levels]\` defaults to 5 stars.
-
-| Type | Aliases | Input |
-|---|---|---|
-| \`string\` | str, line | single-line text |
-| \`text\` | textarea, multiline, paragraph | multi-line text |
-| \`integer\` | int, whole | whole number |
-| \`number\` | num, float, decimal | decimal number |
-| \`bool\` | boolean, checkbox, check, yesno | yes/no checkbox |
-| \`date\` / \`time\` / \`datetime\` | timestamp | pickers |
-| \`select\` | choice, dropdown, enum, option | single choice, dropdown |
-| \`buttons\` | radio, toggle, choices, pills | single choice, pills |
-| \`multiselect\` | multi, checklist, tags, checkboxes | multiple choice |
-| \`smiley\` | smileys, mood, emoji | 1..5 mood scale |
-| \`rating\` | stars, star | 1..N stars |
-| \`slider\` | range | numeric range |
-| \`image\` | images, photo, picture, pic | image upload |
-| \`email\` | mail | email address |
-| \`url\` | link | URL |
-
-An unknown type falls back to \`string\`. Field keys are derived from the label
-(lowercased, umlauts folded: ä→ae, ö→oe, ü→ue, ß→ss), so give fields distinct
-labels. The **first** field labels each submission in the entry list — put the
-most identifying one first.
-
-Example — \`standup/_form.md\`:
-
-\`\`\`markdown
-# Daily standup
-
-Name: ______ [string] (required)
-Date: ______ [date] (required)
-Mood: ______ [smiley]
-Focus today: ______ [select: feature, bug, review, ops]
-Confidence: ______ [slider: 0, 10, 1]
-
-What did you do?
-______ [text]
-\`\`\`
-
-**Don't hand-write entries.** Submission files carry a \`notation_entry: true\`
-frontmatter flag and are created by the app when someone fills the form in.
-Editing the template is your job; inventing entries is not.
-
-## Comments, reactions and why moves matter
-
-Readers select a passage in the app and pin a **comment** or an **emoji
-reaction** to that exact quote. The anchor is stored as the quoted text plus a
-short window of the surrounding text, not a line number — so it survives ordinary
-edits above and around it.
-
-What breaks an anchor is rewriting the quoted passage itself, or moving the file
-in a way the app can't recognise as a move. Two habits keep annotations intact:
-
-1. **Move and rename files as such** — one operation, content unchanged. A move
-   plus a heavy rewrite in the same push is harder to match and may orphan the
-   thread (the app will then ask a human where it went).
-2. **Leave quoted passages alone when you can.** If you must rewrite one,
-   rewording around it is safer than replacing it wholesale.
-
-## ${CHANGELOG_NAME} — log every change you make
-
-Whenever you change anything in this folder, append **one** entry to
-\`${CHANGELOG_NAME}\` in the folder root. Create the file if it isn't there yet.
-One entry per request — not per file — written in the same push as the changes
-it describes.
-
-Unlike this briefing, the changelog is ordinary content: it travels into the
-Space and comes back on the next pull. That is the point — it is how the owner
-of this Space, and your next session, see what an AI did here.
-
-- **Append only.** Newest entry at the bottom. Never edit, reword, reorder or
-  delete an entry that is already there — not even one of your own. Got
-  something wrong? Append a new entry that corrects it.
-- **Date** each entry \`YYYY-MM-DD\`. Several entries can share a date; they stay
-  in the order they happened.
-- **Request**: one or two sentences on what was actually asked for, in the
-  language it was asked in. Paraphrase — no need to quote.
-- **Files**: everything you created, changed, moved or deleted, with a few words
-  on what happened to it. Files you only read do not belong in the table.
-- Changed nothing? Then there is nothing to log.
-
-Copy this shape:
-
-\`\`\`markdown
-## 2026-03-14 — Short title of the change
-
-**Request:** Was gefragt wurde, in ein bis zwei Sätzen.
-
-| File | Change | What |
-|---|---|---|
-| \`notizen/meeting.md\` | changed | Beschlüsse aus Q3 ergänzt |
-| \`notizen/backlog.md\` | new | aus meeting.md herausgelöst |
-\`\`\`
-
-Use \`new\` / \`changed\` / \`moved\` / \`deleted\` in the Change column.
-
-## Working style
-
-- Match the surrounding documents: this is someone's knowledge base, not a
-  codebase. Keep headings, tone and structure consistent with the neighbours.
-- Prefer editing pages in place over restructuring the tree. A reshuffle
-  produces a large, hard-to-review push.
-- Don't create \`README\`-style meta files unless asked — the Space is read in
-  the app, not on a repository page. \`${CHANGELOG_NAME}\` is the one exception,
-  and it is required.
-- Empty folders left behind by a push are removed automatically.
-`
-  )
+/**
+ * Mirror files for the skills, in `.claude/skills/<dir>/`. A Space skill is
+ * copied as is plus a note on where its folder is in this checkout (its
+ * templates live there); a library skill — not in this folder at all — brings
+ * its other files along. Earlier entries win a name clash, so pass the
+ * library's skills first (Claude Code: personal over project).
+ */
+export function skillMirrorFiles(skills: SkillMirrorInput[]): { dir: string; files: { path: string; bytes: Uint8Array }[] }[] {
+  const out: { dir: string; files: { path: string; bytes: Uint8Array }[] }[] = []
+  const taken = new Set<string>()
+  const te = new TextEncoder()
+  for (const s of skills) {
+    const dir = skillDirName(s.name)
+    if (!dir || taken.has(dir)) continue
+    taken.add(dir)
+    const base = `${SKILLS_DIR}/${dir}`
+    const srcDir = s.path.includes('/') ? s.path.slice(0, s.path.lastIndexOf('/')) : ''
+    // Rebuilt from what the panel parses, never copied: no allowed-tools,
+    // hooks or shell commands reach Claude Code from Space content.
+    const front = mirrorFrontmatter(skillFromText(s.path, s.text, s.source), dir)
+    const where = s.source === 'space'
+      ? `This skill is stored in the Space at \`${s.path}\`; files it refers to are in \`${srcDir || '.'}/\` of this checkout.`
+      : 'This skill comes from the skill library Space; its files are next to this one.'
+    const marker = `${GUIDE_MARKER} v3 — skill mirror generated by notation on every pull. ${DOT_WHAT} ${where} Shell commands and tool permissions are not carried over. -->`
+    let body = neutralizeShell(parseFrontmatter(s.text).body)
+    // A Space skill's own folder is elsewhere in this checkout: point
+    // ${CLAUDE_SKILL_DIR} there (relative to the project root), as the
+    // assistant does — the mirror's folder holds only SKILL.md.
+    if (s.source === 'space') body = body.replace(/\$\{CLAUDE_SKILL_DIR\}/g, srcDir || '.')
+    const files: { path: string; bytes: Uint8Array }[] = [{ path: `${base}/SKILL.md`, bytes: te.encode(`${front}${marker}\n\n${body.replace(/^\s+/, '')}`) }]
+    if (s.source === 'library' && s.extra) {
+      for (const [rel, bytes] of s.extra) {
+        // No dotfiles, no climbing out, and no nested SKILL.md — that one is a
+        // skill of its own, mirrored (and sanitised) as such.
+        if (rel.split('/').some(seg => seg.startsWith('.') || seg === '..' || seg === '')) continue
+        if (/(^|\/)SKILL\.md$/i.test(rel)) continue
+        files.push({ path: `${base}/${rel}`, bytes })
+      }
+    }
+    out.push({ dir, files })
+  }
+  return out
 }

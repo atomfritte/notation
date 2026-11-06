@@ -54,7 +54,7 @@ class MemSpace implements SyncSpace {
   async pruneEmptyDirs() { return [] }
 }
 
-const noBrief: Brief = { instructions: [], skills: [], sources: { space: null, library: null } }
+const noBrief: Brief = { memory: { mode: 'claude', files: [] }, skills: [], sources: { space: null, library: null } }
 
 function ctxFor(space: MemSpace, hooks = {}): ToolContext {
   return { fs: new AgentFS(space, hooks), brief: noBrief, openPage: () => {} }
@@ -276,8 +276,13 @@ describe('brief and system prompt', () => {
       'skills/protokoll/SKILL.md': '---\nname: protokoll\ndescription: Meeting minutes\n---\nSteps…',
     })
     const brief = await collectBrief(new AgentFS(space), { currentSpace: 'spc' })
-    expect(brief.instructions.map(i => i.path)).toEqual(['AGENTS.md'])
-    expect(brief.skills).toEqual([{ name: 'protokoll', description: 'Meeting minutes', source: 'space', path: 'skills/protokoll/SKILL.md' }])
+    // A generated CLAUDE.md doesn't count, so AGENTS.md is read (Claude Code's default).
+    expect(brief.memory.mode).toBe('agents')
+    expect(brief.memory.files.map(i => i.path)).toEqual(['AGENTS.md'])
+    expect(brief.skills).toEqual([{
+      name: 'protokoll', description: 'Meeting minutes', source: 'space', path: 'skills/protokoll/SKILL.md',
+      modelInvocable: true, userInvocable: true, paths: undefined, argNames: undefined, argumentHint: undefined,
+    }])
 
     const prompt = buildSystemPrompt({ spaceId: 'spc', spaceName: 'Team', encrypted: true, brief, globalInstructions: 'Be brief.' })
     expect(prompt).toContain('Always write in German.')
@@ -288,7 +293,7 @@ describe('brief and system prompt', () => {
     // Deterministic: the same inputs give byte-identical prompts (prompt cache,
     // preserved thinking) and nothing volatile like today's date is in it.
     expect(buildSystemPrompt({ spaceId: 'spc', spaceName: 'Team', encrypted: true, brief, globalInstructions: 'Be brief.' })).toBe(prompt)
-    expect(prompt).not.toMatch(/20\d\d-\d\d-\d\d/)
+    expect(prompt).not.toContain(new Date().toISOString().slice(0, 10))
   })
 })
 

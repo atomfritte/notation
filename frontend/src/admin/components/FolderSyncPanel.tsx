@@ -16,6 +16,9 @@ import {
 import {
   folderSyncSupported, pickDirectory, ensureReadWritePermission, hasReadWritePermission,
 } from '../lib/fsAccess'
+import { getAISettings } from '../lib/ai/settings'
+import { librarySkillMirrors } from '../lib/ai/skills'
+import { SKILLS_DIR } from '../lib/spaceGuide'
 
 /**
  * FolderSyncPanel — the UI for manual local-folder sync, for ANY space
@@ -41,6 +44,14 @@ type Phase = 'home' | 'working' | 'pullPreview' | 'preview' | 'result' | 'error'
 // The engine speaks a minimal subset of FileSystemDirectoryHandle; cast at the
 // boundary (the real handle structurally provides it).
 const asSyncDir = (h: FileSystemDirectoryHandle): SyncDirHandle => h as unknown as SyncDirHandle
+
+/** "AGENTS.md + .claude/rules/notation-space.md + 2 skills in .claude/skills/" */
+function describeGuides(guides: string[]): string {
+  const skills = guides.filter(g => g.startsWith(`${SKILLS_DIR}/`)).length
+  const parts = guides.filter(g => !g.startsWith(`${SKILLS_DIR}/`))
+  if (skills) parts.push(`${skills} skill${skills === 1 ? '' : 's'} in ${SKILLS_DIR}/`)
+  return parts.join(' + ')
+}
 
 export function FolderSyncPanel({
   space,
@@ -150,7 +161,16 @@ export function FolderSyncPanel({
     setPhase('working')
     setBusy(encrypted ? 'Decrypting the selected files into your folder…' : 'Copying the selected files into your folder…')
     try {
-      const res = await applyPull(space, asSyncDir(handle), preparedPull, pullSel, onProgress, { spaceName })
+      // Claude Code in the folder gets what the assistant gets: the owner's
+      // instructions and the skill library. Without assistant settings (feature
+      // off, not an owner) the pull goes on without them.
+      const ai = await getAISettings().catch(() => null)
+      const librarySkills = await librarySkillMirrors(ai?.skills_space, spaceID)
+      const res = await applyPull(space, asSyncDir(handle), preparedPull, pullSel, onProgress, {
+        spaceName,
+        ownerInstructions: ai?.instructions,
+        librarySkills,
+      })
       await setManifest(spaceID, res.manifest.entries)
       const parts: string[] = []
       if (res.written.length) parts.push(`${res.written.length} written`)
@@ -159,7 +179,7 @@ export function FolderSyncPanel({
       if (res.keptLocalOnly.length) parts.push(`${res.keptLocalOnly.length} local-only file${res.keptLocalOnly.length === 1 ? '' : 's'} kept`)
       // The briefing is tooling, not content — say that it landed AND that it
       // never travels back, so nobody has to wonder about the extra files.
-      const guides = res.guides.length > 0 ? ` Added ${res.guides.join(' + ')} so local AI tools know what this Space is (never pushed back).` : ''
+      const guides = res.guides.length > 0 ? ` Added ${describeGuides(res.guides)} so local AI tools like Claude Code work as the assistant does (never pushed back).` : ''
       setResult(
         (parts.length ? `“${handle.name}”: ${parts.join(' · ')}.` : `“${handle.name}” already matched the space — nothing to write.`) + guides,
       )

@@ -37,7 +37,8 @@
  * subset; the UI casts it at the boundary.
  */
 import type { SyncSpace } from './syncSpace'
-import { guideFiles, isGeneratedGuide, isGuideName, type GuideContext } from './spaceGuide'
+import { GUIDE_FILENAMES, SKILLS_DIR, carriesMarker, guideFiles, isGeneratedGuide, isGuideName, skillMirrorFiles, type GuideContext, type SkillMirrorInput } from './spaceGuide'
+import { isSkillFile, skillFromText } from './ai/skillFormat'
 
 /** Reports `done` of `total` units while a long pull/push walks the file set. */
 export type ProgressFn = (done: number, total: number) => void
@@ -200,7 +201,8 @@ export async function writeFileTo(root: SyncDirHandle, path: string, bytes: Uint
 
 /**
  * Delete `path` from the folder. Used only for a pull's explicitly opted-in
- * "the space deleted this, drop my untouched copy too" — never implicitly.
+ * "the space deleted this, drop my untouched copy too", and for a generated
+ * guide that still carries our marker — never for the user's own files.
  * A path that is already gone is not an error.
  */
 export async function removeFileFrom(root: SyncDirHandle, path: string): Promise<void> {
@@ -400,6 +402,10 @@ export function allActionableSelection(plan: PullPlan): Set<string> {
 export interface GuideOptions {
   /** Display name of the space, for the guide's heading. */
   spaceName: string
+  /** The owner's instructions for every Space (assistant settings), as the assistant gets them. */
+  ownerInstructions?: string
+  /** The skill library's skills, as the assistant offers them (they win a name clash). */
+  librarySkills?: SkillMirrorInput[]
 }
 
 export interface PreparedPull {
@@ -566,20 +572,52 @@ export async function applyPull(
       encrypted: space.encrypted,
       formFolders: formFoldersOf([...spaceFiles.keys()]),
       fileCount: spaceFiles.size,
+      ownerInstructions: guide.ownerInstructions,
     }
-    for (const g of guideFiles(ctx)) {
+    const write = async (path: string, bytes: Uint8Array): Promise<boolean> => {
+      try {
+        await writeFileTo(dir, path, bytes)
+        return true
+      } catch (err) {
+        failed.push({ path, error: String((err as Error)?.message ?? err) })
+        return false
+      }
+    }
+    const generated = guideFiles(ctx, { agents: spaceFiles.has('AGENTS.md') })
+    for (const g of generated) {
       // The space's own page at that path always wins, and so does a briefing
       // the user has taken over (no marker left) — neither is ours to clobber.
       if (spaceFiles.has(g.name)) continue
       const existing = await readFolderFile(dir, g.name)
-      if (existing && !isGeneratedGuide(existing)) continue
-      try {
-        await writeFileTo(dir, g.name, new TextEncoder().encode(g.content))
-        guides.push(g.name)
-      } catch (err) {
-        failed.push({ path: g.name, error: String((err as Error)?.message ?? err) })
-      }
+      if (existing && !carriesMarker(existing)) continue
+      if (await write(g.name, new TextEncoder().encode(g.content))) guides.push(g.name)
     }
+    // A root guide an older pull wrote that this one doesn't (a CLAUDE.md
+    // would keep Claude Code from reading AGENTS.md) goes — if it is still ours.
+    for (const name of GUIDE_FILENAMES) {
+      if (spaceFiles.has(name) || generated.some((g) => g.name === name)) continue
+      const existing = await readFolderFile(dir, name)
+      if (existing && isGeneratedGuide(existing)) await removeFileFrom(dir, name).catch(() => {})
+    }
+
+    // The skills the assistant offers, as Claude Code skills. The library's
+    // come first: they win a name clash, like personal skills in Claude Code.
+    const own: SkillMirrorInput[] = []
+    for (const [path, bytes] of spaceFiles) {
+      if (!isSkillFile(path)) continue
+      const text = new TextDecoder().decode(bytes)
+      own.push({ name: skillFromText(path, text, 'space').name, source: 'space', path, text })
+    }
+    const mirrors = skillMirrorFiles([...(guide.librarySkills ?? []), ...own])
+    for (const m of mirrors) {
+      // A skill of the user's own under that name stays theirs.
+      const existing = await readFolderFile(dir, `${SKILLS_DIR}/${m.dir}/SKILL.md`)
+      if (existing && !carriesMarker(existing)) continue
+      let ok = true
+      for (const f of m.files) ok = (await write(f.path, f.bytes)) && ok
+      if (ok) guides.push(`${SKILLS_DIR}/${m.dir}/`)
+    }
+    await pruneSkillMirrors(dir, new Set(mirrors.map((m) => m.dir)))
   }
 
   return { written, removedLocal, skipped, keptLocalOnly, dirs: spaceDirs, guides, failed, manifest }
@@ -623,6 +661,35 @@ function nextPullManifest(
 }
 
 /** One file's bytes from the folder, or `null` when it isn't there. */
+/**
+ * Remove skill mirrors from an earlier pull whose skill is gone. Only folders
+ * whose SKILL.md still carries our marker — a skill of the user's own is never
+ * touched.
+ */
+async function pruneSkillMirrors(dir: SyncDirHandle, keep: Set<string>): Promise<void> {
+  let skills: SyncDirHandle
+  try {
+    let cur = dir
+    for (const seg of SKILLS_DIR.split('/')) cur = await cur.getDirectoryHandle(seg)
+    skills = cur
+  } catch {
+    return
+  }
+  const stale: string[] = []
+  for await (const [name, child] of skills.entries()) {
+    if (child.kind !== 'directory' || keep.has(name)) continue
+    const bytes = await readFolderFile(dir, `${SKILLS_DIR}/${name}/SKILL.md`)
+    if (bytes && carriesMarker(bytes)) stale.push(name)
+  }
+  for (const name of stale) {
+    try {
+      await skills.removeEntry(name, { recursive: true })
+    } catch {
+      /* best effort */
+    }
+  }
+}
+
 async function readFolderFile(dir: SyncDirHandle, path: string): Promise<Uint8Array | null> {
   const segs = path.split('/').filter(Boolean)
   const name = segs.pop()
