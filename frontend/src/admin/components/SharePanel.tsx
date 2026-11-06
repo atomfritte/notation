@@ -88,7 +88,7 @@ export function SharePanel({ spaceID }: Props) {
 
       <form onSubmit={onCreate} className="space-y-2 mb-3">
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Permission</label>
+          <label className="block text-xs text-[var(--notation-fg-muted)] mb-1">Permission</label>
           <select
             value={perm}
             onChange={e => setPerm(e.target.value as Permission)}
@@ -100,7 +100,7 @@ export function SharePanel({ spaceID }: Props) {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Scope</label>
+          <label className="block text-xs text-[var(--notation-fg-muted)] mb-1">Scope</label>
           <input
             value={scope}
             onChange={e => setScope(e.target.value)}
@@ -111,13 +111,13 @@ export function SharePanel({ spaceID }: Props) {
           <datalist id="share-scope-options">
             {scopeOptions.map(p => <option key={p} value={p} />)}
           </datalist>
-          <p className="text-[10px] text-gray-500 mt-0.5">
+          <p className="text-[10px] text-[var(--notation-fg-muted)] mt-0.5">
             Guests only ever see this page or folder — enforced on the server.
             Media referenced from outside the scope stays blocked; share the folder for pages with attachments.
           </p>
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Label</label>
+          <label className="block text-xs text-[var(--notation-fg-muted)] mb-1">Label</label>
           <input
             value={label}
             onChange={e => setLabel(e.target.value)}
@@ -126,7 +126,7 @@ export function SharePanel({ spaceID }: Props) {
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Expires in</label>
+          <label className="block text-xs text-[var(--notation-fg-muted)] mb-1">Expires in</label>
           <input
             value={expiresIn}
             onChange={e => setExpiresIn(e.target.value)}
@@ -177,7 +177,7 @@ export function SharePanel({ spaceID }: Props) {
             <button onClick={() => copy(created.url)} className="text-[var(--notation-info)] hover:underline">
               copy
             </button>
-            <button onClick={() => setCreated(null)} className="text-gray-600 hover:underline">
+            <button onClick={() => setCreated(null)} className="text-[var(--notation-fg-muted)] hover:underline">
               dismiss
             </button>
           </div>
@@ -185,7 +185,7 @@ export function SharePanel({ spaceID }: Props) {
       )}
 
       {shares.length === 0 ? (
-        <p className="text-xs text-gray-500 italic">No active shares.</p>
+        <p className="text-xs text-[var(--notation-fg-muted)] italic">No active shares.</p>
       ) : (
         <ul className="space-y-1 text-xs">
           {shares.map(s => (
@@ -201,14 +201,14 @@ export function SharePanel({ spaceID }: Props) {
                       ⌖ {s.scope}
                     </div>
                   )}
-                  {s.label && <div className="text-gray-700 mt-0.5">{s.label}</div>}
+                  {s.label && <div className="text-[var(--notation-fg)] mt-0.5">{s.label}</div>}
                   {s.expires_at && (
-                    <div className="text-gray-500 mt-0.5">
+                    <div className="text-[var(--notation-fg-muted)] mt-0.5">
                       expires {new Date(s.expires_at).toLocaleString()}
                     </div>
                   )}
                   {s.last_used && (
-                    <div className="text-gray-500 mt-0.5">
+                    <div className="text-[var(--notation-fg-muted)] mt-0.5">
                       last used {new Date(s.last_used).toLocaleString()}
                     </div>
                   )}

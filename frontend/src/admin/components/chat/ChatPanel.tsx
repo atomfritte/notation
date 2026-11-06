@@ -372,7 +372,7 @@ export default function ChatPanel(props: ChatPanelProps) {
   const [historyOpen, setHistoryOpen] = useState(false)
 
   const shell = isMobile
-    ? 'fixed inset-0 z-50 flex flex-col bg-[var(--notation-bg-elevated)]'
+    ? 'fixed inset-0 z-50 flex flex-col bg-[var(--notation-bg-elevated)] text-[var(--notation-fg)]'
     : 'surface-elevated relative border-l border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] flex flex-col flex-shrink-0 animate-in slide-in-from-right-8 duration-200 shadow-xl'
 
   const lastMsg = chat?.body.messages[chat.body.messages.length - 1]

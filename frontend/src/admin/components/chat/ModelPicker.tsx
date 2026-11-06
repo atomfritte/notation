@@ -80,7 +80,7 @@ export function ModelPicker({
         <div
           role="dialog"
           aria-label="Model and effort"
-          className="absolute bottom-full left-0 mb-1.5 z-30 w-[min(22rem,calc(100vw-1.5rem))] max-h-[min(70vh,34rem)] overflow-y-auto rounded-xl border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] shadow-2xl animate-in fade-in slide-in-from-bottom-1 duration-100"
+          className="absolute bottom-full left-0 mb-1.5 z-30 w-[min(22rem,calc(100vw-1.5rem))] max-h-[min(70vh,34rem)] overflow-y-auto rounded-xl text-[var(--notation-fg)] border border-[var(--notation-border)] bg-[var(--notation-bg-elevated)] shadow-2xl animate-in fade-in slide-in-from-bottom-1 duration-100"
         >
           <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--notation-fg-muted)]">Model</span>
@@ -119,7 +119,7 @@ export function ModelPicker({
                       <span className="block text-[11px] text-[var(--notation-fg-muted)] leading-snug">
                         {known?.blurb || (m.released ? `Released ${m.released}` : m.id)}
                       </span>
-                      <span className="block text-[10.5px] text-[var(--notation-fg-muted)] opacity-80 tabular-nums">
+                      <span className="block text-[10.5px] text-[var(--notation-fg-muted)] tabular-nums">
                         {p ?? 'Price not known here — the cost estimate assumes Opus rates'}
                       </span>
                     </span>

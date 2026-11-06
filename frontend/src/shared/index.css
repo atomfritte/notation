@@ -659,9 +659,31 @@
   --notation-fg: var(--notation-fg-on-elevated);
   --notation-fg-muted: var(--notation-fg-on-elevated-muted);
   --notation-border: var(--notation-border-on-elevated);
+  /* And the INHERITED text colour with them. The body writes zinc-800, which
+     is right on the content side but near-invisible on a deep chrome tone: any
+     heading, label or input inside a chrome panel that doesn't name a colour
+     itself (inputs inherit — preflight sets `color: inherit`) came out dark on
+     dark in the split-tone themes. Resolves to the rebound token above. */
+  color: var(--notation-fg);
+  /* Code blocks too: --notation-code-bg is computed on :root from the PAGE
+     background, so inside chrome a `<pre>` stayed content-toned (near-white in
+     a split-tone light theme) while its text followed the chrome ink above —
+     light on light in the assistant's replies. Keep it in the chrome family.
+     (Chrome never syntax-highlights, so the light hljs palette can't clash.) */
+  --notation-code-bg: color-mix(in srgb, var(--notation-chrome-bg-alt), black 4%);
+}
+.dark .surface-elevated {
+  --notation-code-bg: color-mix(in srgb, var(--notation-chrome-bg-alt), black 35%);
 }
 
 @layer base {
+  /* Placeholders in the theme's muted ink (rebound inside chrome like any
+     text). Preflight's default — half the current colour — lands near 3:1 on
+     the tinted fields, too faint to read what a field wants. */
+  ::placeholder {
+    color: var(--notation-fg-muted);
+    opacity: 1;
+  }
   body {
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
