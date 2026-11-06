@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
-import { FolderPlus, FolderMinus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync, Sparkles } from 'lucide-react'
+import { FolderPlus, FolderMinus, Bookmark, Plus, MessageSquare, Edit3, Eye, FileText, FilePlus, PanelLeft, Moon, Sun, Edit2, Trash, BookmarkMinus, List, Search, Upload, History, Printer, ChevronLeft, Copy, ExternalLink, Files, Palette, HelpCircle, Download, Archive, Headphones, Lock, Unlock, X as XIcon, BookOpen, FolderSync, Sparkles, MoreHorizontal, LayoutGrid } from 'lucide-react'
 import * as api from '../lib/api'
 import * as keyStore from '../lib/keyStore'
 import { openEncryptedFS, fsToEntries } from '../lib/encSpace'
@@ -23,7 +23,8 @@ import { MarkdownView, stripMdExt } from '../components/MarkdownView'
 import { FormView } from '../components/FormView'
 import { ReadAloudBar } from '../components/ReadAloudBar'
 import { PrepareAudioPanel } from '../components/PrepareAudioPanel'
-import { HeaderActionBtn, HeaderOverflowMenu, useHeaderWidth, headerIsCompact, type HeaderAction } from '../components/HeaderActions'
+import { HeaderActionBtn, useHeaderWidth, headerIsCompact } from '../components/HeaderActions'
+import { ActionMenu, type MenuAction, type MenuSection } from '../components/ui/ActionMenu'
 // Monaco is heavy (~3MB). Load it only when the user actually starts editing.
 const Editor = lazy(() => import('../components/Editor'))
 // The Claude assistant (and the SDK it pulls in) loads only when first opened.
@@ -42,10 +43,10 @@ import { EncryptedFileView } from '../components/EncryptedFileView'
 import { BacklinksPanel } from '../components/BacklinksPanel'
 import { HistoryView } from '../components/HistoryView'
 import { ThemePalette } from '../components/ThemePalette'
-import { HelpPanel } from '../components/HelpPanel'
+import { HelpPanel, isMac } from '../components/HelpPanel'
 import { useCommentFilter, applyCommentFilter } from '../lib/commentView'
 import { getHeaderStyle, HEADER_STYLE_EVENT, type HeaderStyle } from '../lib/theme'
-import { SidebarTabs, type SidebarTabKey } from '../components/SidebarTabs'
+import { SidebarTabs, MANAGE_TABS, type SidebarTabKey } from '../components/SidebarTabs'
 import { AllCommentsPanel } from '../components/AllCommentsPanel'
 import { ConvertDialog } from '../components/ConvertDialog'
 import { FolderSyncPanel } from '../components/FolderSyncPanel'
@@ -1311,56 +1312,78 @@ export function SpaceView() {
   const displayTitle = stripMdExt(file.split('/').pop() || '')
   const pathParts = file ? file.split('/') : []
 
-  // Header tools as one list driving both the inline icons and the overflow
-  // ("tool") menu — so on a narrow window every tool stays reachable. Encrypted
-  // spaces hide the server-backed tools (full-text search, git history,
-  // comments, studio read-aloud) that 409 server-side.
-  const headerActions: HeaderAction[] = []
-  // Full-text search works for BOTH modes: plaintext hits the server /search
-  // endpoint; encrypted searches the decrypted corpus in-browser (see below).
-  if (aiEnabled && aiSpace) headerActions.push({ key: 'assistant', label: 'Claude assistant (Alt+A)', icon: <Sparkles size={18} />, active: showChat, onClick: () => setShowChat(v => !v) })
-  headerActions.push({ key: 'search', label: 'Search', icon: <Search size={18} />, onClick: () => setSearchOpen(true) })
-  if (isMarkdownFile(file) && !isForm) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
-  if (!isForm && !encrypted) headerActions.push({ key: 'history', label: 'Version history', icon: <History size={18} />, active: historyMode, onClick: () => { if (!confirmDiscardEdits()) return; setHistoryMode(v => !v); setEditing(false) } })
-  if (!isForm) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove favorite' : 'Add favorite', icon: <Bookmark size={18} fill={isBookmarked ? 'currentColor' : 'none'} />, active: isBookmarked, onClick: () => toggleBookmark(file) })
-  if (!isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: visibleComments.length, onClick: () => setShowComments(v => !v) })
-  if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={18} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
-  if (isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={18} />, onClick: () => window.print() })
-  // Whole-space PDF — sibling of the single-page print; available for any space.
-  headerActions.push({ key: 'print-space', label: 'Print whole space (PDF)', icon: <BookOpen size={18} />, onClick: printWholeSpace })
-  headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={18} />, onClick: () => setThemeOpen(true) })
-  headerActions.push({ key: 'help', label: 'Keyboard shortcuts', icon: <HelpCircle size={18} />, onClick: () => setHelpOpen(true) })
-  headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
-  if (syncSpace && folderSyncSupported()) headerActions.push({ key: 'folder-sync', label: 'Local folder sync', icon: <FolderSync size={18} />, onClick: () => setFolderSyncOpen(true) })
-  if (encrypted) headerActions.push({ key: 'lock', label: 'Lock space', icon: <Lock size={18} />, onClick: () => { setContent(''); setTree([]); keyStore.lock(spaceID) } })
-  // ---- Sidebar footer tools ------------------------------------------------
-  // Same treatment as the page header: one list drives both the inline icons
-  // and the overflow menu, so an action can never exist in one and not the
-  // other. What differs is the budget — the sidebar is user-resizable, so the
-  // count is derived from ITS width, not the viewport's.
-  const sidebarActions: HeaderAction[] = []
-  sidebarActions.push({ key: 'new-folder', label: 'New top-level folder', icon: <FolderPlus size={16} />, onClick: () => createFolderIn('') })
-  sidebarActions.push({ key: 'upload', label: 'Upload files (or drag-drop anywhere)', icon: <Upload size={16} />, onClick: () => uploadInputRef.current?.click() })
-  if (syncSpace) sidebarActions.push({
-    key: 'prune-dirs',
-    label: 'Remove empty folders',
-    icon: <FolderMinus size={16} />,
-    onClick: () => { void pruneEmptyFolders() },
-  })
-  sidebarActions.push({ key: 'zip', label: encrypted ? 'Download decrypted ZIP of this Space' : 'Download whole Space as ZIP', icon: <Archive size={16} />, onClick: () => { void downloadAllZip() } })
-  if (syncSpace && folderSyncSupported()) sidebarActions.push({ key: 'folder-sync', label: 'Local folder sync', icon: <FolderSync size={16} />, onClick: () => setFolderSyncOpen(true) })
-  if (!spaceMeta?.converting) sidebarActions.push({ key: 'convert', label: encrypted ? 'Decrypt this Space' : 'Encrypt this Space (zero-knowledge)', icon: encrypted ? <Unlock size={16} /> : <Lock size={16} />, onClick: () => setConvertDir(encrypted ? 'to-plaintext' : 'to-encrypted') })
-  if (!encrypted && ttsVoices && ttsVoices.length > 0) sidebarActions.push({ key: 'audio', label: 'Prepare audio (voice a folder, listen offline)', icon: <Headphones size={16} />, onClick: () => setPrepareAudioOpen(true) })
-  // ~34px per icon button, and "New Page" keeps a readable minimum beside them.
-  const sidebarIconBudget = Math.max(0, Math.floor((sidebarWidth - 16 - 108) / 34))
-  const inlineSidebarActions = sidebarActions.length <= sidebarIconBudget
-    ? sidebarActions
-    // One slot goes to the hamburger itself.
-    : sidebarActions.slice(0, Math.max(0, sidebarIconBudget - 1))
-  const overflowSidebarActions = sidebarActions.slice(inlineSidebarActions.length)
+  // ── Actions ────────────────────────────────────────────────────────────────
+  // One set of lists drives the header buttons, the grouped "More" menu, the
+  // sidebar's Space menu and the command palette (Cmd/Ctrl+K), so an action is
+  // labelled the same everywhere and can't exist in one place only. Encrypted
+  // spaces hide the server-backed tools (git history, sharing, MCP, audit,
+  // studio read-aloud) that 409 server-side.
+  const isPage = isMarkdownFile(file) && !isForm
+  const openSection = (k: SidebarTabKey) => { setSidebarTab(k); setSidebarOpen(true) }
+  const searchAction: MenuAction = { key: 'search', label: 'Search', hint: `${isMac() ? '⌘' : 'Ctrl'}+Shift+F`, icon: <Search size={18} />, onClick: () => setSearchOpen(true) }
+  const assistantAction: MenuAction | null = aiEnabled && aiSpace
+    ? { key: 'assistant', label: 'Claude assistant', hint: 'Alt+A', icon: <Sparkles size={18} />, active: showChat, onClick: () => setShowChat(v => !v) }
+    : null
+  const outlineAction: MenuAction | null = isPage
+    ? { key: 'outline', label: 'Outline', icon: <List size={18} />, active: showOutline, onClick: () => setShowOutline(v => !v) }
+    : null
+  const commentsAction: MenuAction | null = !isForm && file
+    ? { key: 'comments', label: 'Comments', icon: <MessageSquare size={18} />, active: showComments, badge: visibleComments.length, onClick: () => setShowComments(v => !v) }
+    : null
 
+  const pageItems: MenuAction[] = []
+  if (!isForm && file) pageItems.push({ key: 'bookmark', label: 'Favorite', icon: <Bookmark size={16} />, active: isBookmarked, onClick: () => toggleBookmark(file) })
+  if (!isForm && !encrypted && file) pageItems.push({ key: 'history', label: 'Page history', icon: <History size={16} />, active: historyMode, onClick: () => { if (!confirmDiscardEdits()) return; setHistoryMode(v => !v); setEditing(false) } })
+  if (isPage && !editing) pageItems.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={16} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
+  if (isMarkdownFile(file) && !editing) pageItems.push({ key: 'print', label: 'Print page', icon: <Printer size={16} />, onClick: () => window.print() })
+
+  const spaceItems: MenuAction[] = []
+  spaceItems.push({ key: 'print-space', label: 'Print whole Space (PDF)', icon: <BookOpen size={16} />, onClick: printWholeSpace })
+  spaceItems.push({ key: 'zip', label: encrypted ? 'Download as ZIP (decrypted)' : 'Download as ZIP', icon: <Archive size={16} />, onClick: () => { void downloadAllZip() } })
+  if (syncSpace && folderSyncSupported()) spaceItems.push({ key: 'folder-sync', label: 'Sync with a local folder', icon: <FolderSync size={16} />, onClick: () => setFolderSyncOpen(true) })
+  if (!encrypted && ttsVoices && ttsVoices.length > 0) spaceItems.push({ key: 'audio', label: 'Prepare audio for offline', icon: <Headphones size={16} />, onClick: () => setPrepareAudioOpen(true) })
+  if (syncSpace) spaceItems.push({ key: 'prune-dirs', label: 'Remove empty folders', icon: <FolderMinus size={16} />, onClick: () => { void pruneEmptyFolders() } })
+  if (!spaceMeta?.converting) spaceItems.push({ key: 'convert', label: encrypted ? 'Decrypt this Space' : 'Encrypt this Space', icon: encrypted ? <Unlock size={16} /> : <Lock size={16} />, onClick: () => setConvertDir(encrypted ? 'to-plaintext' : 'to-encrypted') })
+  if (encrypted) spaceItems.push({ key: 'lock', label: 'Lock Space', icon: <Lock size={16} />, onClick: () => { setContent(''); setTree([]); keyStore.lock(spaceID) } })
+
+  const manageItems: MenuAction[] = encrypted ? [] : MANAGE_TABS.map(t => ({
+    key: `manage-${t.key}`, label: t.title, icon: t.icon, active: sidebarTab === t.key && sidebarOpen, onClick: () => openSection(t.key),
+  }))
+
+  const appItems: MenuAction[] = [
+    { key: 'spaces', label: 'All Spaces', icon: <LayoutGrid size={16} />, onClick: () => { if (confirmDiscardEdits()) navigate('/admin') } },
+    { key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') },
+    { key: 'accent', label: 'Accent colour', icon: <Palette size={16} />, onClick: () => setThemeOpen(true) },
+    { key: 'help', label: 'Help & shortcuts', hint: '?', icon: <HelpCircle size={16} />, onClick: () => setHelpOpen(true) },
+  ]
+
+  // Header: the everyday tools inline, everything else grouped and labelled in
+  // "More". On a narrow header the page toggles move into the menu too.
   const editVisible = isTextFile(file) && !historyMode && !isForm
-  const compactHeader = headerIsCompact(headerWidth, headerActions.length, 120 + (editVisible ? 64 : 0), isMobile)
+  const wideInline = [searchAction, outlineAction, commentsAction, assistantAction].filter((a): a is MenuAction => !!a)
+  const compactHeader = headerIsCompact(headerWidth, wideInline.length + 1, 200 + (editVisible ? (isMobile ? 40 : 84) : 0), isMobile)
+  const inlineHeader = compactHeader
+    ? [searchAction, assistantAction].filter((a): a is MenuAction => !!a)
+    : wideInline
+  const moreSections: MenuSection[] = [
+    { title: 'This page', items: [...(compactHeader ? [outlineAction, commentsAction].filter((a): a is MenuAction => !!a) : []), ...pageItems] },
+    { title: 'This Space', items: spaceItems },
+    { title: 'App', items: appItems },
+  ]
+  const spaceMenuSections: MenuSection[] = [
+    { title: 'Space', items: spaceItems },
+    { title: 'Manage', items: manageItems },
+  ]
+  // Everything, for the command palette.
+  const paletteActions: MenuAction[] = [
+    ...[searchAction, assistantAction, outlineAction, commentsAction].filter((a): a is MenuAction => !!a),
+    { key: 'new-page', label: 'New page', hint: 'Alt+N', icon: <FilePlus size={16} />, onClick: () => onNewFile() },
+    { key: 'new-folder', label: 'New folder', icon: <FolderPlus size={16} />, onClick: () => createFolderIn('') },
+    { key: 'upload', label: 'Upload files', icon: <Upload size={16} />, onClick: () => uploadInputRef.current?.click() },
+    ...(editVisible ? [{ key: 'edit', label: editing ? 'Stop editing' : 'Edit page', icon: <Edit3 size={16} />, onClick: () => { if (confirmDiscardEdits()) setEditing(v => !v) } }] : []),
+    ...pageItems, ...spaceItems, ...manageItems, ...appItems,
+  ]
+  const spaceName = spaceMeta?.name || spaceID
 
   return (
     <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] font-sans overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
@@ -1438,23 +1461,33 @@ export function SpaceView() {
           className="h-full flex flex-col absolute top-0 left-0 w-full md:w-auto"
           style={{ width: isMobile ? undefined : sidebarWidth }}
         >
-          {/* Clickable header takes you back to the Spaces overview. The
-             avatar swaps to a left-chevron on hover so the action is obvious. */}
-          <Link
-            to="/admin"
-            className="h-12 flex items-center px-4 hover:bg-[var(--notation-border)] transition-colors mt-2 mx-2 rounded-md group"
-            title="Back to all Spaces"
-          >
-            <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium w-full">
-              <div className="w-5 h-5 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase relative">
-                <span className="group-hover:opacity-0 transition-opacity">{spaceID.charAt(0)}</span>
-                <ChevronLeft size={12} className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+          {/* The Space: its name takes you back to all Spaces (the avatar turns
+             into a back chevron on hover); the menu beside it holds the Space's
+             tools and administration. */}
+          <div className="h-12 mt-2 mx-2 flex items-center gap-1">
+            <Link
+              to="/admin"
+              className="flex-1 min-w-0 h-full flex items-center px-2 hover:bg-[var(--notation-border)] transition-colors rounded-md group"
+              title="Back to all Spaces"
+            >
+              <div className="flex items-center gap-2 text-[var(--notation-fg)] font-medium w-full min-w-0">
+                <div className="w-5 h-5 flex-shrink-0 rounded bg-[var(--notation-bg-alt)] text-[var(--notation-fg)] dark:bg-[color:var(--notation-accent-20)] dark:text-[color:var(--notation-accent)] flex items-center justify-center font-bold text-xs uppercase relative">
+                  <span className="group-hover:opacity-0 transition-opacity">{spaceName.charAt(0)}</span>
+                  <ChevronLeft size={12} className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <span className="truncate">{spaceName}</span>
               </div>
-              <span className="truncate">{spaceID}</span>
-            </div>
-          </Link>
+            </Link>
+            <ActionMenu
+              sections={spaceMenuSections}
+              label="Space menu"
+              title={spaceName}
+              icon={<MoreHorizontal size={18} />}
+              isMobile={isMobile}
+            />
+          </div>
 
-          <div className="px-3 mt-4">
+          <div className="px-3 mt-3 mb-2">
             <SidebarTabs
               active={sidebarTab}
               onPick={setSidebarTab}
@@ -1462,21 +1495,8 @@ export function SpaceView() {
                 comments: visibleAllComments.length,
                 bookmarks: bookmarks.length,
               }}
-              // Encrypted spaces expose the client-side tabs plus Comments
-              // (now end-to-end encrypted in the op-log). Sharing, MCP, git
-              // history and audit remain plaintext-only server features.
-              tabs={encrypted ? ['files', 'bookmarks', 'comments'] : undefined}
+              wide={(isMobile ? 288 : sidebarWidth) >= 320}
             />
-          </div>
-
-          <div className="px-5 mt-6 mb-2 text-xs font-semibold text-[var(--notation-fg-muted)] uppercase tracking-wider">
-            {sidebarTab === 'files' && 'Workspace'}
-            {sidebarTab === 'bookmarks' && 'Favorites'}
-            {sidebarTab === 'comments' && 'All Comments'}
-            {sidebarTab === 'shares' && 'Active Shares'}
-            {sidebarTab === 'mcp' && 'Settings'}
-            {sidebarTab === 'history' && 'Recent Commits'}
-            {sidebarTab === 'audit' && 'Activity'}
           </div>
 
           <div ref={sidebarScrollRef} className="flex-1 overflow-y-auto px-2 pb-4 no-scrollbar">
@@ -1556,15 +1576,22 @@ export function SpaceView() {
             >
               <Plus size={16} className="flex-shrink-0" /> <span className="truncate">New Page</span>
             </button>
-            {/* Space tools. The sidebar is resizable, so the row is laid out
-                against its measured width: whatever doesn't fit moves into a
-                hamburger that opens upward. Without this the icons squashed
-                into each other (and eventually out of the panel) as soon as
-                the sidebar was dragged narrow. */}
-            {inlineSidebarActions.map(a => <HeaderActionBtn key={a.key} action={a} />)}
-            {overflowSidebarActions.length > 0 && (
-              <HeaderOverflowMenu actions={overflowSidebarActions} placement="up" label="More space tools" />
-            )}
+            <button
+              onClick={() => createFolderIn('')}
+              title="New folder"
+              aria-label="New folder"
+              className="p-1.5 rounded-md text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] transition-colors"
+            >
+              <FolderPlus size={16} />
+            </button>
+            <button
+              onClick={() => uploadInputRef.current?.click()}
+              title="Upload files (or drag and drop anywhere)"
+              aria-label="Upload files"
+              className="p-1.5 rounded-md text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)] transition-colors"
+            >
+              <Upload size={16} />
+            </button>
             <input
               ref={uploadInputRef}
               type="file"
@@ -1672,7 +1699,7 @@ export function SpaceView() {
 
             {file && (
               <div className="flex items-center text-sm text-[var(--notation-fg-muted)] min-w-0">
-                <Link to="/admin" className="hover:text-[var(--notation-fg)] hover:underline truncate max-w-[100px] flex-shrink-0" title="Back to all Spaces">{spaceID}</Link>
+                <Link to="/admin" className="hover:text-[var(--notation-fg)] hover:underline truncate max-w-[120px] flex-shrink-0 hidden sm:inline" title="Back to all Spaces">{spaceName}</Link>
                 {pathParts.map((part, i) => {
                   const isLast = i === pathParts.length - 1
                   const label = stripMdExt(part)
@@ -1682,7 +1709,7 @@ export function SpaceView() {
                   const firstInFolder = isLast ? null : allFiles.find(p => p.startsWith(folderPrefix))
                   return (
                     <span key={i} className="flex items-center min-w-0">
-                      <span className="mx-1.5 text-[var(--notation-fg-muted)] flex-shrink-0">/</span>
+                      <span className={`mx-1.5 text-[var(--notation-fg-muted)] flex-shrink-0 ${i === 0 ? 'hidden sm:inline' : ''}`}>/</span>
                       {firstInFolder ? (
                         <button
                           onClick={() => selectFile(firstInFolder)}
@@ -1706,18 +1733,27 @@ export function SpaceView() {
             )}
           </div>
 
-          {file && (
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {compactHeader
-                ? <HeaderOverflowMenu actions={headerActions} />
-                : headerActions.map(act => <HeaderActionBtn key={act.key} action={act} />)}
-              {editVisible && (
-                <button onClick={() => { if (!confirmDiscardEdits()) return; setEditing(v => !v) }} title={editing ? 'Preview' : 'Edit'} className={`ml-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${editing ? 'text-[var(--notation-fg)] bg-[var(--notation-bg-alt)] dark:text-[color:var(--notation-accent)] dark:bg-[color:var(--notation-accent-10)]' : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}>
-                  {editing ? <Eye size={16} /> : <Edit3 size={16} />}
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {inlineHeader.map(act => <HeaderActionBtn key={act.key} action={act} />)}
+            <ActionMenu
+              sections={moreSections}
+              label="More"
+              title="More"
+              icon={<MoreHorizontal size={18} />}
+              isMobile={isMobile}
+            />
+            {editVisible && (
+              <button
+                onClick={() => { if (!confirmDiscardEdits()) return; setEditing(v => !v) }}
+                title={editing ? 'Done — back to reading' : 'Edit this page'}
+                aria-label={editing ? 'Done editing' : 'Edit'}
+                className={`ml-1 px-2.5 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${editing ? 'bg-[color:var(--notation-accent)] text-[var(--notation-fg-on-accent,#fff)] hover:opacity-90' : 'border border-[var(--notation-border)] text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]'}`}
+              >
+                {editing ? <Eye size={16} /> : <Edit3 size={16} />}
+                {!isMobile && <span>{editing ? 'Done' : 'Edit'}</span>}
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Resume/abort banner for a conversion that was left in-flight (e.g. the
@@ -2021,6 +2057,7 @@ export function SpaceView() {
       <CommandPalette
         open={paletteOpen}
         files={allFiles}
+        actions={paletteActions}
         onClose={() => setPaletteOpen(false)}
         onSelect={(p) => selectFile(p)}
       />

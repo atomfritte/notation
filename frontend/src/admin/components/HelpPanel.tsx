@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Keyboard, X } from 'lucide-react'
+import { Keyboard, MoreHorizontal, X } from 'lucide-react'
 
 type Props = {
   open: boolean
@@ -49,7 +49,7 @@ export function HelpPanel({ open, onClose, scope = 'admin' }: Props) {
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--notation-border)]">
           <div className="flex items-center gap-2 text-[var(--notation-fg)] font-semibold">
             <Keyboard size={16} />
-            <span>Keyboard shortcuts</span>
+            <span>{scope === 'admin' ? 'Help & shortcuts' : 'Keyboard shortcuts'}</span>
           </div>
           <button
             onClick={onClose}
@@ -61,6 +61,17 @@ export function HelpPanel({ open, onClose, scope = 'admin' }: Props) {
         </div>
 
         <div className="max-h-[70vh] overflow-y-auto px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+          {scope === 'admin' && (
+            <section className="md:col-span-2">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--notation-fg-muted)] mb-2">Where things are</h3>
+              <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1.5 text-sm text-[var(--notation-fg)]">
+                <li><Dots /> <strong>More</strong> (top right) — this page (favorite, history, read aloud, print), the Space, theme and help</li>
+                <li><Dots /> next to the <strong>Space name</strong> — Space tools (ZIP, folder sync, encryption) and sharing, integration, history, activity</li>
+                <li><KeyCombo combo={`${MOD}+K`} inline /> — find any page <em>or action</em> by name; start with <code>&gt;</code> for actions only</li>
+                <li>The tabs above the page tree — <strong>Pages</strong>, <strong>Favorites</strong>, <strong>Comments</strong></li>
+              </ul>
+            </section>
+          )}
           {groups.map(g => (
             <section key={g.title}>
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--notation-fg-muted)] mb-2">
@@ -94,6 +105,10 @@ export function HelpPanel({ open, onClose, scope = 'admin' }: Props) {
   )
 }
 
+function Dots() {
+  return <MoreHorizontal size={14} className="inline -mt-0.5 text-[var(--notation-fg-muted)]" aria-label="the ··· button" />
+}
+
 function KeyCombo({ combo, inline = false }: { combo: string; inline?: boolean }) {
   const parts = combo.split('+').map(p => p.trim()).filter(Boolean)
   return (
@@ -115,7 +130,7 @@ function adminGroups(): Group[] {
     {
       title: 'Navigation',
       items: [
-        { keys: `${MOD}+K`, label: 'Quick open — jump to any page' },
+        { keys: `${MOD}+K`, label: 'Quick open — any page or action' },
         { keys: `${MOD}+Shift+F`, label: 'Search page titles + full text across the Space' },
         { keys: `${MOD}+\\`, label: 'Toggle sidebar' },
         { keys: 'Alt+N', label: 'Create new page' },
@@ -181,7 +196,7 @@ function shareGroups(): Group[] {
   ]
 }
 
-function isMac(): boolean {
+export function isMac(): boolean {
   if (typeof navigator === 'undefined') return false
   return /Mac|iPhone|iPad|iPod/.test(navigator.platform)
 }

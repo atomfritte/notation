@@ -5,6 +5,7 @@
 
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import { lockAll } from './keyStore'
+import { lockAIKey } from './ai/keyMemory'
 
 export type AuthState = {
   signed_in: boolean
@@ -73,9 +74,10 @@ export async function claim(token: string): Promise<void> {
 }
 
 export async function logout(): Promise<void> {
-  // Drop every unlocked space key before the session ends — a shared machine
-  // must not keep a decrypted DEK alive past sign-out.
+  // Drop every unlocked space key (and the unlocked API key) before the
+  // session ends — a shared machine must not keep either alive past sign-out.
   lockAll()
+  lockAIKey()
   await jsonOrThrow(
     await fetch('/api/auth/logout', {
       method: 'POST',
