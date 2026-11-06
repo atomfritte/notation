@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/yoogie27/notation/internal/ai"
 	"github.com/yoogie27/notation/internal/authstore"
 	"github.com/yoogie27/notation/internal/config"
 	"github.com/yoogie27/notation/internal/gitrepo"
@@ -32,6 +33,7 @@ type Deps struct {
 	MCP           *mcphandler.Server
 	AuthStore     *authstore.Store
 	TTS           *tts.Synth
+	AI            *ai.Store
 	SessionSecret []byte
 }
 
@@ -152,7 +154,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 	ahdmin := &adminHandlers{
 		cfg: d.Cfg, store: d.Store, git: d.Git,
 		shares: d.Shares, mcpTokens: d.MCPTokens, comments: d.Comments,
-		audit: d.Audit, tts: d.TTS,
+		audit: d.Audit, tts: d.TTS, ai: d.AI,
 	}
 	adminMW := adminMiddleware(d.Cfg, d.SessionSecret)
 	r.Route("/api/admin", func(ar chi.Router) {
@@ -168,6 +170,11 @@ func NewRouter(d Deps) (http.Handler, error) {
 		// synth endpoint is space-scoped (below) so each clip is isolated to its
 		// space's cache + inherits the space's access check.
 		ar.Get("/tts/info", ahdmin.getTTSInfo)
+		// In-app Claude assistant: instance settings + key hand-off. The chat
+		// itself goes browser → Claude API directly (see http/ai.go).
+		ar.Get("/ai/settings", ahdmin.getAISettings)
+		ar.Put("/ai/settings", ahdmin.putAISettings)
+		ar.Post("/ai/key", ahdmin.issueAIKey)
 		ar.Get("/spaces", ahdmin.listSpaces)
 		ar.Post("/spaces", ahdmin.createSpace)
 		// Landing-page Kanban board: batch-update column + ordering across spaces.
@@ -184,6 +191,13 @@ func NewRouter(d Deps) (http.Handler, error) {
 			sr.Get("/mcp-tokens", ahdmin.listMCPTokens)
 			sr.Post("/mcp-tokens", ahdmin.createMCPToken)
 			sr.Delete("/mcp-tokens/{tokenID}", ahdmin.deleteMCPToken)
+			// Assistant chat history. Mode-agnostic: a plaintext Space stores
+			// JSON records, a zero-knowledge Space only sealed ones (enforced in
+			// space.WriteChat). Lives OUTSIDE files/ — never content, never git.
+			sr.Get("/chats", ahdmin.listChats)
+			sr.Get("/chats/{chatID}", ahdmin.getChat)
+			sr.Put("/chats/{chatID}", ahdmin.putChat)
+			sr.Delete("/chats/{chatID}", ahdmin.deleteChat)
 
 			// Zero-knowledge blob + op-log store. Each handler 409s on a
 			// plaintext space (requireEncrypted). The server only ever moves

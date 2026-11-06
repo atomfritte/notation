@@ -97,14 +97,16 @@ func hasEncodedSeparator(raw string) bool {
 // pointing at the file endpoint. Cross-origin framing is still refused, so
 // clickjacking protection is intact. `X-Frame-Options: SAMEORIGIN` mirrors
 // this for legacy browsers that ignore frame-ancestors.
-// Read-aloud now synthesises on the server (same-origin /tts), so the CSP needs
-// no third-party hosts — everything the app talks to is 'self'.
+// Read-aloud synthesises on the server (same-origin /tts). The ONE third-party
+// host is the Claude API: the in-app assistant calls it straight from the
+// browser so the server never relays (and, for a zero-knowledge Space, never
+// sees) a chat. connect-src only — nothing from there is ever executed.
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self' 'wasm-unsafe-eval'; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: blob:; " +
 	"font-src 'self' data:; " +
-	"connect-src 'self'; " +
+	"connect-src 'self' https://api.anthropic.com; " +
 	"media-src 'self' blob:; " +
 	"worker-src 'self' blob:; " +
 	"frame-src 'self'; " +

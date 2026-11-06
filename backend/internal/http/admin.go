@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/yoogie27/notation/internal/ai"
 	"github.com/yoogie27/notation/internal/auth"
 	"github.com/yoogie27/notation/internal/config"
 	"github.com/yoogie27/notation/internal/gitrepo"
@@ -33,12 +34,23 @@ type adminHandlers struct {
 	comments  *share.CommentStore
 	audit     *share.AuditLog
 	tts       *tts.Synth
+	ai        *ai.Store
 }
 
+// adminAuthor is the git identity for an admin write. A write the in-app
+// assistant made on the admin's behalf carries `X-Notation-Actor: ai` and is
+// committed as `ai:<name>`, so the Space's history tells an AI edit from a
+// hand edit (the roadmap's "every AI edit is a commit with its own author").
+// The header can only relabel the signed-in admin's own writes, so it needs no
+// further trust.
 func adminAuthor(r *http.Request) gitrepo.Author {
 	u, _ := auth.AdminFromContext(r.Context())
+	prefix := "admin:"
+	if r.Header.Get("X-Notation-Actor") == "ai" {
+		prefix = "ai:"
+	}
 	return gitrepo.Author{
-		Name:  "admin:" + u.Name,
+		Name:  prefix + u.Name,
 		Email: u.Name + "@notation.admin",
 	}
 }

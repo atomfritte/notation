@@ -83,9 +83,17 @@ func (s *Store) AbortConvert(id string) error {
 		if err := s.purgeEncArtifacts(id); err != nil {
 			return err
 		}
+		// ...including the sealed chat copies the client staged.
+		if err := s.PurgeChats(id, true); err != nil {
+			return err
+		}
 	case ConvertToPlaintext:
 		// Discard staged decrypted plaintext; the ciphertext is untouched.
 		if err := s.purgePlaintextContent(id); err != nil {
+			return err
+		}
+		// ...including the decrypted chat copies the client staged.
+		if err := s.PurgeChats(id, false); err != nil {
 			return err
 		}
 	default:
@@ -294,7 +302,9 @@ func (s *Store) PurgeLegacyServerMetadata(id string) error {
 			return err
 		}
 	}
-	return nil
+	// Plaintext assistant chats are the same leak class: the client migrates
+	// them into sealed records first (see chats.go), then the cleartext goes.
+	return s.PurgeChats(id, false)
 }
 
 // HasLegacyServerMetadata reports whether any legacy plaintext sidecar still
@@ -329,6 +339,13 @@ func (s *Store) HasLegacyServerMetadata(id string) (comments, other bool, err er
 		} else {
 			other = true
 		}
+	}
+	plainChats, chatErr := s.hasChats(id, false)
+	if chatErr != nil {
+		return false, false, chatErr
+	}
+	if plainChats {
+		other = true
 	}
 	return comments, other, nil
 }

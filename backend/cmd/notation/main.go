@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yoogie27/notation/internal/ai"
 	"github.com/yoogie27/notation/internal/authstore"
 	"github.com/yoogie27/notation/internal/config"
 	"github.com/yoogie27/notation/internal/gitrepo"
@@ -105,6 +106,7 @@ func main() {
 		MCP:           mcpSrv,
 		AuthStore:     authStore,
 		TTS:           synth,
+		AI:            ai.NewStore(cfg.DataDir, cfg.AnthropicAPIKey, cfg.AIDisabled),
 		SessionSecret: secret,
 	})
 	if err != nil {

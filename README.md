@@ -55,6 +55,7 @@ Most note tools force you to pick a side: either a SaaS that owns your data, or 
 - [Spaces & Git versioning](#spaces--git-versioning)
 - [Magic Links](#magic-links)
 - [Local folder sync](#local-folder-sync)
+- [Claude assistant](#claude-assistant)
 - [MCP integration](#mcp-integration)
 - [Supported file types](#supported-file-types)
 - [Markdown features](#markdown-features)
@@ -149,6 +150,15 @@ Encrypt a Space end-to-end in your browser: the server keeps ciphertext and opaq
 ### 📂  Local folder sync
 
 Pull a Space into a real folder, work on it with local tools or a coding agent, push the changes back through a reviewed 3-way diff. Works for plaintext and encrypted Spaces alike.
+
+</td>
+</tr>
+<tr>
+<td colspan="2">
+
+### ✨  Claude assistant
+
+A chat panel next to every page: Claude reads, searches and edits the Space with your own API key — every change shown as a diff to accept or reject, with undo. Runs in the browser, so it works on encrypted Spaces too; chats persist per Space, sealed with the Space key when the Space is encrypted.
 
 </td>
 </tr>
@@ -266,6 +276,13 @@ All configuration is via environment variables. None are required for a basic lo
 | `NOTATION_ADMIN_GROUPS_HEADER` | `Remote-Groups` | Authelia groups header. |
 | `NOTATION_ADMIN_GROUP` | *(empty)* | If set, the user must be a member of this group. |
 | `NOTATION_DEV_BYPASS_AUTH` | `0` | **Do NOT set in production.** Bypasses all auth, intended only for local Vite-against-backend development. |
+
+### Claude assistant
+
+| Variable | Default | Description |
+|---|---|---|
+| `NOTATION_ANTHROPIC_API_KEY` | *(empty)* | Claude API key for the assistant. Optional: the key can also be entered in the app (stored `0600` in `<data>/.notation/ai.json`). When set, it wins and the in-app field is read-only. |
+| `NOTATION_AI_DISABLED` | `0` | Set to `1` to remove the assistant entirely (its endpoints answer 404 and the UI hides it). |
 
 ### Behind a reverse proxy
 
@@ -390,6 +407,21 @@ Work on a Space with local tools — an editor, a script, a coding agent — and
 - **Ignored on both sides**: dotfiles and dot-directories (`.git`, `.env`, the manifest itself) and any `node_modules/`.
 - **A failed write doesn't poison the baseline.** If the server rejects a file (too large, connection lost), the push still applies everything else, reports what failed, and keeps those paths out of the sync record so the next push retries them.
 - **Requirements**: a Chromium-based browser (Chrome, Edge, Brave) over https or localhost — it uses the File System Access API. The picked folder is remembered per Space in IndexedDB; you only re-grant permission with one click. No encryption key is ever stored there.
+
+---
+
+## Claude assistant
+
+A chat panel on the right of every Space (the ✨ button in the header, or `Alt` + `A`). Ask about the pages, or have Claude write, restructure and tidy them — the way you would with a coding agent after a folder sync, without leaving the app.
+
+- **Bring your own key.** Add a Claude API key once in the panel (or via `NOTATION_ANTHROPIC_API_KEY`); usage is billed to that key. Pick the model (Opus 5.5 by default) and how much effort Claude spends per chat; the panel shows an estimated cost and the current context size.
+- **You approve every change.** Writes, edits, moves and deletes are shown as a diff first — *Apply*, *Reject* (optionally telling Claude what to do instead), or *Apply all in this chat*. An *Auto-apply* switch skips the question; every applied change keeps an *Undo* button, which refuses to overwrite edits made after it. A page open in the editor with unsaved changes is never touched.
+- **Works on encrypted Spaces.** The whole agent loop runs in your browser tab: it talks to the Claude API directly and reads/writes the Space through the same interface as the folder sync — the decrypted, in-browser file system for an encrypted Space. The notation server is not in the conversation path.
+- **Chats persist per Space**, across sessions and devices, in `<space>/.notation/chats/` (plaintext Space) or **sealed with the Space key** (encrypted Space — AES-GCM, each record bound to its chat id and role). The server refuses plaintext chat records on an encrypted Space, and encrypting/decrypting a Space re-seals or unseals its chats as part of the conversion.
+- **Space instructions and skills.** A non-generated `AGENTS.md` / `CLAUDE.md` in the Space root is Claude's brief; every `SKILL.md` (e.g. `skills/protokoll/SKILL.md`) is offered as a skill that Claude loads on demand. A *skill library* Space (settings) adds skills to every chat. Same conventions as Claude Code after a folder sync, so a Space behaves the same either way.
+- **Traceable.** Claude appends one entry per request to `CHANGELOG.md`. On a plaintext Space each change is a git commit by `ai:<you>`.
+
+**What leaves the box.** What Claude reads to answer you — pages, search hits — is sent to Anthropic's API under your key (API data isn't used for model training). Nothing else: the key is fetched into the tab's memory only (never browser storage), admin-only, CSRF-protected; Magic-Link guests and MCP tokens can't reach it or the chats. Page content is treated as untrusted input (a page can't instruct Claude to act), and no change happens without the approval flow above.
 
 ---
 
@@ -561,6 +593,7 @@ That split is one palette token, `chromeBg`, so you can build your own: set the 
 | `Cmd` / `Ctrl` + `Shift` + `F` | Full-text search modal |
 | `Cmd` / `Ctrl` + `\` | Toggle sidebar |
 | `Alt` + `N` | New page |
+| `Alt` + `A` | Open / close the Claude assistant |
 | `Cmd` / `Ctrl` + `S` | Save current edit |
 | `Cmd` / `Ctrl` + `B` | Bold (editor) |
 | `Cmd` / `Ctrl` + `I` | Italic (editor) |
@@ -585,7 +618,7 @@ script-src 'self' 'wasm-unsafe-eval';
 style-src 'self' 'unsafe-inline';
 img-src 'self' data: blob:;
 font-src 'self' data:;
-connect-src 'self';
+connect-src 'self' https://api.anthropic.com;
 media-src 'self' blob:;
 worker-src 'self' blob:;
 frame-src 'self';
