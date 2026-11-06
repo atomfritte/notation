@@ -164,8 +164,10 @@ export function SpaceList() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative flex-1 max-w-md">
+        {/* On a phone the search gets its own full-width row; the view switch
+            and New Space share the next one. */}
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="relative basis-full sm:basis-auto sm:flex-1 sm:max-w-md">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--notation-fg-muted)]" />
             <input
               value={query}
@@ -194,7 +196,7 @@ export function SpaceList() {
           </div>
           <button
             onClick={() => setCreating('inbox')}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 transition-colors whitespace-nowrap"
+            className="ml-auto sm:ml-0 flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md bg-[var(--notation-accent)] text-[var(--notation-fg-on-accent)] hover:opacity-90 transition-colors whitespace-nowrap"
           >
             <Plus size={15} /> New Space
           </button>

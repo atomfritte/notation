@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Route, Routes, useSearchParams } from 'react-router'
 import {
   PanelLeft, List, MessageSquare, Search, Printer, Sun, Moon, Palette,
-  Bookmark, FileText, Folder, HelpCircle, X, Headphones, Link2Off,
+  Bookmark, FileText, Folder, HelpCircle, X, Headphones, Link2Off, MoreHorizontal,
 } from 'lucide-react'
 import * as api from './lib/api'
 
@@ -31,7 +31,8 @@ function friendlyShareError(err: string): { title: string; detail: string } {
 }
 import { getCachedFile, setCachedFile, prefetchFile } from '../admin/lib/contentCache'
 import { ShareCommentsPanel } from './ShareCommentsPanel'
-import { HeaderActionBtn, HeaderOverflowMenu, useHeaderWidth, headerIsCompact, type HeaderAction } from '../admin/components/HeaderActions'
+import { HeaderActionBtn, useHeaderWidth, headerIsCompact } from '../admin/components/HeaderActions'
+import { ActionMenu, type MenuAction, type MenuSection } from '../admin/components/ui/ActionMenu'
 import { FileTree } from '../admin/components/FileTree'
 import { FileViewer } from '../admin/components/FileViewer'
 import { MarkdownView, stripMdExt } from '../admin/components/MarkdownView'
@@ -522,24 +523,31 @@ function ShareUI() {
     if (commentID) setSelectedCommentId(commentID)
   }
 
-  // The header's icon actions — a single list that drives both the inline
-  // buttons and the overflow menu, so they never drift apart.
-  const headerActions: HeaderAction[] = []
-  if (features?.search) headerActions.push({ key: 'search', label: 'Search', icon: <Search size={16} />, onClick: () => setSearchOpen(true) })
-  if (features?.outline && !isMobile && isMarkdownFile(file)) headerActions.push({ key: 'outline', label: 'Outline', icon: <List size={16} />, active: showOutline, onClick: () => setShowOutline(v => !v) })
-  if (canComment && !isForm) headerActions.push({ key: 'comments', label: 'Comments', icon: <MessageSquare size={16} />, active: showComments, badge: comments.length, onClick: () => { openedBySelectionRef.current = false; setShowComments(v => !v) } })
-  if (features?.bookmarks) headerActions.push({ key: 'bookmark', label: isBookmarked ? 'Remove bookmark' : 'Bookmark this page', icon: <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />, active: !!isBookmarked, onClick: () => toggleBookmark(file) })
-  if (isMarkdownFile(file) && !editing && !isForm) headerActions.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={16} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
-  if (features?.print && isMarkdownFile(file) && !editing) headerActions.push({ key: 'print', label: 'Print this page', icon: <Printer size={16} />, onClick: () => window.print() })
-  if (features?.theme) headerActions.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={16} />, onClick: () => setThemeOpen(true) })
-  if (features?.theme) headerActions.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
-  headerActions.push({ key: 'help', label: 'Keyboard shortcuts', icon: <HelpCircle size={16} />, onClick: () => setHelpOpen(true) })
+  // The header: the everyday tools inline, the rest grouped and labelled in
+  // "More". One set of lists drives both, so they never drift apart.
+  const searchAction: MenuAction | null = features?.search ? { key: 'search', label: 'Search', icon: <Search size={16} />, onClick: () => setSearchOpen(true) } : null
+  const outlineAction: MenuAction | null = features?.outline && !isMobile && isMarkdownFile(file) ? { key: 'outline', label: 'Outline', icon: <List size={16} />, active: showOutline, onClick: () => setShowOutline(v => !v) } : null
+  const commentsAction: MenuAction | null = canComment && !isForm ? { key: 'comments', label: 'Comments', icon: <MessageSquare size={16} />, active: showComments, badge: comments.length, onClick: () => { openedBySelectionRef.current = false; setShowComments(v => !v) } } : null
+  const pageItems: MenuAction[] = []
+  if (features?.bookmarks) pageItems.push({ key: 'bookmark', label: 'Bookmark', icon: <Bookmark size={16} />, active: !!isBookmarked, onClick: () => toggleBookmark(file) })
+  if (isMarkdownFile(file) && !editing && !isForm) pageItems.push({ key: 'read', label: 'Read aloud', icon: <Headphones size={16} />, active: readAloud, onClick: () => setReadAloud(v => !v) })
+  if (features?.print && isMarkdownFile(file) && !editing) pageItems.push({ key: 'print', label: 'Print page', icon: <Printer size={16} />, onClick: () => window.print() })
+  const viewItems: MenuAction[] = []
+  if (features?.theme) viewItems.push({ key: 'theme', label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />, onClick: () => setTheme(theme === 'dark' ? 'light' : 'dark') })
+  if (features?.theme) viewItems.push({ key: 'accent', label: 'Accent colour', icon: <Palette size={16} />, onClick: () => setThemeOpen(true) })
+  viewItems.push({ key: 'help', label: 'Keyboard shortcuts', hint: '?', icon: <HelpCircle size={16} />, onClick: () => setHelpOpen(true) })
 
-  // Collapse to the hamburger when the icons (~34px each) would crowd the title
-  // or the Edit button. Before the first measurement, fall back to isMobile.
+  // Collapse the page toggles into "More" when the icons (~34px each) would
+  // crowd the title or the Edit button. Before the first measurement, fall back to isMobile.
   const editVisible = canEdit && isTextFile(file) && !isForm
   const reservedW = 40 /* sidebar toggle */ + 72 /* title min */ + (editVisible ? 76 : 0)
-  const compactHeader = headerIsCompact(headerWidth, headerActions.length, reservedW, isMobile)
+  const wideInline = [searchAction, outlineAction, commentsAction].filter((a): a is MenuAction => !!a)
+  const compactHeader = headerIsCompact(headerWidth, wideInline.length + 1, reservedW, isMobile)
+  const inlineHeader = compactHeader ? (searchAction ? [searchAction] : []) : wideInline
+  const moreSections: MenuSection[] = [
+    { title: 'This page', items: [...(compactHeader ? [outlineAction, commentsAction].filter((a): a is MenuAction => !!a) : []), ...pageItems] },
+    { title: 'View', items: viewItems },
+  ]
 
   return (
     <div className="flex h-[100dvh] bg-[var(--notation-bg)] text-[var(--notation-fg)] overflow-hidden selection:bg-[color:var(--notation-accent-30)]">
@@ -702,9 +710,8 @@ function ShareUI() {
               </div>
 
               <div className="flex items-center gap-1 flex-shrink-0">
-                {compactHeader
-                  ? <HeaderOverflowMenu actions={headerActions} />
-                  : headerActions.map(a => <HeaderActionBtn key={a.key} action={a} />)}
+                {inlineHeader.map(a => <HeaderActionBtn key={a.key} action={a} />)}
+                <ActionMenu sections={moreSections} label="More" title="More" icon={<MoreHorizontal size={18} />} isMobile={isMobile} />
                 {editVisible && (
                   <button
                     onClick={() => {

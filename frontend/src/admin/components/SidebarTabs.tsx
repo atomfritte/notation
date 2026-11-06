@@ -1,105 +1,95 @@
-import { useState } from 'react'
 import {
-  Bookmark, Folder, Share2, Settings, GitCommit, ShieldCheck, MessageSquare,
-  ChevronDown, ChevronRight,
+  Bookmark, Folder, Share2, Plug, GitCommit, ShieldCheck, MessageSquare, X,
 } from 'lucide-react'
 
 export type SidebarTabKey = 'files' | 'bookmarks' | 'comments' | 'shares' | 'mcp' | 'history' | 'audit'
 
-type TabDef = { key: SidebarTabKey; icon: React.ReactNode; label: string }
+type TabDef = { key: SidebarTabKey; icon: React.ReactNode; label: string; title: string }
 
-const TABS: TabDef[] = [
-  { key: 'bookmarks', icon: <Bookmark size={16} />,      label: 'Bookmarks' },
-  { key: 'files',     icon: <Folder size={16} />,        label: 'Pages' },
-  { key: 'comments',  icon: <MessageSquare size={16} />, label: 'Comments' },
-  { key: 'shares',    icon: <Share2 size={16} />,        label: 'Sharing' },
-  { key: 'mcp',       icon: <Settings size={16} />,      label: 'Integration' },
-  { key: 'history',   icon: <GitCommit size={16} />,     label: 'History' },
-  { key: 'audit',     icon: <ShieldCheck size={16} />,   label: 'Audit' },
+/** The everyday sections: always visible as tabs. */
+export const PRIMARY_TABS: TabDef[] = [
+  { key: 'files',     icon: <Folder size={14} />,        label: 'Pages',     title: 'Pages' },
+  { key: 'bookmarks', icon: <Bookmark size={14} />,      label: 'Favorites', title: 'Favorites' },
+  { key: 'comments',  icon: <MessageSquare size={14} />, label: 'Comments',  title: 'All comments' },
+]
+
+/** Space administration: opened from the Space menu ("Manage"), shown with a way back. */
+export const MANAGE_TABS: TabDef[] = [
+  { key: 'shares',  icon: <Share2 size={16} />,      label: 'Sharing',       title: 'Sharing & guest links' },
+  { key: 'mcp',     icon: <Plug size={16} />,        label: 'Integration',   title: 'Integration (MCP)' },
+  { key: 'history', icon: <GitCommit size={16} />,   label: 'Space history', title: 'Space history' },
+  { key: 'audit',   icon: <ShieldCheck size={16} />, label: 'Activity log',  title: 'Activity log' },
 ]
 
 type Props = {
   active: SidebarTabKey
   onPick: (k: SidebarTabKey) => void
-  /** Counts shown as small badges next to tabs that have content. Missing
-   *  or zero entries hide the badge. */
+  /** Counts shown as small badges on the tabs. Missing or zero hide the badge. */
   badges?: Partial<Record<SidebarTabKey, number>>
-  /** Whitelist of tabs to show. Encrypted spaces pass a reduced set (the
-   *  server-backed tabs — comments, sharing, integration, history, audit —
-   *  don't apply). Omit to show all. */
-  tabs?: SidebarTabKey[]
+  /** Room for every label; otherwise only the active tab is spelled out. */
+  wide?: boolean
 }
 
 /**
- * SidebarTabs — collapsible nav for the SpaceView sidebar.
+ * The sidebar's section switcher.
  *
- * Collapsed (default) it shows just the active tab as a row with a chevron;
- * tapping the row expands the full list. Picking a different tab in the
- * expanded view immediately collapses back to the new active row. The
- * pattern keeps vertical real-estate free for the actual tab content,
- * which matters most on phones / narrow desktop sidebar widths.
- *
- * Badge counts (Comments, Bookmarks) ride alongside the label in both the
- * collapsed-single-row and the expanded-full-list states.
+ * Pages, Favorites and Comments are a visible segmented control — no hidden
+ * list to discover. The administrative sections (sharing, integration, space
+ * history, activity) live in the Space menu; while one is open, this row shows
+ * its title and a button back to the pages.
  */
-export function SidebarTabs({ active, onPick, badges, tabs }: Props) {
-  const [expanded, setExpanded] = useState(false)
-  const visibleTabs = tabs ? TABS.filter(t => tabs.includes(t.key)) : TABS
-  const activeTab = visibleTabs.find(t => t.key === active) || visibleTabs[0] || TABS[1]
-  const activeBadge = badges?.[active] ?? 0
-
-  if (!expanded) {
+export function SidebarTabs({ active, onPick, badges, wide = false }: Props) {
+  const manage = MANAGE_TABS.find(t => t.key === active)
+  if (manage) {
     return (
-      <button
-        onClick={() => setExpanded(true)}
-        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium bg-[var(--notation-border)] text-[var(--notation-fg)] hover:opacity-90 transition-opacity"
-        title="Show all sections"
-      >
-        {activeTab.icon}
-        <span className="truncate flex-1 text-left">{activeTab.label}</span>
-        {activeBadge > 0 && <Badge count={activeBadge} />}
-        <ChevronRight size={14} className="opacity-60" />
-      </button>
+      <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-[var(--notation-bg-alt)] text-sm font-medium">
+        <span className="text-[var(--notation-fg-muted)] flex-shrink-0">{manage.icon}</span>
+        <span className="flex-1 min-w-0 truncate">{manage.title}</span>
+        <button
+          onClick={() => onPick('files')}
+          className="p-1 -mr-1 rounded text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-border)]"
+          title="Back to pages"
+          aria-label="Back to pages"
+        >
+          <X size={14} />
+        </button>
+      </div>
     )
   }
-
   return (
-    <div className="space-y-0.5">
-      {visibleTabs.map(t => {
-        const isActive = t.key === active
+    <div role="tablist" aria-label="Sidebar" className="flex gap-0.5 p-0.5 rounded-lg bg-[var(--notation-bg-alt)]">
+      {PRIMARY_TABS.map(t => {
+        const sel = t.key === active
         const count = badges?.[t.key] ?? 0
+        const showLabel = wide || sel
         return (
           <button
             key={t.key}
-            onClick={() => {
-              onPick(t.key)
-              setExpanded(false)
-            }}
+            role="tab"
+            aria-selected={sel}
+            aria-label={count > 0 ? `${t.label} (${count})` : t.label}
+            onClick={() => onPick(t.key)}
+            title={t.title}
             className={
-              'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors ' +
-              (isActive
-                ? 'bg-[var(--notation-border)] text-[var(--notation-fg)]'
-                : 'text-[var(--notation-fg-muted)] hover:bg-[var(--notation-border)] hover:text-[var(--notation-fg)]')
+              `${showLabel ? 'flex-[2]' : 'flex-1'} min-w-0 flex items-center justify-center gap-1.5 px-1.5 py-1 rounded-md text-[12.5px] font-medium transition-colors ` +
+              (sel
+                ? 'bg-[var(--notation-bg-elevated)] text-[var(--notation-fg)] shadow-sm'
+                : 'text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)]')
             }
           >
-            {t.icon}
-            <span className="truncate flex-1 text-left">{t.label}</span>
-            {count > 0 && <Badge count={count} />}
-            {isActive && <ChevronDown size={14} className="opacity-60" />}
+            <span className="flex-shrink-0">{t.icon}</span>
+            {showLabel && <span className="truncate">{t.label}</span>}
+            {count > 0 && (
+              <span
+                className="flex-shrink-0 text-[10px] font-bold px-1 rounded-full bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)]"
+                aria-label={`${count} item${count === 1 ? '' : 's'}`}
+              >
+                {count > 99 ? '99+' : count}
+              </span>
+            )}
           </button>
         )
       })}
     </div>
-  )
-}
-
-function Badge({ count }: { count: number }) {
-  return (
-    <span
-      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] min-w-[1.25rem] text-center"
-      aria-label={`${count} item${count === 1 ? '' : 's'}`}
-    >
-      {count > 99 ? '99+' : count}
-    </span>
   )
 }

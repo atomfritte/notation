@@ -85,7 +85,7 @@ Each Space is a folder on disk with its own git repo. Auto-commit on save, manua
 
 ### ✍️  Notion-grade editor
 
-Monaco-based Markdown editor with toolbar, `[[wiki-link]]` picker, custom context menu, line numbers, selection toolbar, and `Cmd/Ctrl + K` command palette.
+Monaco-based Markdown editor with toolbar, `[[wiki-link]]` picker, custom context menu, line numbers, selection toolbar, and a `Cmd/Ctrl + K` command palette that finds any page *or action* by name. Page tools sit in the header's **More** menu, Space tools and administration in the **Space menu** next to its name — grouped and labelled, as bottom sheets on a phone.
 
 </td>
 </tr>
@@ -547,7 +547,7 @@ The viewer is the same on the admin side and through Magic Links.
 
 Any Space can be **encrypted end-to-end in your browser**, turning the server into a zero-trust store: it holds ciphertext and nothing else. Use it for the Spaces that hold the sensitive things; leave the rest plaintext and keep the server-side features. It is a per-Space choice, switchable in both directions.
 
-Open a Space → **Encrypt this Space** (the lock icon in the sidebar footer, or the file-tree context menu) → pick a password. Every file is re-encrypted client-side, the plaintext content **and its git history are erased**, and you get a one-time recovery key. Decrypting later reverses it.
+Open a Space → **Encrypt this Space** (in the Space menu — the ··· next to the Space name — or the file-tree context menu) → pick a password. Every file is re-encrypted client-side, the plaintext content **and its git history are erased**, and you get a one-time recovery key. Decrypting later reverses it.
 
 **What the server can and cannot see**
 

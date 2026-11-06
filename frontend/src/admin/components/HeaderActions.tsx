@@ -1,24 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Menu, Check } from 'lucide-react'
+import { useCallback, useRef, useState } from 'react'
+import type { MenuAction } from './ui/ActionMenu'
 
 // A single header tool. Used to render either an inline icon button or a row in
-// the overflow ("tool") menu, so the two never drift apart.
-export type HeaderAction = {
-  key: string
-  label: string
-  icon: ReactNode
-  onClick: () => void
-  active?: boolean
-  badge?: number
-}
+// a menu, so the two never drift apart.
+export type HeaderAction = MenuAction
 
 // One header action rendered inline (icon + optional count badge).
 export function HeaderActionBtn({ action }: { action: HeaderAction }) {
+  const label = action.hint ? `${action.label} (${action.hint})` : action.label
   return (
     <button
       onClick={action.onClick}
-      title={action.label}
-      aria-label={action.label}
+      title={label}
+      aria-label={label}
       aria-pressed={action.active}
       className={
         'p-1.5 rounded-md transition-colors flex items-center ' +
@@ -30,80 +24,6 @@ export function HeaderActionBtn({ action }: { action: HeaderAction }) {
       {action.icon}
       {action.badge ? <span className="ml-1 text-[10px] font-bold">{action.badge}</span> : null}
     </button>
-  )
-}
-
-/**
- * Hamburger menu holding the actions that don't fit inline.
- *
- * `placement` exists because the same control is used at the top of the page
- * (menu drops down) and in the sidebar's footer row (menu must open UPWARD, or
- * it would render off the bottom of the window).
- */
-export function HeaderOverflowMenu({
-  actions,
-  placement = 'down',
-  label = 'More tools',
-}: {
-  actions: HeaderAction[]
-  placement?: 'down' | 'up'
-  label?: string
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey) }
-  }, [open])
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(v => !v)}
-        title={label}
-        aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="p-1.5 rounded-md transition-colors flex items-center text-[var(--notation-fg-muted)] hover:text-[var(--notation-fg)] hover:bg-[var(--notation-bg-alt)]"
-      >
-        <Menu size={18} />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className={
-            'surface-elevated absolute min-w-[210px] max-w-[min(320px,90vw)] bg-[var(--notation-bg-elevated)] border border-[var(--notation-border)] rounded-md shadow-xl py-1 z-50 ' +
-            // Upward = the sidebar footer, where the trigger sits near the LEFT
-            // edge of the window: anchoring right would push a 210px-wide menu
-            // off-screen, so it grows rightward over the content instead.
-            (placement === 'up' ? 'bottom-full mb-1 left-0' : 'top-full mt-1 right-0')
-          }
-        >
-          {actions.map(a => (
-            <button
-              key={a.key}
-              role="menuitem"
-              onClick={() => { a.onClick(); setOpen(false) }}
-              className={
-                'w-full flex items-center gap-2.5 px-3 py-1.5 text-sm transition-colors hover:bg-[var(--notation-border)] ' +
-                (a.active ? 'text-[color:var(--notation-accent)]' : 'text-[var(--notation-fg)]')
-              }
-            >
-              <span className="flex-shrink-0 flex items-center">{a.icon}</span>
-              <span className="flex-1 text-left truncate">{a.label}</span>
-              {a.badge ? (
-                <span className="text-[10px] font-bold bg-[color:var(--notation-accent-15)] text-[color:var(--notation-accent)] px-1.5 py-0.5 rounded-full">{a.badge}</span>
-              ) : a.active ? (
-                <Check size={14} className="text-[color:var(--notation-accent)] flex-shrink-0" />
-              ) : null}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -128,7 +48,7 @@ export function useHeaderWidth() {
   return { ref, width }
 }
 
-// Collapse the action icons into the overflow menu when they (~34px each) would
+// Collapse the inline action icons into the "More" menu when they (~34px each) would
 // need more room than is available beside the reserved left content. Before the
 // first measurement (width 0), fall back to the viewport heuristic.
 export function headerIsCompact(width: number, actionCount: number, reservedW: number, isMobile: boolean): boolean {
